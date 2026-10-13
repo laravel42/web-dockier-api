@@ -28,7 +28,7 @@ export const deploymentSchema = z.object({
   updatedAt: z.string(),
 });
 
-export const serviceModeSchema = z.enum(["vps", "managed"]);
+export const serviceModeSchema = z.enum(["vps", "external"]);
 
 export const serviceEntrySchema = z.object({
   type: z.string().max(100),

@@ -135,14 +135,14 @@ export async function stageConfigureApp(params: {
 }): Promise<ConfigureAppResult> {
   const { projectId, projectName, environmentId, serverId, gitConfig, repoAnalysis, services = [], provisionedDatabases = [], envVars, client, log, advise } = params;
 
-  // Managed-mode services need no provisioning — the app connects to them via
+  // External-mode services need no provisioning — the app connects to them via
   // its own env credentials (RDS/Neon/Upstash/etc.). vps-mode services are
   // provisioned on the server by the provision-databases stage; here we just
   // note them for visibility.
-  const managed = services.filter((s) => s.mode === "managed");
+  const external = services.filter((s) => s.mode === "external");
   const vps = services.filter((s) => s.mode === "vps");
-  if (managed.length > 0) {
-    await log(`[stage:configure-app] Managed services (app uses its own credentials): ${managed.map((s) => s.name || s.type).join(", ")}`);
+  if (external.length > 0) {
+    await log(`[stage:configure-app] External services (app uses its own credentials): ${external.map((s) => s.name || s.type).join(", ")}`);
   }
   if (vps.length > 0) {
     await log(`[stage:configure-app] Self-hosted services: ${vps.map((s) => s.name || s.type).join(", ")}`);

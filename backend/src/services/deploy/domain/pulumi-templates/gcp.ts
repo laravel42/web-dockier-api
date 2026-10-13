@@ -11,12 +11,12 @@ export function buildGcp(p: DeployParams): string {
 
 function buildGcpComputeEngine(p: DeployParams): string {
   const userData = buildDockerUserData(p);
-  const managedDb = p.services.find(s => s.type === "database" && s.mode === "managed");
-  const managedStorage = p.services.find(s => s.type === "storage" && s.mode === "managed");
-  const managedCache = p.services.find(s => s.type === "cache" && s.mode === "managed");
+  const externalDb = p.services.find(s => s.type === "database" && s.mode === "external");
+  const externalStorage = p.services.find(s => s.type === "storage" && s.mode === "external");
+  const externalCache = p.services.find(s => s.type === "cache" && s.mode === "external");
 
   let dbBlock = "";
-  if (managedDb) {
+  if (externalDb) {
     dbBlock = `
 // ── Cloud SQL (PostgreSQL) ──
 const dbInstance = new gcp.sql.DatabaseInstance("${p.appName}-db", {
@@ -49,7 +49,7 @@ export const dbName = database.name;
   }
 
   let storageBlock = "";
-  if (managedStorage) {
+  if (externalStorage) {
     storageBlock = `
 // ── Cloud Storage ──
 const bucket = new gcp.storage.Bucket("${p.appName}-storage", {
@@ -64,7 +64,7 @@ export const bucketName = bucket.name;
   }
 
   let cacheBlock = "";
-  if (managedCache) {
+  if (externalCache) {
     cacheBlock = `
 // ── Memorystore (Redis) ──
 const redisInstance = new gcp.redis.Instance("${p.appName}-redis", {
@@ -170,9 +170,9 @@ export const appUrl = staticIp.address.apply((ip) => \`http://\${ip}\`);
 }
 
 function buildGcpCloudRun(p: DeployParams): string {
-  const managedDb = p.services.find(s => s.type === "database" && s.mode === "managed");
-  const managedStorage = p.services.find(s => s.type === "storage" && s.mode === "managed");
-  const managedCache = p.services.find(s => s.type === "cache" && s.mode === "managed");
+  const externalDb = p.services.find(s => s.type === "database" && s.mode === "external");
+  const externalStorage = p.services.find(s => s.type === "storage" && s.mode === "external");
+  const externalCache = p.services.find(s => s.type === "cache" && s.mode === "external");
 
   // Parse CPU/memory from instanceType (e.g. "1 vCPU / 512 MB" or fallback)
   const cpuMatch = p.instanceType?.match(/([\d.]+)\s*vCPU/i) || p.instanceType?.match(/([\d.]+)-cpu/i);
@@ -183,7 +183,7 @@ function buildGcpCloudRun(p: DeployParams): string {
 
   let dbBlock = "";
   let dbEnvBlock = "";
-  if (managedDb) {
+  if (externalDb) {
     dbBlock = `
 // ── Cloud SQL (PostgreSQL) ──
 const dbInstance = new gcp.sql.DatabaseInstance("${p.appName}-db", {
@@ -223,7 +223,7 @@ export const dbName = database.name;
 
   let storageBlock = "";
   let storageEnvBlock = "";
-  if (managedStorage) {
+  if (externalStorage) {
     storageBlock = `
 // ── Cloud Storage ──
 const bucket = new gcp.storage.Bucket("${p.appName}-storage", {
@@ -241,7 +241,7 @@ export const bucketName = bucket.name;
 
   let cacheBlock = "";
   let cacheEnvBlock = "";
-  if (managedCache) {
+  if (externalCache) {
     cacheBlock = `
 // ── Memorystore (Redis) ──
 const redisInstance = new gcp.redis.Instance("${p.appName}-redis", {

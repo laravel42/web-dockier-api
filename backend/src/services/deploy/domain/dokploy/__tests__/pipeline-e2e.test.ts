@@ -337,7 +337,7 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     // env vars — nothing to provision. The deploy should succeed and simply
     // note the managed service; no DB-provisioning calls happen.
     await executeDokployPipeline(input({
-      services: [{ type: "database", name: "MySQL", mode: "managed" }],
+      services: [{ type: "database", name: "MySQL", mode: "external" }],
     }));
 
     expect(statusCalls).toContain("success");

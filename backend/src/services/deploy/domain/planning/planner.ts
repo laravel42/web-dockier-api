@@ -109,15 +109,15 @@ export function estimateResources(
   services: ServiceEntry[],
   deployStrategy: string,
 ): string[] {
-  const managedServices = services.filter((service) => service.mode === "managed");
+  const externalServices = services.filter((service) => service.mode === "external");
   const resources: string[] = [];
 
   if (provider === "aws") {
     resources.push(deployStrategy === "vps" ? "aws_ec2_instance" : "aws_ecs_service");
-    if (managedServices.some((service) => service.type === "database")) resources.push("aws_rds_instance");
-    if (managedServices.some((service) => service.type === "cache")) resources.push("aws_elasticache_cluster");
-    if (managedServices.some((service) => service.type === "queue")) resources.push("aws_sqs_queue");
-    if (managedServices.some((service) => service.type === "storage")) resources.push("aws_s3_bucket");
+    if (externalServices.some((service) => service.type === "database")) resources.push("aws_rds_instance");
+    if (externalServices.some((service) => service.type === "cache")) resources.push("aws_elasticache_cluster");
+    if (externalServices.some((service) => service.type === "queue")) resources.push("aws_sqs_queue");
+    if (externalServices.some((service) => service.type === "storage")) resources.push("aws_s3_bucket");
     if (hasDocker) resources.push("aws_ecr_repository");
     resources.push("aws_iam_role");
     return resources;
@@ -131,8 +131,8 @@ export function estimateResources(
     } else {
       resources.push("gcp_compute_instance", "gcp_compute_firewall", "gcp_compute_address");
     }
-    if (managedServices.some((service) => service.type === "database")) resources.push("gcp_sql_database_instance");
-    if (managedServices.some((service) => service.type === "cache")) resources.push("gcp_redis_instance");
+    if (externalServices.some((service) => service.type === "database")) resources.push("gcp_sql_database_instance");
+    if (externalServices.some((service) => service.type === "cache")) resources.push("gcp_redis_instance");
     return resources;
   }
 

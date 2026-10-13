@@ -3,7 +3,7 @@ import type { TableRow } from "../../shared/supabase/types.js";
 export type ServiceEntry = {
   type: string;
   name: string;
-  mode: "vps" | "managed";
+  mode: "vps" | "external";
 };
 
 export type ProviderRow = TableRow<"server_providers">;

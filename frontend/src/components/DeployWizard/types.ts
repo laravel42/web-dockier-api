@@ -131,7 +131,7 @@ export interface WizardState {
   // Env Vars
   envVars: Array<{ name: string; value: string }>;
   // Analysis
-  servicesModes: Record<string, "vps" | "managed">;
+  servicesModes: Record<string, "vps" | "external">;
   envDetectionHints: Record<string, string>;
   manualServiceOverrides: string[];
   // Plan
@@ -167,7 +167,7 @@ export interface Plan {
   ram: string;
   storage: string;
   network: string;
-  managedServices: string[];
+  externalServices: string[];
   monthlyPrice: string;
   breakdown: Array<{ item: string; cost: string }>;
 }

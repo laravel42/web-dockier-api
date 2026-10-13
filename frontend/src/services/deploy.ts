@@ -74,7 +74,7 @@ export const deployApi = {
     region?: string;
     skipPipeline?: boolean;
     templateId?: string;
-    services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+    services?: Array<{ type: string; name: string; mode: "vps" | "external" }>;
   }) =>
     request<{
       id: string;
@@ -130,7 +130,7 @@ export const deployApi = {
     useDocker?: boolean;
     dockerImage?: string;
     instanceType?: string;
-    services?: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+    services?: Array<{ type: string; name: string; mode: "vps" | "external" }>;
     aiAnalysis?: Record<string, unknown>;
     templateId?: string;
   }) =>

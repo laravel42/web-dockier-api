@@ -24,7 +24,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
   analysisLoading?: boolean;
   analysisError?: string;
   detectionHints?: Record<string, string>;
-  onChange: (modes: Record<string, "vps" | "managed">) => void;
+  onChange: (modes: Record<string, "vps" | "external">) => void;
 }) {
   if (analysisLoading) {
     return (
@@ -135,7 +135,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
           </p>
           <div className="space-y-2">
             {provisionableServices.map((svc) => {
-              const isManaged = state.servicesModes[svc.type] === "managed";
+              const isExternal = state.servicesModes[svc.type] === "external";
               return (
                 <div key={svc.type} className="rounded-lg border border-border px-3 py-2.5">
                   <div className="flex items-center justify-between">
@@ -150,25 +150,25 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
                       <button
                         type="button"
                         onClick={() => onChange({ ...state.servicesModes, [svc.type]: "vps" })}
-                        className={`px-2.5 py-1 text-xs font-medium transition-colors ${!isManaged ? "bg-primary-500 text-primary-foreground" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
+                        className={`px-2.5 py-1 text-xs font-medium transition-colors ${!isExternal ? "bg-primary-500 text-primary-foreground" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
                       >
                         Self-hosted
                       </button>
                       <button
                         type="button"
-                        onClick={() => onChange({ ...state.servicesModes, [svc.type]: "managed" })}
-                        className={`px-2.5 py-1 text-xs font-medium transition-colors ${isManaged ? "bg-primary-500 text-primary-foreground" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
+                        onClick={() => onChange({ ...state.servicesModes, [svc.type]: "external" })}
+                        className={`px-2.5 py-1 text-xs font-medium transition-colors ${isExternal ? "bg-primary-500 text-primary-foreground" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
                       >
-                        Managed
+                        External
                       </button>
                     </div>
                   </div>
-                  {isManaged && (
+                  {isExternal && (
                     <div className="mt-2 pl-0.5">
                       <span className="text-xs text-text-muted">External service — bring your own credentials via env vars, billed by your provider</span>
                     </div>
                   )}
-                  {!isManaged && (
+                  {!isExternal && (
                     <div className="mt-1.5 pl-0.5">
                       <span className="text-xs text-text-muted">Installed on the same instance — no extra cost</span>
                     </div>

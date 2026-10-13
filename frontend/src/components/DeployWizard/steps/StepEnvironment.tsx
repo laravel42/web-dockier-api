@@ -182,10 +182,10 @@ export default function StepEnvironment({ state, templateId, analysis, onChange,
                   <div className="flex justify-between"><span>Storage</span><span className="font-medium text-text">{plan.storage}</span></div>
                   <div className="flex justify-between"><span>Network</span><span className="font-medium text-text">{plan.network}</span></div>
                 </div>
-                {plan.managedServices.length > 0 && (
+                {plan.externalServices.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-border">
                     <p className="text-xs text-text-muted uppercase mb-1">External Services (billed separately)</p>
-                    {plan.managedServices.map((s, j) => (
+                    {plan.externalServices.map((s, j) => (
                       <p key={j} className="text-xs text-primary-600">{s}</p>
                     ))}
                   </div>

@@ -61,7 +61,7 @@ describe("stageProvisionDatabases", () => {
       ...base,
       client: client as unknown as DokployClient,
       log,
-      services: [{ type: "database", name: "MySQL", mode: "managed" }],
+      services: [{ type: "database", name: "MySQL", mode: "external" }],
       envVars: [],
     });
     expect(result.databases).toHaveLength(0);

@@ -133,7 +133,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
 
       const serviceTypes = analysis.detectedServices.map((s) => s.type);
       const detection = detectServiceModes(envVars, serviceTypes, analysis.detectedDbEngine);
-      const modes: Record<string, "vps" | "managed"> = {};
+      const modes: Record<string, "vps" | "external"> = {};
       const hints: Record<string, string> = {};
       for (const svc of analysis.detectedServices) {
         const result = detection[svc.type];

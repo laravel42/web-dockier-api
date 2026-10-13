@@ -9,7 +9,7 @@ export interface DeployParams {
   runtime: { name: string; version: string; buildCmd: string; startCmd: string; port: number };
   hasDocker: boolean;
   techStack: string[];
-  services: Array<{ type: string; name: string; mode: "vps" | "managed" }>;
+  services: Array<{ type: string; name: string; mode: "vps" | "external" }>;
   deployStrategy?: "vps" | "managed" | "static";
   useDocker?: boolean;
   dockerImage?: string;

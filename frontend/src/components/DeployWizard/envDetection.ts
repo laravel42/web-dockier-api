@@ -159,7 +159,7 @@ function getRawDriver(
 }
 
 export interface EnvDetectionResult {
-  mode: "vps" | "managed";
+  mode: "vps" | "external";
   hint: string;
 }
 
@@ -284,7 +284,7 @@ export function detectServiceModes(
 
     if (detectedProvider) {
       results[serviceType] = {
-        mode: "managed",
+        mode: "external",
         hint: `🔗 Detected: ${detectedProvider} (${driverLabel || serviceType}) from your repository`,
       };
       continue;
@@ -314,7 +314,7 @@ export function detectServiceModes(
       // we don't recognize. Default to managed since they have real credentials.
       // But if the host is clearly local, we already caught that above.
       results[serviceType] = {
-        mode: "managed",
+        mode: "external",
         hint: `🔗 ${driverLabel}credentials detected in your repository config`,
       };
     } else {
