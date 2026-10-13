@@ -56,6 +56,15 @@ const DEFAULT_PHP_EXTENSIONS = ["gd", "intl", "zip", "sockets", "bcmath", "exif"
  */
 const NODE_RAILPACK_PORT = 3000;
 
+/**
+ * The port railpack serves a Python app on. Railpack's Python provider runs
+ * gunicorn/uvicorn on 8000, and Django's generated start command
+ * (`gunicorn {app}:application`) binds 0.0.0.0:8000 and ignores PORT, so there
+ * is nothing to inject — Traefik must simply route to this fixed port or every
+ * request Bad Gateways.
+ */
+const PYTHON_RAILPACK_PORT = 8000;
+
 export interface ConfigureAppResult {
   dokployApplicationId: string;
   buildType: DokployBuildType;
@@ -601,11 +610,39 @@ function isNodeApp(primaryLanguage: string | undefined, techStack: string[]): bo
 }
 
 /**
+ * Detect a Python app from the primary language or tech stack.
+ *
+ * Railpack's Python provider serves gunicorn/uvicorn on 8000, not 80. Django's
+ * generated start command ignores PORT, so detecting Python only drives the
+ * Traefik port — there is nothing to inject (unlike Node). A Flask/FastAPI
+ * `${PORT:-8000}` PORT-injection follow-up could honor a custom PORT, but is
+ * intentionally not implemented here.
+ */
+function isPythonApp(primaryLanguage: string | undefined, techStack: string[]): boolean {
+  const lang = (primaryLanguage ?? "").toLowerCase();
+  if (lang.includes("python")) return true;
+  return techStack.some((s) => {
+    const t = s.toLowerCase();
+    return (
+      t.includes("python") ||
+      t.includes("django") ||
+      t.includes("flask") ||
+      t.includes("fastapi") ||
+      t.includes("gunicorn") ||
+      t.includes("uvicorn")
+    );
+  });
+}
+
+/**
  * Resolve the container port Traefik must route the app's domain to.
  *
  *  - railpack + static bundle → 80: Railpack builds the bundle and serves the
  *    output over Caddy. There is no Node process, so PORT is meaningless here
  *    even when the project is written in TypeScript.
+ *  - railpack + Python server → PYTHON_RAILPACK_PORT: railpack runs
+ *    gunicorn/uvicorn on 8000, and Django's start command ignores PORT, so
+ *    routing to this fixed port is the only fix (no env injection).
  *  - railpack + Node server → NODE_RAILPACK_PORT: a Node server honors the PORT
  *    env we inject (see nodeRuntimeEnv), so we route to that same port.
  *  - railpack + non-Node (PHP via FrankenPHP) → 80.
@@ -628,6 +665,7 @@ export function resolveContainerPort(
 ): number {
   if (buildType === "railpack") {
     if (kind === "static") return 80;
+    if (isPythonApp(primaryLanguage, techStack)) return PYTHON_RAILPACK_PORT;
     return isNodeApp(primaryLanguage, techStack) ? NODE_RAILPACK_PORT : 80;
   }
   // Dokploy's `static` build type serves the publish directory from an nginx

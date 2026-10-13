@@ -77,6 +77,25 @@ describe("resolveContainerPort", () => {
     });
   });
 
+  /**
+   * Railpack serves Python (gunicorn/uvicorn) on 8000, and Django's start
+   * command ignores PORT, so Traefik must route to 8000 — the Bad Gateway this
+   * fix addresses, where a Django app fell through to 80.
+   */
+  describe("railpack + Python → 8000", () => {
+    it("routes a Python app to 8000 via primaryLanguage", () => {
+      expect(resolveContainerPort("railpack", "python", ["Django"], "server")).toBe(8000);
+    });
+
+    it("routes a Python app to 8000 detected via techStack only", () => {
+      expect(resolveContainerPort("railpack", undefined, ["django"], "server")).toBe(8000);
+    });
+
+    it("routes a static Python kind to 80 — static wins over Python", () => {
+      expect(resolveContainerPort("railpack", "python", ["Django"], "static")).toBe(80);
+    });
+  });
+
   describe("railpack + PHP → 80", () => {
     it("routes Laravel to 80 (FrankenPHP)", () => {
       expect(resolveContainerPort("railpack", "php", ["Laravel"], "server")).toBe(80);
