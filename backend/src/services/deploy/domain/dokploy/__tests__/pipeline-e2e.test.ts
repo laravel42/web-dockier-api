@@ -341,8 +341,8 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     }));
 
     expect(statusCalls).toContain("success");
-    expect(logLines.some((l) => /Managed services/i.test(l))).toBe(true);
-    // Env is still configured (managed DB creds ride along in the app env).
+    expect(logLines.some((l) => /External services/i.test(l))).toBe(true);
+    // Env is still configured (external DB creds ride along in the app env).
     expect(clientMethods.saveEnvironment).toHaveBeenCalled();
   });
 
