@@ -272,6 +272,7 @@ export default function ProjectDetail() {
         project={project}
         onProjectUpdate={setProject}
         onInfraRefresh={() => { void refetchProject(); }}
+        domainRefreshKey={domainRefreshKey}
         activityPanel={
           <div className="flex flex-col gap-6">
             <RecentCommits commits={recentCommits} commitsLoading={commitsLoading} commitsError={commitsError} />

@@ -23,6 +23,8 @@ import { dnsBannerCopy } from "@/utils/dnsBannerCopy";
 
 interface Props {
   project: Project;
+  /** Bumps after an in-session deploy; shown-after-deploy trigger for the DNS banner. */
+  domainRefreshKey?: number;
 }
 
 // Fixed width of the portaled actions menu (matches the legacy `w-40` = 10rem).
@@ -915,7 +917,7 @@ function formatExpiry(dateStr: string): string {
 
 // ─── Main Domains Tab ───
 
-export default function ProjectDomainsTab({ project }: Props) {
+export default function ProjectDomainsTab({ project, domainRefreshKey }: Props) {
   const { has, loading: permissionsLoading } = usePermissions();
   const canManage = has("project:manage");
   const canView = has("project:view");
@@ -967,6 +969,10 @@ export default function ProjectDomainsTab({ project }: Props) {
     void fetchData();
   }, [permissionsLoading, canView, fetchData]);
 
+  // Reload resets domainRefreshKey to 0 → deployedThisSession is false (banner hidden);
+  // an in-session deploy bumps it above the captured initial → banner shows.
+  const initialKey = useRef(domainRefreshKey ?? 0);
+
   if (permissionsLoading || loading) {
     return <TabSpinner label="Loading domains…" />;
   }
@@ -984,11 +990,10 @@ export default function ProjectDomainsTab({ project }: Props) {
   }
 
   const dnsBanner = dnsBannerCopy(project.infraState, domains.length > 0);
+  const deployedThisSession = (domainRefreshKey ?? 0) > initialKey.current;
 
   return (
     <div className="space-y-6 overflow-y-auto pr-1">
-      {dnsBanner.show && <Alert variant="warning">{dnsBanner.text}</Alert>}
-
       {/* Header with actions */}
       <div className="flex items-start justify-between gap-4">
         <TabPanelHeader
@@ -1009,6 +1014,10 @@ export default function ProjectDomainsTab({ project }: Props) {
           </div>
         )}
       </div>
+
+      {deployedThisSession && dnsBanner.show && (
+        <Alert variant="warning">{dnsBanner.text}</Alert>
+      )}
 
       <DomainAttachment
         projectId={project.id}

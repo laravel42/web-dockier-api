@@ -57,6 +57,8 @@ interface Props {
   securityPanel?: ReactNode;
   /** Deploy history timeline for the deployments tab. */
   deploysPanel?: ReactNode;
+  /** Bumps after an in-session deploy; drives the transient DNS banner. */
+  domainRefreshKey?: number;
 }
 
 /**
@@ -888,6 +890,7 @@ export default function ProjectDescription({
   activityPanel,
   securityPanel,
   deploysPanel,
+  domainRefreshKey,
 }: Props) {
   // The tab strip is a sidebar at md+ and a horizontal scroller below it, so the
   // announced orientation has to track the breakpoint. The keyboard handler
@@ -1163,7 +1166,7 @@ export default function ProjectDescription({
       case "observe":
         return <ProjectObserveTab project={project} />;
       case "domains":
-        return <ProjectDomainsTab project={project} />;
+        return <ProjectDomainsTab project={project} domainRefreshKey={domainRefreshKey} />;
       default: {
         const settingsSection = settingsSectionForTab(activeMainTabSafe);
         if (settingsSection) {
