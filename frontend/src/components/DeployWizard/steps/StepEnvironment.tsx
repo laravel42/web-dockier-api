@@ -184,7 +184,7 @@ export default function StepEnvironment({ state, templateId, analysis, onChange,
                 </div>
                 {plan.managedServices.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-border">
-                    <p className="text-xs text-text-muted uppercase mb-1">Managed Services</p>
+                    <p className="text-xs text-text-muted uppercase mb-1">External Services (billed separately)</p>
                     {plan.managedServices.map((s, j) => (
                       <p key={j} className="text-xs text-primary-600">{s}</p>
                     ))}

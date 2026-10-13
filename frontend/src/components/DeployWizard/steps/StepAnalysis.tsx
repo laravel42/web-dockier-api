@@ -1,5 +1,4 @@
 import type { WizardState, RepoAnalysis } from "../types";
-import { PROVIDER_META, MANAGED_INFO, FALLBACK_MANAGED } from "../constants";
 import Spinner from "@/components/Spinner";
 import DockerfileIcon from "@/components/icons/filled/DockerfileIcon";
 import { TriangleAlertIcon, ClockIcon, MailIcon, PlugIcon, SparklesIcon } from "lucide-react";
@@ -49,10 +48,6 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
       </div>
     );
   }
-
-  const providerName = PROVIDER_META[state.selectedProvider]?.name || state.selectedProvider;
-  const getManagedInfo = (type: string) =>
-    MANAGED_INFO[providerName]?.[type] || FALLBACK_MANAGED[type] || { service: "Managed Service", cost: "varies" };
 
   // Separate provisionable services from auto-configured ones
   const provisionableServices = analysis.detectedServices.filter(
@@ -140,7 +135,6 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
           </p>
           <div className="space-y-2">
             {provisionableServices.map((svc) => {
-              const managed = getManagedInfo(svc.type);
               const isManaged = state.servicesModes[svc.type] === "managed";
               return (
                 <div key={svc.type} className="rounded-lg border border-border px-3 py-2.5">
@@ -170,10 +164,8 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
                     </div>
                   </div>
                   {isManaged && (
-                    <div className="mt-2 flex items-center gap-3 pl-0.5">
-                      <span className="text-xs text-primary-600 font-medium">{managed.service}</span>
-                      <span className="text-xs text-text-muted">·</span>
-                      <span className="text-xs font-semibold text-warning-500">{managed.cost}</span>
+                    <div className="mt-2 pl-0.5">
+                      <span className="text-xs text-text-muted">External service — bring your own credentials via env vars, billed by your provider</span>
                     </div>
                   )}
                   {!isManaged && (

@@ -30,37 +30,6 @@ export const PROVIDER_META: Record<string, { name: string; icon: string; color: 
 };
 
 /**
- * Managed service info per provider.
- * To add a new provider, add its managed service details here.
- */
-export const MANAGED_INFO: Record<string, Record<string, { service: string; cost: string }>> = {
-  AWS: {
-    database: { service: "Amazon RDS (Postgres/MySQL)", cost: "~$15/mo" },
-    cache: { service: "Amazon ElastiCache (Redis)", cost: "~$15/mo" },
-    queue: { service: "Amazon SQS", cost: "~$1/mo" },
-    storage: { service: "Amazon S3", cost: "~$2/mo per 100GB" },
-    search: { service: "Amazon OpenSearch", cost: "~$25/mo" },
-    mail: { service: "Amazon SES", cost: "~$1/mo" },
-  },
-  "Google Cloud": {
-    database: { service: "Cloud SQL (PostgreSQL)", cost: "~$10/mo" },
-    cache: { service: "Memorystore (Redis)", cost: "~$35/mo" },
-    storage: { service: "Cloud Storage", cost: "~$2/mo per 100GB" },
-    queue: { service: "Cloud Tasks / Pub/Sub", cost: "~$1/mo" },
-  },
-};
-
-export const FALLBACK_MANAGED: Record<string, { service: string; cost: string }> = {
-  database: { service: "Managed Database", cost: "~$15/mo" },
-  cache: { service: "Managed Redis", cost: "~$15/mo" },
-  queue: { service: "Message Queue", cost: "~$10/mo" },
-  storage: { service: "Object Storage", cost: "~$5/mo" },
-  search: { service: "Search Service", cost: "~$25/mo" },
-  mail: { service: "SMTP Provider", cost: "~$15/mo" },
-  broadcasting: { service: "WebSocket Service", cost: "~$10/mo" },
-};
-
-/**
  * Available regions per provider.
  * To add a new provider, add its regions here.
  */
