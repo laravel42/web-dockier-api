@@ -29,7 +29,7 @@ import {
  * Kept as a single constant so it's easy to bump when validating a newer
  * Railpack release.
  */
-const RAILPACK_VERSION = "0.15.4";
+const RAILPACK_VERSION = "0.41.0";
 
 /**
  * Default PHP extensions installed for Railpack PHP builds via the
