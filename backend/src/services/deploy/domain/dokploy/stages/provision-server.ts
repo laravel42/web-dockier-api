@@ -190,6 +190,13 @@ async function provisionAwsServer(params: {
     throw err;
   }
 
+  // Persist the VM's instanceId immediately, before SSH/setup can fail. A
+  // first-time deploy that provisions the VM then dies before createServer
+  // would otherwise leave a running instance with no dokploy_servers row —
+  // orphaned and invisible to teardown. dokployServerId is "" until the Dokploy
+  // server is registered (the column is nullable TEXT, so "" is accepted).
+  await upsertServer({ projectId, providerId, dokployServerId: "", serverIp, instanceId, serverStatus: "provisioning" });
+
   // Wait for SSH before handing the box to Dokploy's setup (which SSHes in).
   await log(`[stage:provision-server] Waiting for SSH on ${serverIp}:22...`);
   const reachable = await waitForSsh(serverIp, 22, {
@@ -253,6 +260,10 @@ async function provisionGcpServer(params: {
     if (await getServer(projectId)) await updateServerStatus(projectId, "error");
     throw err;
   }
+
+  // Persist the VM's instanceId immediately (see the AWS path for rationale):
+  // a VM provisioned but not yet registered must still leave a row for teardown.
+  await upsertServer({ projectId, providerId, dokployServerId: "", serverIp, instanceId, serverStatus: "provisioning" });
 
   await log(`[stage:provision-server] Waiting for SSH on ${serverIp}:22...`);
   const reachable = await waitForSsh(serverIp, 22, {
@@ -475,6 +486,20 @@ export async function registerServerInDokploy(params: {
 
   await log(`[stage:provision-server] Server registered (${server.serverId}). Running setup (Docker, Traefik, buildpacks)...`);
 
+  // Persist the mapping (with the real serverId) BEFORE setup/validate so a
+  // failure there still leaves a dokploy_servers row — teardown needs the
+  // serverId to remove the Dokploy server. Status stays "provisioning"; the
+  // final "ready" flip happens after setup succeeds.
+  await upsertServer({
+    projectId,
+    providerId,
+    dokployServerId: server.serverId,
+    serverIp,
+    instanceId,
+    serverStatus: "provisioning",
+    sshPrivateKey,
+  });
+
   await log("[stage:provision-server] Validating server readiness...");
   // Retries until BOTH Docker is enabled and the Dokploy network exists (or
   // attempts are exhausted, in which case it throws). On return the server is
@@ -486,16 +511,7 @@ export async function registerServerInDokploy(params: {
     throw err;
   }
 
-  // Store mapping (persists the Dockier SSH key encrypted when supplied).
-  await upsertServer({
-    projectId,
-    providerId,
-    dokployServerId: server.serverId,
-    serverIp,
-    instanceId,
-    serverStatus: "ready",
-    sshPrivateKey,
-  });
+  await updateServerStatus(projectId, "ready");
 
   await log(`[stage:provision-server] ✓ Server ready: ${serverIp} (${server.serverId})`);
   return {

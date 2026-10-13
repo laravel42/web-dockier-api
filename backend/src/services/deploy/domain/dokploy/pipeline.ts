@@ -325,6 +325,17 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     } catch {
       // Best-effort status update
     }
+    // A failed deploy may still have created a VM + Dokploy records partway
+    // through. Mark infra "live" so the Tear Down button (gated on
+    // infra_state === "live") lights up and the user can destroy the orphans.
+    // Best-effort: wrapped so it can never mask the original failure.
+    if (projectId) {
+      try {
+        await markProjectInfraLive(projectId);
+      } catch {
+        // never mask the original failure
+      }
+    }
     // Surface the failure through the user's notification channels, as the
     // native pipeline does — otherwise a failed Dokploy deploy is silent.
     emitDeployFailureNotification({

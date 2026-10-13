@@ -301,7 +301,30 @@ describe("executeDokployPipeline", () => {
     expect(mockEmitFailure).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-1", repo: "owner/my-app" }),
     );
-    expect(mockMarkInfraLive).not.toHaveBeenCalled();
+  });
+
+  it("marks infra live on a failed deploy so orphaned resources can be torn down", async () => {
+    mockConfigureApp.mockRejectedValueOnce(new Error("Config failed"));
+
+    await executeDokployPipeline(basePipelineInput);
+
+    // A failed deploy may have created a VM + Dokploy records partway through.
+    // Marking infra "live" lets the Tear Down button light up for the orphans.
+    const statusCalls = mockUpdateStatus.mock.calls.map((c) => c[1]);
+    expect(statusCalls).toContain("failed");
+    expect(mockMarkInfraLive).toHaveBeenCalledWith("project-1");
+  });
+
+  it("does not mark infra live with a truthy id when a projectless deploy fails", async () => {
+    mockConfigureApp.mockRejectedValueOnce(new Error("Config failed"));
+
+    const { projectId: _omit, ...noProject } = basePipelineInput;
+    await executeDokployPipeline(noProject as typeof basePipelineInput);
+
+    // Ad-hoc (projectless) deploys have no project row to mark — the catch
+    // guards on projectId, so the helper is never called with a truthy id.
+    const markedWithTruthy = mockMarkInfraLive.mock.calls.some((c) => Boolean(c[0]));
+    expect(markedWithTruthy).toBe(false);
   });
 
   it("persists appUrl ATOMICALLY with the success status", async () => {

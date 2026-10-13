@@ -238,7 +238,6 @@ async function ensureDatabase(params: {
       dockerImage,
       serverId,
     });
-    await client.deployRedis(created.id);
   } else if (engine === "postgres") {
     created = await client.createPostgres({
       name: serviceName,
@@ -250,7 +249,6 @@ async function ensureDatabase(params: {
       dockerImage,
       serverId,
     });
-    await client.deployPostgres(created.id);
   } else {
     created = await client.createMysql({
       name: serviceName,
@@ -262,9 +260,11 @@ async function ensureDatabase(params: {
       dockerImage,
       serverId,
     });
-    await client.deployMysql(created.id);
   }
 
+  // Persist the mapping the moment the service exists (id known) and BEFORE the
+  // deploy call: a deploy* that throws otherwise leaves an orphan Dokploy
+  // service with no mapping row, which teardown can never find and remove.
   await upsertDatabase({
     projectId,
     serviceType,
@@ -274,6 +274,14 @@ async function ensureDatabase(params: {
     dbName: created.databaseName ?? (engine === "redis" ? null : dbName),
     dbUser: created.databaseUser ?? (engine === "redis" ? null : dbUser),
   });
+
+  if (engine === "redis") {
+    await client.deployRedis(created.id);
+  } else if (engine === "postgres") {
+    await client.deployPostgres(created.id);
+  } else {
+    await client.deployMysql(created.id);
+  }
 
   await log(`[stage:provision-databases] ✓ ${engine} ready at ${created.appName}`);
   return {

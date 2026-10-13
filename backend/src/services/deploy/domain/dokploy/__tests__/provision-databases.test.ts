@@ -229,6 +229,24 @@ describe("stageProvisionDatabases", () => {
     );
   });
 
+  it("persists the mapping (upsertDatabase) BEFORE deploying the service", async () => {
+    await stageProvisionDatabases({
+      ...base,
+      client: client as unknown as DokployClient,
+      log,
+      services: [{ type: "database", name: "Database", mode: "vps" }],
+      envVars: [],
+    });
+
+    // The mapping row must exist before deploy* runs: a deploy that throws would
+    // otherwise leave an orphan Dokploy service with no row for teardown to find.
+    const upsertOrder = upsertDatabase.mock.invocationCallOrder[0];
+    const deployOrder = client.deployMysql.mock.invocationCallOrder[0];
+    expect(upsertOrder).toBeDefined();
+    expect(deployOrder).toBeDefined();
+    expect(upsertOrder).toBeLessThan(deployOrder);
+  });
+
   it("is best-effort: a provisioning failure is logged and does not throw", async () => {
     client.createMysql.mockRejectedValueOnce(new Error("boom"));
     const result = await stageProvisionDatabases({
