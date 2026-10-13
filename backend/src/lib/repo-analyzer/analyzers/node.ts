@@ -90,9 +90,11 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
       config.features.add("api-routes");
     }
     config.features.add("ssr");
-  } else if (allDeps["nuxt"]) {
+  } else if (allDeps["nuxt"] || allDeps["nuxt3"] || allDeps["nuxt-edge"] || existsApp("nuxt.config.ts") || existsApp("nuxt.config.mjs") || existsApp("nuxt.config.js")) {
+    // A nuxt.config.* file is authoritative: Nuxt can be pulled in via a preset
+    // or workspace package, so the dep key alone (checked across variants) misses it.
     config.framework = "nuxt";
-    config.frameworkVersion = cleanVersion(allDeps["nuxt"]);
+    config.frameworkVersion = cleanVersion(allDeps["nuxt"] || allDeps["nuxt3"] || allDeps["nuxt-edge"] || "");
     config.port = 3000;
     let isStatic = false;
     for (const cfgName of ["nuxt.config.ts", "nuxt.config.mjs", "nuxt.config.js"]) {

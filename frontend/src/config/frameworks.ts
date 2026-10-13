@@ -63,7 +63,7 @@ const PHP_DEPLOY = `# PHP post-deploy commands
 const NEXTJS_DEPLOY = `# Next.js post-deploy commands
 # Container starts automatically via npm start or next start`;
 
-const NUXTJS_DEPLOY = `# Nuxt.js post-deploy commands
+const NUXTJS_DEPLOY = `# Nuxt post-deploy commands
 # Container starts automatically via nuxt start`;
 
 const NODEJS_DEPLOY = `# Node.js post-deploy commands
@@ -105,7 +105,7 @@ export const FRAMEWORKS: Framework[] = [
 
   // JavaScript
   { id: "nextjs", name: "Next.js", category: "JavaScript", icon: "/devicons/nextjs-dark.svg", defaultDeployScript: NEXTJS_DEPLOY },
-  { id: "nuxtjs", name: "Nuxt.js", category: "JavaScript", icon: "/devicons/nuxtjs.svg", defaultDeployScript: NUXTJS_DEPLOY },
+  { id: "nuxtjs", name: "Nuxt", category: "JavaScript", icon: "/devicons/nuxtjs.svg", defaultDeployScript: NUXTJS_DEPLOY },
   { id: "react", name: "React", category: "JavaScript", icon: "/devicons/react.svg", defaultDeployScript: REACT_DEPLOY },
   { id: "vuejs", name: "Vue.js", category: "JavaScript", icon: "/devicons/vuejs.svg", defaultDeployScript: VUE_DEPLOY },
   { id: "remix", name: "Remix", category: "JavaScript", icon: "/devicons/remix.svg", defaultDeployScript: REMIX_DEPLOY },

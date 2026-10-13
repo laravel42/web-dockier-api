@@ -164,6 +164,36 @@ describe("analyzeRepoFiles (filesystem-agnostic core)", () => {
     const config = analyzeRepoFiles(files);
     expect(config.runtime).toBe("unknown");
   });
+
+  it("detects SSR Nuxt from the nuxt dependency", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build" } }),
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.framework).toBe("nuxt");
+    expect(config.features.has("ssr")).toBe(true);
+  });
+
+  it("detects Nuxt from nuxt.config even when the dep is not in the app's package.json (monorepo/preset)", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: {}, scripts: { build: "nuxt build" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({});",
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.framework).toBe("nuxt");
+    expect(config.features.has("ssr")).toBe(true);
+  });
+
+  it("detects a static Nuxt (ssr:false) and marks it static-export", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt generate" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({ ssr: false });",
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.framework).toBe("nuxt");
+    expect(config.features.has("static-export")).toBe(true);
+    expect(config.features.has("ssr")).toBe(false);
+  });
 });
 
 describe("detectSubDir", () => {
@@ -182,6 +212,15 @@ describe("detectSubDir", () => {
       "package.json": JSON.stringify({ private: true }),
       "apps/web/package.json": "{}",
       "apps/web/next.config.js": "{}",
+    });
+    expect(detectSubDir(files)).toBe("apps/web");
+  });
+
+  it("finds a Nuxt app subdir configured with nuxt.config.mjs", () => {
+    const files = new MapRepoFiles({
+      "package.json": JSON.stringify({ private: true }),
+      "apps/web/package.json": "{}",
+      "apps/web/nuxt.config.mjs": "export default {}",
     });
     expect(detectSubDir(files)).toBe("apps/web");
   });

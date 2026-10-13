@@ -3,7 +3,8 @@ import { joinPath } from "./repo-files.js";
 
 const FRAMEWORK_CONFIGS = [
   "next.config.js", "next.config.ts", "next.config.mjs",
-  "nuxt.config.ts", "vite.config.ts", "angular.json",
+  "nuxt.config.ts", "nuxt.config.mjs", "nuxt.config.js",
+  "vite.config.ts", "angular.json",
   "remix.config.js", "astro.config.mjs",
 ];
 
