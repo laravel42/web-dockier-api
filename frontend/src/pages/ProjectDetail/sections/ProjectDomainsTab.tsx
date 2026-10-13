@@ -19,6 +19,7 @@ import { settingsBadgeCls } from "@/utils/styles";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 import DropdownPortal from "@/components/DropdownPortal";
+import { dnsBannerCopy } from "@/utils/dnsBannerCopy";
 
 interface Props {
   project: Project;
@@ -375,7 +376,7 @@ function DomainsSection({
         </div>
       </div>
 
-      {!infraLive && (
+      {!infraLive && domains.length === 0 && (
         <Alert variant="warning" className="m-4 mb-0">
           Add domains now — they activate automatically the next time you deploy.
           DNS setup and HTTPS can't be verified until your app is running.
@@ -982,8 +983,12 @@ export default function ProjectDomainsTab({ project }: Props) {
     return <p className="text-sm text-danger-500 text-center py-8">{error}</p>;
   }
 
+  const dnsBanner = dnsBannerCopy(project.infraState, domains.length > 0);
+
   return (
     <div className="space-y-6 overflow-y-auto pr-1">
+      {dnsBanner.show && <Alert variant="warning">{dnsBanner.text}</Alert>}
+
       {/* Header with actions */}
       <div className="flex items-start justify-between gap-4">
         <TabPanelHeader
