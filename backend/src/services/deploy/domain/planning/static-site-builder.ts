@@ -76,6 +76,11 @@ export function hasPayloadCms(repoDir: string): boolean {
  * (via the clone-less analysis path) rely on it. The Payload signal is an input
  * (`opts.hasPayload`) rather than a disk read so callers without a clone can
  * still reach the same decision.
+ *
+ * For Next/Nuxt the gate also accepts `detectedStack.canGenerateStatic` — a
+ * repo whose default build is SSR but which offers a static build. That matches
+ * what {@link buildSite} actually does on the static path (`nuxt generate` /
+ * `next export`), so the gate and the builder agree.
  */
 export function getStaticDeployBlockReason(opts: {
   detectedStack: DetectedStack;
@@ -95,14 +100,16 @@ export function getStaticDeployBlockReason(opts: {
 
   if (detectedStack.runtime !== "node") return null;
 
+  const staticOk = detectedStack.isStatic || detectedStack.canGenerateStatic === true;
+
   const isNext =
     detectedStack.framework === "nextjs" ||
     stackLower.some((t) => t.includes("next.js") || t === "nextjs" || t === "next");
-  if (isNext && !detectedStack.isStatic) {
+  if (isNext && !staticOk) {
     return "This Next.js project uses SSR/App Router and cannot be deployed as a static S3 site. Use EC2 or ECS, or set output: 'export' in next.config for static export only.";
   }
 
-  if (detectedStack.framework === "nuxt" && !detectedStack.isStatic) {
+  if (detectedStack.framework === "nuxt" && !staticOk) {
     return "This Nuxt project uses SSR and cannot be deployed as a static S3 site. Use EC2 or ECS instead.";
   }
 

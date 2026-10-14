@@ -29,8 +29,6 @@ export default function StepEnvironment({ state, templateId, analysis, onChange,
   const serverOnly = isServerOnly(analysis);
   const isStatic = state.deployStrategy === "static" && !serverOnly;
   const staticStack = STATIC_STACK[state.selectedProvider] || "object storage + CDN";
-  const framework = analysis?.aiAnalysis?.framework;
-  const frameworkLabel = framework?.trim() ? `a ${framework.trim()} app` : "this stack";
 
   return (
     <div className="space-y-4">
@@ -47,8 +45,8 @@ export default function StepEnvironment({ state, templateId, analysis, onChange,
             <span>
               <span className="font-semibold">Server.</span>{" "}
               <span className="text-text-muted">
-                {frameworkLabel.charAt(0).toUpperCase() + frameworkLabel.slice(1)} needs a server, so static hosting
-                isn&apos;t available — your app runs on a virtual machine.
+                This project is configured to run on a server, so static hosting isn&apos;t available — your app runs
+                on a virtual machine.
               </span>
             </span>
           </div>

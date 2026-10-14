@@ -5,6 +5,47 @@ export function cleanVersion(v: string): string {
   return v.replace(/^[\^~>=<]+/, "").split(" ")[0];
 }
 
+/**
+ * Static-capability signals for a framework that can render either way.
+ *
+ * `buildsStatic` — the DEFAULT build already produces static output, so the app
+ * is static (drives `static-export` ⇄ `ssr`, `kind`, the Dockerfile template).
+ * `canGenerateStatic` — a static build is AVAILABLE if the user picks the static
+ * deploy target (e.g. a `nuxt generate` script next to an SSR `nuxt build`).
+ * Only the static deploy gate reads it; the default build path is unaffected.
+ */
+export interface StaticSignals {
+  buildsStatic: boolean;
+  canGenerateStatic: boolean;
+}
+
+// shortcut: config text is matched, not evaluated — a computed ssr/output value
+// (ssr: isProd, output: process.env.X) is not detected; upgrade to parsing the
+// AST if a real repo is misread.
+
+/** Nuxt: `ssr: false` / `nitro.preset: "static"` build static; a generate script can. */
+export function nuxtStaticSignals(configText: string, scriptsText: string): StaticSignals {
+  const buildsStatic =
+    /nitro\s*:\s*\{[^}]*preset\s*:\s*['"]static['"]/.test(configText)
+    || /ssr\s*:\s*false/.test(configText)
+    || /preset\s*:\s*['"]static['"]/.test(configText);
+  return {
+    buildsStatic,
+    canGenerateStatic: buildsStatic
+      || /\b(nuxt|nuxi)\s+generate\b/.test(scriptsText)
+      || /NITRO_PRESET\s*=\s*['"]?static\b/.test(scriptsText),
+  };
+}
+
+/** Next.js: only `output: "export"` builds static; a `next export` script can. */
+export function nextStaticSignals(configText: string, scriptsText: string): StaticSignals {
+  const buildsStatic = /output\s*:\s*['"]export['"]/.test(configText);
+  return {
+    buildsStatic,
+    canGenerateStatic: buildsStatic || /\bnext\s+export\b/.test(scriptsText),
+  };
+}
+
 /** Apply framework-specific Node.js minimums after engines/.nvmrc detection. */
 export function finalizeNodeVersion(config: RepoConfig): void {
   if (config.runtime !== "node") return;

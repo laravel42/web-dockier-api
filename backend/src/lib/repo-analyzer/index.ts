@@ -102,6 +102,7 @@ export function toDetectedStack(config: RepoConfig): import("./types.js").Detect
         nodeVersion: config.nodeVersion || "20",
         hasStandalone: config.hasStandalone,
         isStatic: config.features.has("static-export"),
+        canGenerateStatic: config.features.has("static-generate"),
         subDir: config.subDir,
         port: config.port,
         nativeDeps: config.nativeDeps,

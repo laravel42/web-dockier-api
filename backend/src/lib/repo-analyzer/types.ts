@@ -10,7 +10,15 @@ export type DetectedStack =
       packageManagerVersion: string;
       nodeVersion: string;
       hasStandalone: boolean;
+      /** The DEFAULT build already produces static output. */
       isStatic: boolean;
+      /**
+       * A static build is AVAILABLE if the user chooses the static deploy
+       * target (e.g. a `nuxt generate` script beside an SSR `nuxt build`).
+       * Read only by the static deploy gate — it does not change how the app
+       * is built or served on the server path.
+       */
+      canGenerateStatic?: boolean;
       subDir: string;
       port: number;
       nativeDeps: NativeDep[];

@@ -14,7 +14,10 @@ import { TEMPLATE_ANALYSIS } from "../constants/templateAnalysis";
 // a MySQL project). v12 added `staticCapable`. Bumping discards analyses cached
 // before each field existed, which would otherwise keep showing stale/guessed
 // values.
-const analysisCache = new SessionCache<RepoAnalysis>("analysis", 13);
+// v14: Nuxt/Next static-capability re-evaluated (a `nuxt generate` script and a
+// real `output: 'export'` match are now detected), so pre-fix verdicts must be
+// discarded.
+const analysisCache = new SessionCache<RepoAnalysis>("analysis", 14);
 
 
 /**

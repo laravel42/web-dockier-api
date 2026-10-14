@@ -55,4 +55,54 @@ describe("computeStaticCapable", () => {
     );
     expect(computeStaticCapable(files)).toBe(false);
   });
+
+  it("treats a default (SSR) Nuxt app as NOT static-capable", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({});",
+    });
+    expect(computeStaticCapable(files)).toBe(false);
+  });
+
+  it("treats a Nuxt app with a `nuxt generate` script as static-capable", () => {
+    // The reported bug: the wizard told the user static hosting was unavailable
+    // even though the repo ships a generate script.
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build", generate: "nuxt generate" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({});",
+    });
+    expect(computeStaticCapable(files)).toBe(true);
+  });
+
+  it("treats a Nuxt app with ssr: false as static-capable", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({ ssr: false });",
+    });
+    expect(computeStaticCapable(files)).toBe(true);
+  });
+
+  it("treats a Nuxt app with nitro preset 'static' as static-capable", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({ nitro: { preset: 'static' } });",
+    });
+    expect(computeStaticCapable(files)).toBe(true);
+  });
+
+  it("treats a default (SSR) Next app as NOT static-capable", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { next: "^15.0.0" }, scripts: { build: "next build" } }),
+      "next.config.mjs": "const config = { output: 'standalone' };\nexport default config;",
+    });
+    expect(computeStaticCapable(files)).toBe(false);
+  });
+
+  it("treats a Next app with output: 'export' as static-capable", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { next: "^15.0.0" }, scripts: { build: "next build" } }),
+      "next.config.mjs": "export default { output: 'export' };",
+    });
+    expect(computeStaticCapable(files)).toBe(true);
+  });
 });

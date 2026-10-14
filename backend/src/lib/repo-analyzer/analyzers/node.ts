@@ -2,14 +2,14 @@ import type { RepoConfig } from "../types.js";
 import type { RepoFiles } from "../repo-files.js";
 import { joinPath } from "../repo-files.js";
 import { NATIVE_DEPS_MAP } from "../constants.js";
-import { cleanVersion } from "../utils.js";
+import { cleanVersion, nextStaticSignals, nuxtStaticSignals } from "../utils.js";
 
 interface NodePackageJson {
   engines?: { node?: string };
   packageManager?: string;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
-  scripts?: { start?: string; build?: string; serve?: string };
+  scripts?: Record<string, string | undefined>;
   main?: string;
   workspaces?: string[] | { packages: string[] };
 }
@@ -68,6 +68,8 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
   // Framework detection from dependencies
   const allDeps: Record<string, string> = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
 
+  const scriptsText = Object.values(pkg.scripts ?? {}).filter(Boolean).join("\n");
+
   const hasPayload = Object.keys(allDeps).some(
     (dep) => dep === "payload" || dep.startsWith("@payloadcms/"),
   );
@@ -77,15 +79,19 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
     config.framework = "nextjs";
     config.frameworkVersion = cleanVersion(allDeps["next"]);
     config.port = 3000;
+    let nextConfigText = "";
     for (const cfgName of ["next.config.ts", "next.config.mjs", "next.config.js"]) {
       const content = readApp(cfgName);
       if (content !== null) {
+        nextConfigText = content;
         config.hasStandalone = content.includes("standalone");
-        if (content.includes("output:") && content.includes("export")) config.features.add("static-export");
         if (content.includes("serverActions") || content.includes("server actions")) config.features.add("server-actions");
         break;
       }
     }
+    const nextSignals = nextStaticSignals(nextConfigText, scriptsText);
+    if (nextSignals.buildsStatic) config.features.add("static-export");
+    if (nextSignals.canGenerateStatic) config.features.add("static-generate");
     if (existsApp("app/api") || existsApp("pages/api")) {
       config.features.add("api-routes");
     }
@@ -96,23 +102,21 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
     config.framework = "nuxt";
     config.frameworkVersion = cleanVersion(allDeps["nuxt"] || allDeps["nuxt3"] || allDeps["nuxt-edge"] || "");
     config.port = 3000;
-    let isStatic = false;
+    let nuxtConfigText = "";
     for (const cfgName of ["nuxt.config.ts", "nuxt.config.mjs", "nuxt.config.js"]) {
       const content = readApp(cfgName);
       if (content !== null) {
-        if (/nitro\s*:\s*\{[^}]*preset\s*:\s*['"]static['"]/.test(content)
-          || /ssr\s*:\s*false/.test(content)
-          || /preset\s*:\s*['"]static['"]/.test(content)) {
-          isStatic = true;
-        }
+        nuxtConfigText = content;
         break;
       }
     }
-    if (isStatic) {
+    const nuxtSignals = nuxtStaticSignals(nuxtConfigText, scriptsText);
+    if (nuxtSignals.buildsStatic) {
       config.features.add("static-export");
     } else {
       config.features.add("ssr");
     }
+    if (nuxtSignals.canGenerateStatic) config.features.add("static-generate");
   } else if (allDeps["@angular/core"]) {
     config.framework = "angular";
     config.frameworkVersion = cleanVersion(allDeps["@angular/core"]);

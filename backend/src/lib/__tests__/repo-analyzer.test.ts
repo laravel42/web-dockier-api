@@ -194,6 +194,71 @@ describe("analyzeRepoFiles (filesystem-agnostic core)", () => {
     expect(config.features.has("static-export")).toBe(true);
     expect(config.features.has("ssr")).toBe(false);
   });
+
+  it("marks an SSR Nuxt with a `nuxt generate` script as static-generate, not static-export", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build", generate: "nuxt generate" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({});",
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.features.has("static-generate")).toBe(true);
+    expect(config.features.has("static-export")).toBe(false);
+    expect(config.features.has("ssr")).toBe(true);
+    const stack = toDetectedStack(config);
+    expect(stack).toMatchObject({ isStatic: false, canGenerateStatic: true });
+  });
+
+  it("recognises `nuxi generate` as a static-generate signal", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build", generate: "nuxi generate" } }),
+    });
+    expect(analyzeRepoFiles(files).features.has("static-generate")).toBe(true);
+  });
+
+  it("recognises NITRO_PRESET=static in a script as a static-generate signal", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { generate: "NITRO_PRESET=static nuxt build" } }),
+    });
+    expect(analyzeRepoFiles(files).features.has("static-generate")).toBe(true);
+  });
+
+  it("leaves a plain SSR Nuxt without any static signal", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build" } }),
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.features.has("static-generate")).toBe(false);
+    expect(config.features.has("static-export")).toBe(false);
+  });
+
+  it("does NOT mark a Next.js `output: 'standalone'` config as static", () => {
+    // Regression: the old probe tested includes("output:") && includes("export"),
+    // and "export default" matches in virtually every next.config.
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { next: "^15.0.0" }, scripts: { build: "next build" } }),
+      "next.config.mjs": "const config = { output: 'standalone' };\nexport default config;",
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.features.has("static-export")).toBe(false);
+    expect(config.features.has("static-generate")).toBe(false);
+  });
+
+  it("marks a Next.js `output: 'export'` config as static-export", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { next: "^15.0.0" }, scripts: { build: "next build" } }),
+      "next.config.mjs": "export default { output: 'export' };",
+    });
+    expect(analyzeRepoFiles(files).features.has("static-export")).toBe(true);
+  });
+
+  it("marks a Next.js repo with a `next export` script as static-generate only", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { next: "^15.0.0" }, scripts: { export: "next build && next export" } }),
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.features.has("static-generate")).toBe(true);
+    expect(config.features.has("static-export")).toBe(false);
+  });
 });
 
 describe("detectSubDir", () => {
