@@ -77,10 +77,11 @@ export function hasPayloadCms(repoDir: string): boolean {
  * (`opts.hasPayload`) rather than a disk read so callers without a clone can
  * still reach the same decision.
  *
- * For Next/Nuxt the gate also accepts `detectedStack.canGenerateStatic` — a
- * repo whose default build is SSR but which offers a static build. That matches
- * what {@link buildSite} actually does on the static path (`nuxt generate` /
- * `next export`), so the gate and the builder agree.
+ * For Nuxt the gate also accepts `detectedStack.canGenerateStatic` — a repo
+ * whose default build is SSR but which offers a `nuxt generate`, which is what
+ * {@link buildSite} runs on the static path, so the gate and the builder agree.
+ * For Next there is no such extra signal: only `output: "export"` produces
+ * static files, and buildNext errors when the build leaves no `out/`.
  */
 export function getStaticDeployBlockReason(opts: {
   detectedStack: DetectedStack;
@@ -346,9 +347,20 @@ async function buildNext(
 ): Promise<boolean> {
   const buildRes = await runScript(runCmd, packageManager, "build", repoDir);
   if (buildRes.code === 0) {
-    // Try next export if out/ doesn't exist yet
+    // Try next export if out/ doesn't exist yet (removed in Next 14+, so this
+    // is a best-effort fallback for older repos).
     if (!existsSync(join(repoDir, "out"))) {
       await runBin(runCmd, packageManager, "next", ["export"], repoDir);
+    }
+    // Fail loudly rather than returning success with nothing to publish:
+    // findOutputDir falls back to repoDir, which would upload the repository
+    // SOURCE (configs, lockfiles, anything else in the tree) to a public CDN
+    // origin.
+    if (!existsSync(join(repoDir, "out"))) {
+      throw new Error(
+        "Next.js static build produced no 'out' directory. A static deploy needs output: 'export' in next.config; "
+        + "without it the build emits a server bundle, not static files. Deploy this project to a server instead.",
+      );
     }
     await appendLog("✓ Next.js static site built");
     return true;

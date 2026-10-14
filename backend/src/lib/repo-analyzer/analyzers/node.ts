@@ -89,7 +89,7 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
         break;
       }
     }
-    const nextSignals = nextStaticSignals(nextConfigText, scriptsText);
+    const nextSignals = nextStaticSignals(nextConfigText);
     if (nextSignals.buildsStatic) config.features.add("static-export");
     if (nextSignals.canGenerateStatic) config.features.add("static-generate");
     if (existsApp("app/api") || existsApp("pages/api")) {
@@ -110,7 +110,7 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
         break;
       }
     }
-    const nuxtSignals = nuxtStaticSignals(nuxtConfigText, scriptsText);
+    const nuxtSignals = nuxtStaticSignals(nuxtConfigText, scriptsText, existsApp("server/api"));
     if (nuxtSignals.buildsStatic) {
       config.features.add("static-export");
     } else {

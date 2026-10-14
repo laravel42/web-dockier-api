@@ -105,4 +105,39 @@ describe("computeStaticCapable", () => {
     });
     expect(computeStaticCapable(files)).toBe(true);
   });
+
+  it("treats a Next app whose only static signal is a `next export` script as NOT static-capable", () => {
+    // `next export` was removed in Next 14, so the script cannot produce a
+    // static build and offering it would publish nothing useful.
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { next: "^15.0.0" }, scripts: { build: "next build", export: "next build && next export" } }),
+    });
+    expect(computeStaticCapable(files)).toBe(false);
+  });
+
+  it("treats a Nuxt app with a generate script but server/api routes as NOT static-capable", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build", generate: "nuxt generate" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({});",
+      "server/api/foo.ts": "export default defineEventHandler(() => ({ ok: true }));",
+    });
+    expect(computeStaticCapable(files)).toBe(false);
+  });
+
+  it("treats a Nuxt app with a generate script but a non-static nitro preset as NOT static-capable", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build", generate: "nuxt generate" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({ nitro: { preset: 'node-server' } });",
+    });
+    expect(computeStaticCapable(files)).toBe(false);
+  });
+
+  it("keeps a Nuxt app with ssr: false static-capable even with server/api routes", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({ ssr: false });",
+      "server/api/foo.ts": "export default defineEventHandler(() => ({ ok: true }));",
+    });
+    expect(computeStaticCapable(files)).toBe(true);
+  });
 });

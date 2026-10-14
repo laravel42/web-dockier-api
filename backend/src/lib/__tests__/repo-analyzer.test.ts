@@ -251,13 +251,46 @@ describe("analyzeRepoFiles (filesystem-agnostic core)", () => {
     expect(analyzeRepoFiles(files).features.has("static-export")).toBe(true);
   });
 
-  it("marks a Next.js repo with a `next export` script as static-generate only", () => {
+  it("ignores a `next export` script — the command was removed in Next 14", () => {
     const files = new MapRepoFiles({
       "package.json": pkg({ deps: { next: "^15.0.0" }, scripts: { export: "next build && next export" } }),
     });
     const config = analyzeRepoFiles(files);
-    expect(config.features.has("static-generate")).toBe(true);
+    expect(config.features.has("static-generate")).toBe(false);
     expect(config.features.has("static-export")).toBe(false);
+  });
+
+  it("rejects a `nuxt generate` script when the repo has server/api routes", () => {
+    // `nuxi init` ships the generate script, so on its own it is weak evidence;
+    // server/api routes are positive counter-evidence that the app needs a server.
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build", generate: "nuxt generate" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({});",
+      "server/api/foo.ts": "export default defineEventHandler(() => ({ ok: true }));",
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.features.has("static-generate")).toBe(false);
+    expect(config.features.has("ssr")).toBe(true);
+  });
+
+  it("rejects a `nuxt generate` script when the nitro preset is explicitly non-static", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build", generate: "nuxt generate" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({ nitro: { preset: 'node-server' } });",
+    });
+    expect(analyzeRepoFiles(files).features.has("static-generate")).toBe(false);
+  });
+
+  it("keeps ssr: false sufficient even next to server/api routes", () => {
+    // ssr: false is a deliberate author choice; a stray server dir does not override it.
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { nuxt: "^3.13.0" }, scripts: { build: "nuxt build" } }),
+      "nuxt.config.ts": "export default defineNuxtConfig({ ssr: false });",
+      "server/api/foo.ts": "export default defineEventHandler(() => ({ ok: true }));",
+    });
+    const config = analyzeRepoFiles(files);
+    expect(config.features.has("static-export")).toBe(true);
+    expect(config.features.has("static-generate")).toBe(true);
   });
 });
 
