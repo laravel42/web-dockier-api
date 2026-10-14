@@ -148,6 +148,25 @@ describe("resolveRuntimeStartCommand", () => {
     expect(result.kind).toBe("static");
   });
 
+  it("keeps a Next app on kind=server (and port 3000) whatever the static probe says", async () => {
+    // The Next branch always adds "ssr", and `kind` reads "ssr" before
+    // "static-export" — so tightening the static probe to `output: 'export'`
+    // cannot move a Next repo between server and static, nor its Dokploy
+    // container port. Pinned because the static-capability work touches that
+    // probe.
+    serveRepo(
+      ["package.json", "next.config.mjs"],
+      {
+        "package.json": pkg({ deps: { next: "^15.0.0" }, scripts: { build: "next build", start: "next start" } }),
+        "next.config.mjs": "const config = { output: 'standalone' };\nexport default config;",
+      },
+    );
+
+    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    expect(result.framework).toBe("nextjs");
+    expect(result.kind).toBe("server");
+  });
+
   it("returns empty (no throw) when credentials are missing", async () => {
     mockGetCreds.mockResolvedValue(null);
     const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
