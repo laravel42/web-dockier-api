@@ -253,7 +253,9 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       await deployApi.cancelDeployment(state.deploymentId);
       cleanupStandardDeployRef.current();
       setState(prev => ({ ...prev, deployStatus: "cancelled" }));
-      setDeployError("Deployment cancelled.");
+      // A user cancel is not an error — DeployWizard renders deployError in a
+      // danger-toned box. StepDeploy carries the cancelled state instead.
+      setDeployError("");
     } catch (err: unknown) {
       setDeployError(getErrorMessage(err, "Failed to cancel deployment"));
     } finally {

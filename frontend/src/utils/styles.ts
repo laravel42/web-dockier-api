@@ -164,6 +164,7 @@ export const statusDotColors: Record<string, string> = {
   deploying: "bg-primary-500",
   pending: "bg-secondary-400",
   destroyed: "bg-secondary-400",
+  cancelled: "bg-warning-500",
   completed: "bg-success-500",
   running: "bg-primary-500",
 };

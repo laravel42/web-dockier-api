@@ -68,6 +68,7 @@ export function parseStages(
   deployFailed: boolean,
   deployStrategy = "vps",
   deploySucceeded = false,
+  deployCancelled = false,
 ): { stages: PipelineStage[]; retries: AIRetryInfo[] } {
   const stageDefs = stageDefsFor(deployStrategy);
   const stages: PipelineStage[] = stageDefs.map((def) => ({
@@ -140,6 +141,17 @@ export function parseStages(
   if (deployFailed && !stages.some((s) => s.status === "failed")) {
     const lastActive = [...stages].reverse().find((s) => s.status === "in-progress");
     if (lastActive) lastActive.status = "failed";
+  }
+
+  // A cancelled deployment is terminal too: without this the stage that was
+  // running (the `deploy` stage, last line "Triggering deployment...") kept its
+  // "in-progress" status and spun forever. "pending" rather than "failed" —
+  // nothing failed, the work just stopped — and its log line still shows, so
+  // the user can see where it stopped.
+  if (deployCancelled) {
+    for (const stage of stages) {
+      if (stage.status === "in-progress") stage.status = "pending";
+    }
   }
 
   // A succeeded deployment means every stage completed, even ones whose final

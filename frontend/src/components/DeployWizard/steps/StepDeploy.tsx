@@ -18,10 +18,11 @@ export default function StepDeploy({ state }: { state: WizardState }) {
   const isRunning = ["pending", "building", "deploying"].includes(state.deployStatus);
   const isFailed = state.deployStatus === "failed";
   const isSuccess = state.deployStatus === "success";
+  const isCancelled = state.deployStatus === "cancelled";
 
   const { stages, retries } = useMemo(
-    () => parseStages(state.deployLogs, isFailed, state.deployStrategy, isSuccess),
-    [state.deployLogs, isFailed, state.deployStrategy, isSuccess],
+    () => parseStages(state.deployLogs, isFailed, state.deployStrategy, isSuccess, isCancelled),
+    [state.deployLogs, isFailed, state.deployStrategy, isSuccess, isCancelled],
   );
 
   // Surface the failure reason from the top-level "✗ Pipeline failed: ..." log
@@ -40,6 +41,7 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${
           isSuccess ? "bg-success-50 text-success-500" :
           isFailed ? "bg-danger-50 text-danger-500" :
+          isCancelled ? "bg-warning-surface text-warning-ink" :
           isRunning ? "bg-primary-50 text-primary-500" :
           "bg-secondary-100 text-text-muted"
         }`}>
@@ -60,6 +62,16 @@ export default function StepDeploy({ state }: { state: WizardState }) {
               {failureReason || "The deployment pipeline failed. Check the logs below for details."}
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Cancelled notice — a cancel is the user's own action, not an error */}
+      {isCancelled && (
+        <div className="rounded-lg bg-warning-surface border border-warning-line p-3">
+          <p className="text-xs text-warning-ink font-semibold uppercase tracking-wide mb-0.5">Deployment cancelled</p>
+          <p className="text-sm text-text-secondary">
+            You cancelled this deployment. The build server was asked to stop the build — check the logs below for the exact point it stopped.
+          </p>
         </div>
       )}
 
@@ -96,7 +108,11 @@ export default function StepDeploy({ state }: { state: WizardState }) {
                   )}
                 </div>
                 {/* Show last meaningful log for the stage */}
-                {stage.logs.length > 0 && stage.status !== "pending" && (
+                {/* A cancelled stage is downgraded to "pending" but keeps its
+                    logs, so the user still sees where the pipeline stopped.
+                    Outside a cancel, a pending stage shows no log line (as
+                    before) — pending there means "did not run yet". */}
+                {stage.logs.length > 0 && (isCancelled || stage.status !== "pending") && (
                   <p className="text-xs text-text-muted mt-0.5 truncate max-w-md">
                     {cleanLogLine(stage.logs[stage.logs.length - 1])}
                   </p>

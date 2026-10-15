@@ -310,6 +310,23 @@ describe("DokployClient", () => {
       );
     });
 
+    it("cancelDeployment sends correct mutation", async () => {
+      // Dokploy answers this mutation with an empty 2xx body.
+      fetchMock.mockResolvedValue(
+        new Response("", { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
+
+      await client.cancelDeployment("app-1");
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://dokploy.test/api/application.cancelDeployment",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ applicationId: "app-1" }),
+        }),
+      );
+    });
+
     it("triggerAIFix sends correct mutation", async () => {
       fetchMock.mockResolvedValue(
         new Response(JSON.stringify({ result: { data: { applied: true, summary: "Fixed env" } } }), { status: 200 }),

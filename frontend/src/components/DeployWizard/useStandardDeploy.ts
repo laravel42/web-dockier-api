@@ -77,8 +77,9 @@ export function useStandardDeploy() {
         }));
 
         if (d.status === "success" || d.status === "failed" || d.status === "cancelled") {
+          // A cancel is the user's own action: terminal, but not an error, so
+          // it is not pushed into the danger-toned error banner.
           if (d.status === "failed") onError("Deployment failed. Check logs for details.");
-          if (d.status === "cancelled") onError("Deployment was cancelled.");
           onComplete?.();
           return;
         }

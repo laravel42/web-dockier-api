@@ -264,3 +264,39 @@ describe("parseStages — Dokploy pipeline is unaffected", () => {
     expect(stages[0].id).toBe("ensure-project");
   });
 });
+
+describe("parseStages — a cancelled deploy", () => {
+  // The user's actual log tail: the pipeline stopped right after triggering
+  // the build, so the `deploy` stage had no ✓/✗ marker of its own.
+  const CANCELLED_LOG = [
+    "[2026-10-14 22:34:20] [stage:ensure-project] ✓ Reusing existing project: 6BoPIDeG5J8yQQ",
+    "[2026-10-14 22:34:21] [stage:sync-git] ✓ Git config prepared (custom)",
+    "[2026-10-14 22:34:22] [stage:provision-server] ✓ Reusing existing server: 54.91.77.9",
+    "[2026-10-14 22:34:25] [stage:configure-app] ✓ Application configured (build: railpack, port: 3000)",
+    "[2026-10-14 22:34:27] [stage:deploy] Triggering deployment...",
+  ];
+
+  it("leaves no stage spinning and marks nothing as failed", () => {
+    const { stages } = parseStages(CANCELLED_LOG, false, "vps", false, true);
+
+    // The regression: the deploy stage span forever on "Triggering deployment...".
+    expect(stages.some((s) => s.status === "in-progress")).toBe(false);
+    expect(stages.some((s) => s.status === "failed")).toBe(false);
+
+    const byId = Object.fromEntries(stages.map((s) => [s.id, s.status]));
+    expect(byId["deploy"]).toBe("pending");
+    expect(byId["ensure-project"]).toBe("success");
+    expect(byId["sync-git"]).toBe("success");
+    expect(byId["provision-server"]).toBe("success");
+    expect(byId["configure-app"]).toBe("success");
+
+    // The stopped stage keeps its log line, so the user sees where it stopped.
+    const deploy = stages.find((s) => s.id === "deploy");
+    expect(deploy?.logs.at(-1)).toContain("Triggering deployment");
+  });
+
+  it("only downgrades the running stage when the deploy is cancelled", () => {
+    const { stages } = parseStages(CANCELLED_LOG, false, "vps", false, false);
+    expect(stages.find((s) => s.id === "deploy")?.status).toBe("in-progress");
+  });
+});

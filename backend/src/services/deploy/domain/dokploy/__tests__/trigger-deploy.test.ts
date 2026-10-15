@@ -373,6 +373,26 @@ describe("stageTriggerDeploy", () => {
     expect(result.failureReason).toMatch(/repository/i);
     expect(result.failureReason).not.toMatch(/No start command was detected/i);
   });
+  it("stops watching the build when the deployment is cancelled mid-poll", async () => {
+    // Build never finishes; the user cancels while it runs.
+    mockClient.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "running", createdAt: "x" }]);
+    const isCancelled = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+      isCancelled,
+    });
+
+    expect(result.status).toBe("cancelled");
+    expect(result.appUrl).toBe("");
+    expect(logLines.some((l) => /cancelled by user/i.test(l))).toBe(true);
+    // Pre-trigger snapshot + the one poll before the cancel was observed; the
+    // cancel check runs before the Dokploy round-trip, so no further calls.
+    expect(mockClient.listDeployments).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("stageDeployWithRetry", () => {
@@ -450,9 +470,29 @@ describe("stageDeployWithRetry", () => {
     });
 
     expect(result.status).toBe("done");
+    // A genuine build failure must never be reclassified as a user cancel.
+    expect(result.status).not.toBe("cancelled");
     expect(mockClient.deploy).toHaveBeenCalledTimes(2);
     expect(mockInvokeDokployAI).toHaveBeenCalledTimes(1);
     expect(logLines.some((l) => l.includes("Applied automatic fix"))).toBe(true);
+  });
+  it("returns without AI recovery or a second deploy when cancelled", async () => {
+    mockClient.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "running", createdAt: "x" }]);
+    const isCancelled = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+
+    const result = await stageDeployWithRetry({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      maxAttempts: 3,
+      pollIntervalMs: 100,
+      isCancelled,
+    });
+
+    expect(result.status).toBe("cancelled");
+    expect(mockClient.deploy).toHaveBeenCalledTimes(1);
+    expect(mockInvokeDokployAI).not.toHaveBeenCalled();
+    expect(logLines.some((l) => l.includes("Attempt 2/"))).toBe(false);
   });
 
   it("throws after max attempts exhausted", async () => {

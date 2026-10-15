@@ -47,6 +47,13 @@ import { revealEnv } from "../../../projects/domain/env.js";
 const PIPELINE_TIMEOUT_MS = 40 * 60 * 1000; // 40 minutes
 
 /**
+ * Control-flow sentinel for a user cancel — NOT a failure. Thrown to unwind
+ * the pipeline through the single catch block, which then skips the "failed"
+ * status write and the failure notification.
+ */
+class DeployCancelledError extends Error {}
+
+/**
  * Execute the full Dokploy deployment pipeline.
  * This runs asynchronously via the pg-boss job queue.
  */
@@ -65,10 +72,22 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
   // still report what needs attention in the repository.
   const advisories = createAdvisoryCollector();
 
-  const checkTimeout = () => {
+  const isCancelled = async () => (await getDeploymentCurrentStatus(deploymentId)) === "cancelled";
+
+  // Between-stage gate: the deadline, plus a cancel the user issued while the
+  // previous stage ran (the entry guard only reads the status once).
+  // shortcut: a cancel landing between a checkpoint and the next updateStatus
+  // write is still overwritten with a NON-terminal status ("deploying"), so the
+  // user can simply cancel again (CANCELLABLE_STATUSES includes "deploying").
+  // The one window that would have been terminal — a cancel during stage 9
+  // verify ending as "success" — is closed by its own isCancelled() check just
+  // before the success write. Upgrade to a status-guarded conditional
+  // updateStatus only if the remaining non-terminal race shows up in practice.
+  const checkpoint = async () => {
     if (Date.now() - startTime > PIPELINE_TIMEOUT_MS) {
       throw new Error(`Pipeline timed out after ${Math.round(PIPELINE_TIMEOUT_MS / 60_000)} minutes`);
     }
+    if (await isCancelled()) throw new DeployCancelledError();
   };
 
   try {
@@ -83,14 +102,14 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       client,
       log,
     });
-    checkTimeout();
+    await checkpoint();
 
     // ─── Stage 2 & 3: Parallel — Sync Git + Provision Server ─────
     const [gitResult, serverResult] = await Promise.all([
       stageSyncGit({ gitConnectionId, repo, branch, log }),
       stageProvisionServer({ projectId: projectId || deploymentId, providerId: event.providerId, tenantId, instanceType: event.instanceType, client, log }),
     ]);
-    checkTimeout();
+    await checkpoint();
 
     await updateStatus(deploymentId, "deploying");
 
@@ -119,7 +138,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       client,
       log,
     });
-    checkTimeout();
+    await checkpoint();
 
     // Resolve a server start command for apps whose repo has no `start` script
     // (e.g. SSR Astro via @astrojs/node). Prefer one already on the event;
@@ -175,7 +194,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       log,
       advise: advisories.add,
     });
-    checkTimeout();
+    await checkpoint();
 
     // ─── Stage 5: Deploy with Retry ──────────────────────────────
     // A full build takes many minutes, so cap retries at 2: one retry covers a
@@ -199,7 +218,13 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       advise: advisories.add,
       maxAttempts: 2,
       pollIntervalMs: event.deployPollIntervalMs,
+      // Lets a cancel issued mid-build stop the watch instead of polling to the
+      // timeout and reporting the user's cancel as a build failure.
+      isCancelled,
     });
+
+    // Unwind without touching the "cancelled" status the cancel route wrote.
+    if (deployResult.status === "cancelled") throw new DeployCancelledError();
 
     // ─── Stage 6: Post-deploy commands ───────────────────────────
     // Run the project's user-defined post-deploy commands inside the running
@@ -219,7 +244,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         log,
         advise: advisories.add,
       });
-      checkTimeout();
+      await checkpoint();
     }
 
     // ─── Stage 7: Network rules (security + redirects) ───────────
@@ -234,7 +259,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       } catch (netErr) {
         await log(`[stage:network] Skipped applying network rules: ${getErrDetail(netErr)}`);
       }
-      checkTimeout();
+      await checkpoint();
     }
 
     // ─── Stage 8: Custom domains + SSL ───────────────────────────
@@ -250,7 +275,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       } catch (domErr) {
         await log(`[stage:domains] Skipped applying domains: ${getErrDetail(domErr)}`);
       }
-      checkTimeout();
+      await checkpoint();
     }
 
     // ─── Stage 9: Verify the app actually serves traffic ─────────
@@ -279,6 +304,13 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     }
 
     // ─── Success ─────────────────────────────────────────────────
+    // Last gate before a TERMINAL write: stage 9 verify is an HTTP probe with
+    // no checkpoint after it, and a cancel landing there would otherwise end as
+    // "success" — which the user cannot cancel again. Cancel only (not the
+    // deadline): a deploy that already succeeded must not be recorded failed
+    // just because the pipeline ran past PIPELINE_TIMEOUT_MS.
+    if (await isCancelled()) throw new DeployCancelledError();
+
     // Mark the project's infra_state "live" BEFORE flipping the deployment to
     // "success", so a client that trusts the deployment status reads a
     // consistent project row (infra_state already "live") on its first refetch
@@ -318,12 +350,17 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       appUrl: deployResult.appUrl || undefined,
     });
   } catch (err) {
+    const cancelled = err instanceof DeployCancelledError;
     const message = getErrDetail(err);
-    await log(`✗ Pipeline failed: ${message}`);
-    try {
-      await updateStatus(deploymentId, "failed");
-    } catch {
-      // Best-effort status update
+    if (cancelled) {
+      await log("⛔ Deployment cancelled by user — pipeline stopped. Any resources already created remain; use Tear Down to remove them.");
+    } else {
+      await log(`✗ Pipeline failed: ${message}`);
+      try {
+        await updateStatus(deploymentId, "failed");
+      } catch {
+        // Best-effort status update
+      }
     }
     // A failed deploy may still have created a VM + Dokploy records partway
     // through. Mark infra "live" so the Tear Down button (gated on
@@ -336,6 +373,8 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         // never mask the original failure
       }
     }
+    // A cancel is the user's own action — no failure notification for it.
+    if (cancelled) return;
     // Surface the failure through the user's notification channels, as the
     // native pipeline does — otherwise a failed Dokploy deploy is silent.
     emitDeployFailureNotification({

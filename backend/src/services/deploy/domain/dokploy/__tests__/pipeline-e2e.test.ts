@@ -303,6 +303,27 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(failLog).toContain("failed after 2 attempts");
   });
 
+  it("stops a running build and records no failure when the user cancels", async () => {
+    // Build keeps running; the user cancels while the deploy stage polls.
+    clientMethods.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "running", createdAt: "x" }]);
+    mockGetDeploymentCurrentStatus
+      .mockResolvedValueOnce("pending") // entry guard
+      .mockResolvedValueOnce("pending") // checkpoints up to the deploy stage
+      .mockResolvedValueOnce("pending")
+      .mockResolvedValueOnce("pending")
+      .mockResolvedValueOnce("pending")
+      .mockResolvedValue("cancelled");
+
+    await executeDokployPipeline(input());
+
+    expect(statusCalls).not.toContain("failed");
+    expect(statusCalls).not.toContain("success");
+    expect(clientMethods.deploy).toHaveBeenCalledTimes(1);
+    expect(clientMethods.triggerAIFix).not.toHaveBeenCalled();
+    expect(logLines.some((l) => l.includes("Pipeline failed"))).toBe(false);
+    expect(logLines.some((l) => /cancelled by user/i.test(l))).toBe(true);
+  });
+
   it("chooses dockerfile build type when the repo has a Dockerfile", async () => {
     await executeDokployPipeline(input({ hasDocker: true }));
 

@@ -11,7 +11,11 @@ import { sleep } from "../../../../../shared/utils/time.js";
 import { type Advisory, domainPortCorrectedAdvisory } from "../advisories.js";
 
 export interface DeployResult {
-  status: "done" | "error";
+  /**
+   * "cancelled" is a user action observed mid-build, never a build failure:
+   * callers must unwind without AI recovery, a retry, or a "failed" status.
+   */
+  status: "done" | "error" | "cancelled";
   appUrl: string;
   /** User-facing reason when status is "error" (best-effort). */
   failureReason?: string;
@@ -61,8 +65,14 @@ export async function stageTriggerDeploy(params: {
   advise?: (advisory: Advisory) => void;
   pollIntervalMs?: number;
   timeoutMs?: number;
+  /**
+   * Checked once per poll tick so a cancel issued while the build runs stops
+   * the watch. Injected rather than read here, to keep this stage free of the
+   * deployments/DB module.
+   */
+  isCancelled?: () => Promise<boolean>;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, containerPort = 3000, runtimeHint, advise, pollIntervalMs = 5000, timeoutMs = 1_200_000 } = params;
+  const { applicationId, client, log, containerPort = 3000, runtimeHint, advise, pollIntervalMs = 5000, timeoutMs = 1_200_000, isCancelled } = params;
 
   // Capture the set of existing deployment ids BEFORE triggering, so we can
   // identify the NEW deployment this trigger creates and follow only its
@@ -77,6 +87,13 @@ export async function stageTriggerDeploy(params: {
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutMs) {
     await sleep(pollIntervalMs);
+
+    // Cancel check first, so a cancelled deploy also skips the Dokploy
+    // round-trip below.
+    if (isCancelled && (await isCancelled())) {
+      await log("[stage:deploy] ⛔ Cancelled by user — stopped watching the build.");
+      return { status: "cancelled", appUrl: "" };
+    }
 
     // Find the deployment created by this trigger (newest id not seen before),
     // falling back to the most recent record if we can't distinguish one yet.
@@ -121,8 +138,10 @@ export async function stageDeployWithRetry(params: {
   advise?: (advisory: Advisory) => void;
   maxAttempts?: number;
   pollIntervalMs?: number;
+  /** See stageTriggerDeploy — passed straight through. */
+  isCancelled?: () => Promise<boolean>;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, containerPort, runtimeHint, advise, maxAttempts = 3, pollIntervalMs } = params;
+  const { applicationId, client, log, containerPort, runtimeHint, advise, maxAttempts = 3, pollIntervalMs, isCancelled } = params;
 
   let lastFailureReason: string | undefined;
 
@@ -137,9 +156,16 @@ export async function stageDeployWithRetry(params: {
       runtimeHint,
       advise,
       pollIntervalMs,
+      isCancelled,
     });
 
     if (result.status === "done") {
+      return result;
+    }
+
+    // A user cancel is not a failure: return before AI recovery, the next
+    // "Attempt n/n" log line and a second client.deploy().
+    if (result.status === "cancelled") {
       return result;
     }
 

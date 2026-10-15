@@ -650,12 +650,16 @@ export class DokployClient {
  * URL has already been through `z.string().url()` and the init-order Proxy
  * guard reports a clear error if this is called before `initConfig()`.
  */
-export function createDokployClient(): DokployClient {
+export function createDokployClient(
+  // Callers on a user-facing request path (the cancel route) need a tighter
+  // bound than the default 4 attempts × 30s; everything else omits this.
+  overrides?: Pick<DokployClientConfig, "timeout" | "maxRetries">,
+): DokployClient {
   const baseUrl = env.DOKPLOY_API_URL;
   const apiToken = env.DOKPLOY_API_TOKEN;
 
   if (!baseUrl) throw new Error("DOKPLOY_API_URL is required when DEPLOY_PROVIDER=dokploy");
   if (!apiToken) throw new Error("DOKPLOY_API_TOKEN is required when DEPLOY_PROVIDER=dokploy");
 
-  return new DokployClient({ baseUrl, apiToken });
+  return new DokployClient({ baseUrl, apiToken, ...overrides });
 }

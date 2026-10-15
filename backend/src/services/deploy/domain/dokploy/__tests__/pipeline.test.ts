@@ -219,6 +219,56 @@ describe("executeDokployPipeline", () => {
     expect(mockEnsureProject).not.toHaveBeenCalled();
   });
 
+  it("stops at the next checkpoint when the user cancels mid-pipeline", async () => {
+    // "pending" for the entry guard, "cancelled" from the first checkpoint on.
+    mockGetDeploymentCurrentStatus
+      .mockResolvedValueOnce("pending")
+      .mockResolvedValue("cancelled");
+
+    await expect(executeDokployPipeline(basePipelineInput)).resolves.toBeUndefined();
+
+    // The row keeps the "cancelled" the cancel route wrote.
+    expect(mockUpdateStatus).not.toHaveBeenCalledWith("deploy-1", "failed");
+    expect(mockUpdateStatus).not.toHaveBeenCalledWith("deploy-1", "deploying");
+    expect(mockEmitFailure).not.toHaveBeenCalled();
+    expect(mockDeployWithRetry).not.toHaveBeenCalled();
+    expect(mockAppendLog.mock.calls.some(([, line]) => /cancelled by user/i.test(String(line)))).toBe(true);
+  });
+
+  it("unwinds without a failure when the deploy stage reports a cancel", async () => {
+    mockDeployWithRetry.mockResolvedValueOnce({ status: "cancelled", appUrl: "" });
+
+    await expect(executeDokployPipeline(basePipelineInput)).resolves.toBeUndefined();
+
+    const statuses = mockUpdateStatus.mock.calls.map(([, status]) => status);
+    expect(statuses).not.toContain("success");
+    expect(statuses).not.toContain("failed");
+    expect(mockEmitSuccess).not.toHaveBeenCalled();
+    expect(mockEmitFailure).not.toHaveBeenCalled();
+    expect(mockRunPostDeploy).not.toHaveBeenCalled();
+    expect(mockVerifyDeploy).not.toHaveBeenCalled();
+    // Tear Down is gated on infra_state === "live", so it must still light up.
+    expect(mockMarkInfraLive).toHaveBeenCalled();
+  });
+
+  it("does not record success when the cancel lands during stage 9 verify", async () => {
+    // Verify is an HTTP probe with no checkpoint after it; "success" is
+    // terminal, so an overwrite here cannot be recovered by cancelling again.
+    mockVerifyDeploy.mockImplementationOnce(async () => {
+      mockGetDeploymentCurrentStatus.mockResolvedValue("cancelled");
+      return { ok: true, status: 200, reason: "ok" };
+    });
+
+    await expect(executeDokployPipeline(basePipelineInput)).resolves.toBeUndefined();
+
+    const statuses = mockUpdateStatus.mock.calls.map(([, status]) => status);
+    expect(statuses).not.toContain("success");
+    expect(statuses).not.toContain("failed");
+    expect(mockEmitSuccess).not.toHaveBeenCalled();
+    expect(mockEmitFailure).not.toHaveBeenCalled();
+    expect(mockAppendLog.mock.calls.some(([, line]) => /cancelled by user/i.test(String(line)))).toBe(true);
+  });
+
   it("passes git config from sync-git to configure-app", async () => {
     const customGitConfig = { type: "gitlab", owner: "org", repository: "app", branch: "develop" };
     mockSyncGit.mockResolvedValueOnce({ gitConfig: customGitConfig });

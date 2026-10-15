@@ -425,5 +425,60 @@ export async function cancelDeployment(deploymentId: string, tenantId: string) {
   // Append cancel log atomically via RPC (avoids read-modify-write race)
   await appendDeploymentLog(deploymentId, `[${nowIso()}] ⛔ Deployment cancelled by user`);
 
+  // Only after the row is actually cancelled: ask the build server to stop.
+  // A lost race above returns early, so we never stop a remote build that some
+  // other transition already finished.
+  await requestRemoteBuildCancel(deployment.project_id || deploymentId, deploymentId);
+
   return rowToDeployment(updated);
+}
+
+/**
+ * Ask Dokploy to stop the build this deployment started.
+ *
+ * Best-effort and never fatal (same convention as the AI Dockerfile review):
+ * the deployment is already cancelled in Dockier, so a failure here must not
+ * turn a successful cancel into an error — it only means the remote build may
+ * keep running, which we tell the user in the deploy log.
+ *
+ * `mappingKey` is the project id, falling back to the deployment id: the
+ * Dokploy pipeline creates every mapping with `projectId || deploymentId`, so
+ * a projectless deployment's mapping is keyed by its own id.
+ */
+const REMOTE_CANCEL_TIMEOUT_MS = 5_000;
+
+async function requestRemoteBuildCancel(mappingKey: string, deploymentId: string): Promise<void> {
+  // The native/static pipeline has no Dokploy build to stop.
+  if (env.DEPLOY_PROVIDER !== "dokploy") return;
+
+  try {
+    // Dynamic import keeps the Dokploy modules out of this file's (widely
+    // imported) static module graph, matching dokploy/pipeline.ts.
+    const { getApplication } = await import("./dokploy/mappings.js");
+    const mapping = await getApplication(mappingKey);
+    // Nothing was configured on Dokploy yet (e.g. cancel during provisioning).
+    if (!mapping?.dokployApplicationId) return;
+
+    const { createDokployClient } = await import("./dokploy/client.js");
+    // Bounded on purpose: this runs inside the user's Cancel request. The
+    // default client retries 3× with a 30s per-attempt timeout (~127s), which
+    // would hang the Cancel button — and the wizard's spinner — while Dokploy
+    // is unreachable, which is exactly when a user cancels. One short attempt
+    // is enough: failing only means the remote build may keep running, and we
+    // say so in the log below.
+    await createDokployClient({
+      timeout: REMOTE_CANCEL_TIMEOUT_MS,
+      maxRetries: 0,
+    }).cancelDeployment(mapping.dokployApplicationId);
+    await appendDeploymentLog(
+      deploymentId,
+      `[${nowIso()}] ⛔ Asked the build server to stop the running build.`,
+    );
+  } catch (err) {
+    logger.warn({ err, deploymentId }, "[deploy] Failed to cancel the remote Dokploy build");
+    await appendDeploymentLog(
+      deploymentId,
+      `[${nowIso()}] ⚠ Could not reach the build server to stop the build — it may still be running there. The deployment is cancelled in Dockier.`,
+    );
+  }
 }
