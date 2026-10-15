@@ -52,6 +52,7 @@ export type {
   SensitiveDataField,
   RepoVulnerability,
   RepoDependency,
+  MultiServiceHint,
   RepoAnalysisResponse,
   StackComponent,
   StackAnalysisResponse,

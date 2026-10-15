@@ -6,6 +6,7 @@ import { detectServices, type DetectedService } from "./services.js";
 import { detectTechStack, type TechStackItem } from "./tech-stack.js";
 import { scanSensitiveData, type SensitiveField } from "./sensitive-data-scanner.js";
 import { detectStaticCapable } from "./repo-config.js";
+import { detectMultiService, type MultiServiceHint } from "./multi-service.js";
 
 export type { SensitiveField } from "./sensitive-data-scanner.js";
 
@@ -92,6 +93,15 @@ export type RepoAnalysisResult = {
    * `undefined` when no `.env.example` exists or it declares no `DB_CONNECTION`.
    */
   detectedDbEngine?: string;
+  /**
+   * Set when the repo looks like it holds more than one deployable service
+   * (a compose file, or app manifests in two or more directories). Feeds the
+   * wizard's informational "only one service is deployed" warning.
+   *
+   * `null` means checked and single-service; `undefined` means the analysis was
+   * cached before this field existed (the route backfills those).
+   */
+  multiService?: MultiServiceHint | null;
   sensitiveData?: SensitiveField[];
   dependencies?: Dependency[];
   _scannersRan: boolean;
@@ -248,6 +258,7 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
       description: option.description,
     })),
     detectedServices,
+    multiService: detectMultiService(files),
     repoSize: files.length,
     primaryLanguage: mergedTechStack.find((item) => item.category === "language" || item.category === "runtime")?.name ?? "",
     hasDocker,

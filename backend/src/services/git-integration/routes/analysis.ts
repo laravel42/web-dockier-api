@@ -10,6 +10,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, detectDbEngine, runRepoAnalysis, type SensitiveColumn } from "../domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
+import { detectMultiService } from "../domain/multi-service.js";
 import { resolveRepoFaviconDataUrl, isRepoFaviconCacheValid, isValidFaviconDataUrl, REPO_FAVICON_RESOLVER_VERSION, type RepoFaviconCacheEntry } from "../domain/repo-favicon.js";
 import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "../domain/ai/mr-generator.js";
 import { getFindingById } from "../../../shared/service-clients/findings.js";
@@ -394,6 +395,19 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
           const detectedDbEngine = await detectDbEngine(conn, ref);
           parsed = { ...parsed, detectedDbEngine };
           await updateAnalysisCache(repoKey, branch, parsed as unknown as Json, log);
+        }
+
+        // Same backfill for `multiService`, so a stale row still warns about a
+        // compose / multi-service repo. One file-tree fetch, only when absent.
+        if (!("multiService" in parsed)) {
+          try {
+            const multiService = detectMultiService(await getRepoFileTree(conn, ref));
+            parsed = { ...parsed, multiService };
+            await updateAnalysisCache(repoKey, branch, parsed as unknown as Json, log);
+          } catch {
+            // Best-effort: a failed tree fetch leaves the field absent so the
+            // backfill retries, rather than failing a cached analysis read.
+          }
         }
 
         // If AI analysis was requested but cache doesn't have it, run AI and update cache

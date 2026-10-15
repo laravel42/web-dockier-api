@@ -1,5 +1,6 @@
 import type { WizardState, RepoAnalysis } from "../types";
 import Spinner from "@/components/Spinner";
+import Alert from "@/components/ui/Alert";
 import DockerfileIcon from "@/components/icons/filled/DockerfileIcon";
 import { TriangleAlertIcon, ClockIcon, MailIcon, PlugIcon, SparklesIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
@@ -112,6 +113,17 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
             ))}
           </div>
         </div>
+      )}
+
+      {analysis.multiService && (
+        <Alert variant="warning">
+          {analysis.multiService.composeFile
+            ? `A Docker Compose file was found (${analysis.multiService.composeFile}).`
+            : `App manifests were found in ${analysis.multiService.serviceDirs.length} directories.`}{" "}
+          Dockier builds and deploys a single service from the repository root, so the other
+          services here won't be deployed. Create one Dockier project per service, or deploy the
+          compose file directly on your provider.
+        </Alert>
       )}
 
       {analysis.hasDocker && (

@@ -176,6 +176,12 @@ export interface RepoDependency {
   vulnerabilities: RepoVulnerability[];
 }
 
+export interface MultiServiceHint {
+  /** First compose file found, repo-relative. Absent when the signal was the directory count. */
+  composeFile?: string;
+  /** Candidate app directories, "" = repo root. Sorted, capped at 8. */
+  serviceDirs: string[];
+}
 export interface RepoAnalysisResponse {
   techStack: TechBadgeInfo[];
   deployOptions: DeployOption[];
@@ -198,6 +204,13 @@ export interface RepoAnalysisResponse {
    * `undefined` when no `.env.example` declares one.
    */
   detectedDbEngine?: string;
+  /**
+   * Present when the repo looks like it holds more than one deployable service
+   * (a compose file, or app manifests in two or more directories). Drives the
+   * deploy wizard's informational single-service warning. `null` means checked
+   * and single-service; `undefined` means the analysis predates the field.
+   */
+  multiService?: MultiServiceHint | null;
   aiAnalysis?: RepoAiAnalysis;
   sensitiveData?: SensitiveDataField[];
   dependencies?: RepoDependency[];

@@ -17,7 +17,9 @@ import { TEMPLATE_ANALYSIS } from "../constants/templateAnalysis";
 // v14: Nuxt/Next static-capability re-evaluated (a `nuxt generate` script and a
 // real `output: 'export'` match are now detected), so pre-fix verdicts must be
 // discarded.
-const analysisCache = new SessionCache<RepoAnalysis>("analysis", 14);
+// v15: the analysis schema gained `multiService`, so pre-field cached analyses
+// would never show the multi-service warning.
+const analysisCache = new SessionCache<RepoAnalysis>("analysis", 15);
 
 
 /**

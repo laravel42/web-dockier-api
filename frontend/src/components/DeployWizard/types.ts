@@ -1,4 +1,4 @@
-import type { Provider } from "@/types";
+import type { MultiServiceHint, Provider } from "@/types";
 
 export type { Provider };
 
@@ -84,6 +84,12 @@ export interface RepoAnalysis {
    * guessed env vars when labelling the database service.
    */
   detectedDbEngine?: string;
+  /**
+   * Present when the repo looks like it holds more than one deployable service
+   * (compose file, or app manifests in two or more directories). Informational
+   * only — drives a warning in the Analysis step, never blocks the wizard.
+   */
+  multiService?: MultiServiceHint | null;
   aiAnalysis?: AIAnalysis;
   sensitiveData?: SensitiveField[];
   dependencies?: Dependency[];
