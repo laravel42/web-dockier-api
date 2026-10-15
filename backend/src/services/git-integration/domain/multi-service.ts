@@ -4,12 +4,22 @@
  * Pure and sync: it only looks at the paths `getRepoFileTree` already returned.
  * No file is fetched and the compose file is never parsed — the warning this
  * feeds is informational, so presence is all we need.
+ *
+ * On Bitbucket `getRepoFileTree` is non-recursive, so nested manifests are
+ * invisible there and this predicate under-reports — an accepted false
+ * negative, not fixed here.
  */
 
 export type MultiServiceHint = {
-  /** First compose file found, repo-relative. Absent when the signal was the directory count. */
+  /**
+   * First compose file found, repo-relative. Absent when the tree holds no
+   * compose file; the directory count is always the signal.
+   */
   composeFile?: string;
-  /** Candidate app directories, "" = repo root. Sorted, capped at 8. */
+  /**
+   * Candidate app directories, "" = repo root. Sorted, capped at 8. Always
+   * holds 2 or more entries when a hint is returned.
+   */
   serviceDirs: string[];
 };
 
@@ -63,6 +73,10 @@ const WORKSPACE_MARKERS = new Set([
   "rush.json",
 ]);
 
+// npm/yarn declare workspaces inside package.json, so there is no marker file on the path list.
+const NPM_YARN_ROOT_LOCKS = new Set(["yarn.lock", "package-lock.json"]);
+const WORKSPACE_MEMBER_RE = /^(apps|packages)\/[^/]+\/package\.json$/i;
+
 const MANIFESTS = new Set([
   "package.json",
   "composer.json",
@@ -98,9 +112,10 @@ export function detectMultiService(files: string[]): MultiServiceHint | null {
   const candidates = files.filter((file) => !isIgnored(file));
   const hasWorkspaceMarker = candidates.some((file) =>
     dirOf(file) === "" && WORKSPACE_MARKERS.has(baseOf(file).toLowerCase()),
+  ) || (
+    candidates.some((file) => dirOf(file) === "" && NPM_YARN_ROOT_LOCKS.has(baseOf(file).toLowerCase()))
+    && candidates.some((file) => WORKSPACE_MEMBER_RE.test(file))
   );
-
-  const composeFile = candidates.find((file) => COMPOSE_RE.test(file));
 
   const serviceDirSet = new Set<string>();
   for (const file of candidates) {
@@ -113,8 +128,10 @@ export function detectMultiService(files: string[]): MultiServiceHint | null {
   }
 
   const serviceDirs = Array.from(serviceDirSet).sort();
-  // 2 app dirs is where one root build stops covering the repo; same-dir runtime mixes (Laravel + its asset package.json) stay at 1 on purpose.
-  if (!composeFile && serviceDirs.length < 2) return null;
+  // A root compose file is the normal way to run ONE app's dependencies locally (Laravel Sail, Django/Rails + postgres, or a stale unused compose), so it only enriches the copy once 2 app dirs show one root build no longer covers the repo.
+  if (serviceDirs.length < 2) return null;
+
+  const composeFile = candidates.find((file) => COMPOSE_RE.test(file));
 
   return {
     ...(composeFile ? { composeFile } : {}),

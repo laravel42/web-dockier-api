@@ -77,4 +77,66 @@ describe("detectMultiService", () => {
       "vendor/foo/docker-compose.yml",
     ])).toBeNull();
   });
+
+  it("stays quiet for a Laravel repo with a local-dev compose file", () => {
+    expect(detectMultiService([
+      "composer.json",
+      "docker-compose.yml",
+      "config/database.php",
+    ])).toBeNull();
+  });
+
+  it("stays quiet for a Django repo with a local-dev compose file", () => {
+    expect(detectMultiService([
+      "manage.py",
+      "requirements.txt",
+      "docker-compose.yml",
+      "myapp/settings.py",
+    ])).toBeNull();
+  });
+
+  it("stays quiet for a yarn workspace of one app plus shared libs", () => {
+    expect(detectMultiService([
+      "package.json",
+      "yarn.lock",
+      "apps/web/package.json",
+      "apps/web/next.config.js",
+      "packages/ui/package.json",
+    ])).toBeNull();
+  });
+
+  it("stays quiet for an npm workspace root", () => {
+    expect(detectMultiService([
+      "package.json",
+      "package-lock.json",
+      "apps/web/package.json",
+      "apps/web/next.config.js",
+      "packages/ui/package.json",
+    ])).toBeNull();
+  });
+
+  it("flags an npm workspace holding two apps", () => {
+    const hint = detectMultiService([
+      "package.json",
+      "package-lock.json",
+      "apps/web/package.json",
+      "apps/api/package.json",
+    ]);
+    expect(hint).not.toBeNull();
+    expect(hint!.serviceDirs).toEqual(["apps/api", "apps/web"]);
+    expect(hint!.composeFile).toBeUndefined();
+  });
+
+  it("flags a compose file beside two real service directories", () => {
+    const hint = detectMultiService([
+      "docker-compose.yml",
+      "api/manage.py",
+      "api/requirements.txt",
+      "web/package.json",
+      "web/next.config.js",
+    ]);
+    expect(hint).not.toBeNull();
+    expect(hint!.composeFile).toBe("docker-compose.yml");
+    expect(hint!.serviceDirs).toEqual(["api", "web"]);
+  });
 });
