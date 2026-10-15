@@ -13,9 +13,9 @@ export type MultiServiceHint = {
    */
   composeFile?: string;
   /**
-   * Candidate service directories, "" = repo root — app-manifest dirs, or the
-   * Dockerfile dirs a compose repo is built from when no manifest is
-   * recognised. Sorted, capped at 8. Always holds 2 or more entries.
+   * Candidate service directories, "" = repo root — app-manifest dirs, plus
+   * the Dockerfile dirs a compose repo is built from when fewer than two
+   * manifests are recognised. Sorted, capped at 8. Always 2 or more entries.
    */
   serviceDirs: string[];
 };
@@ -79,6 +79,8 @@ const WORKSPACE_MEMBER_RE = /^(apps|packages)\/[^/]+\/package\.json$/i;
 const DOCKER_ASSET_ROOTS = new Set([
   "docker",
   ".docker",
+  "dockerfiles",
+  "compose",
   "deploy",
   "deployment",
   "ops",
@@ -115,7 +117,11 @@ function isIgnored(path: string): boolean {
 
 /**
  * Subdirectories holding a Dockerfile. The repo root is excluded so one app's
- * own Dockerfile plus a sidecar never reaches 2.
+ * own Dockerfile plus a sidecar never reaches 2. Asset dirs are matched on ANY
+ * segment, since they nest both above (`compose/local/django`) and below
+ * (`backend/docker/api`) the app. `Dockerfile.<suffix>` variants are invisible
+ * here, so a compose repo built from root `Dockerfile.api` + `Dockerfile.web`
+ * stays quiet — accepted, the bias is toward silence.
  */
 function dockerfileDirs(candidates: string[]): string[] {
   const dirs = new Set<string>();
@@ -123,8 +129,8 @@ function dockerfileDirs(candidates: string[]): string[] {
     if (baseOf(file).toLowerCase() !== "dockerfile") continue;
     const dir = dirOf(file);
     if (dir === "") continue;
-    const root = dir.split("/")[0].toLowerCase();
-    if (LIBRARY_ROOTS.has(root) || DOCKER_ASSET_ROOTS.has(root)) continue;
+    const segments = dir.split("/").map((segment) => segment.toLowerCase());
+    if (segments.some((segment) => LIBRARY_ROOTS.has(segment) || DOCKER_ASSET_ROOTS.has(segment))) continue;
     dirs.add(dir);
   }
   return Array.from(dirs).sort();
@@ -158,8 +164,11 @@ export function detectMultiService(files: string[]): MultiServiceHint | null {
   const serviceDirs = Array.from(serviceDirSet).sort();
   const composeFile = candidates.find((file) => COMPOSE_RE.test(file));
   // 2 dirs is where one root build stops covering the repo; same-dir runtime mixes (Laravel + its asset package.json) stay at 1 on purpose, and a compose file alone is how ONE app runs its local dependencies (Laravel Sail, Django/Rails + postgres, or a stale unused compose), so it needs a directory signal — Dockerfile dirs when the services use a runtime MANIFESTS does not list (Rust, Java, Ruby, .NET).
-  const dirs = serviceDirs.length >= 2 || !composeFile ? serviceDirs : dockerfileDirs(candidates);
-  if (dirs.length < 2) return null;
+  const dockerDirs = serviceDirs.length >= 2 || !composeFile ? [] : dockerfileDirs(candidates);
+  if (serviceDirs.length < 2 && dockerDirs.length < 2) return null;
+
+  // Report both lists: the manifest dir the fallback fired alongside is still a service the user deploys.
+  const dirs = Array.from(new Set([...serviceDirs, ...dockerDirs])).sort();
 
   return {
     ...(composeFile ? { composeFile } : {}),

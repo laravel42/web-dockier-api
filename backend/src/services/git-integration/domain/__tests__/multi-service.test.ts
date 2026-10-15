@@ -149,6 +149,39 @@ describe("detectMultiService", () => {
     ])).toBeNull();
   });
 
+  it("stays quiet for a cookiecutter-django app whose Dockerfiles live under compose/", () => {
+    expect(detectMultiService([
+      "docker-compose.local.yml",
+      "docker-compose.production.yml",
+      "manage.py",
+      "requirements.txt",
+      "compose/local/django/Dockerfile",
+      "compose/local/docs/Dockerfile",
+      "compose/production/django/Dockerfile",
+      "compose/production/nginx/Dockerfile",
+    ])).toBeNull();
+  });
+
+  it("stays quiet for one app whose Dockerfile assets are nested under it", () => {
+    expect(detectMultiService([
+      "docker-compose.yml",
+      "backend/pyproject.toml",
+      "backend/docker/api/Dockerfile",
+      "backend/docker/worker/Dockerfile",
+    ])).toBeNull();
+  });
+
+  it("keeps the manifest directory when the Dockerfile fallback fires", () => {
+    const hint = detectMultiService([
+      "docker-compose.yml",
+      "composer.json",
+      "api/Dockerfile",
+      "web/Dockerfile",
+    ]);
+    expect(hint).not.toBeNull();
+    expect(hint!.serviceDirs).toEqual(["", "api", "web"]);
+  });
+
   it("flags a compose file beside two real service directories", () => {
     const hint = detectMultiService([
       "docker-compose.yml",
