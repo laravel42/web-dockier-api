@@ -95,8 +95,8 @@ export type RepoAnalysisResult = {
   detectedDbEngine?: string;
   /**
    * Set when the repo looks like it holds more than one deployable service
-   * (app manifests in two or more directories; a compose file is reported when
-   * present but is not the trigger). Feeds the
+   * (app manifests in two or more directories, or a compose file beside
+   * Dockerfiles in two or more directories). Feeds the
    * wizard's informational "only one service is deployed" warning.
    *
    * `null` means checked and single-service; `undefined` means the analysis was

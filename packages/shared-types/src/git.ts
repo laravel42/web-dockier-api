@@ -179,12 +179,13 @@ export interface RepoDependency {
 export interface MultiServiceHint {
   /**
    * First compose file found, repo-relative. Absent when the tree holds no
-   * compose file; the directory count is always the signal.
+   * compose file; a compose file alone never triggers the hint.
    */
   composeFile?: string;
   /**
-   * Candidate app directories, "" = repo root. Sorted, capped at 8. Always
-   * holds 2 or more entries when a hint is present.
+   * Candidate service directories, "" = repo root — app-manifest dirs, or the
+   * Dockerfile dirs of a compose repo with no recognised manifest. Sorted,
+   * capped at 8. Always holds 2 or more entries when a hint is present.
    */
   serviceDirs: string[];
 }
@@ -212,8 +213,8 @@ export interface RepoAnalysisResponse {
   detectedDbEngine?: string;
   /**
    * Present when the repo looks like it holds more than one deployable service
-   * (app manifests in two or more directories; a compose file is reported when
-   * present but is not the trigger). Drives the
+   * (app manifests in two or more directories, or a compose file beside
+   * Dockerfiles in two or more directories). Drives the
    * deploy wizard's informational single-service warning. `null` means checked
    * and single-service; `undefined` means the analysis predates the field.
    */

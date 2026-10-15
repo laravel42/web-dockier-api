@@ -127,6 +127,28 @@ describe("detectMultiService", () => {
     expect(hint!.composeFile).toBeUndefined();
   });
 
+  it("flags a compose file beside Dockerfiles in two directories with no recognised manifest", () => {
+    const hint = detectMultiService([
+      "docker-compose.yml",
+      "api/Dockerfile",
+      "api/Cargo.toml",
+      "web/Dockerfile",
+      "web/pom.xml",
+    ]);
+    expect(hint).not.toBeNull();
+    expect(hint!.composeFile).toBe("docker-compose.yml");
+    expect(hint!.serviceDirs).toEqual(["api", "web"]);
+  });
+
+  it("stays quiet for a single app whose compose file builds a root Dockerfile and a sidecar", () => {
+    expect(detectMultiService([
+      "docker-compose.yml",
+      "Dockerfile",
+      "composer.json",
+      "docker/nginx/Dockerfile",
+    ])).toBeNull();
+  });
+
   it("flags a compose file beside two real service directories", () => {
     const hint = detectMultiService([
       "docker-compose.yml",

@@ -86,8 +86,8 @@ export interface RepoAnalysis {
   detectedDbEngine?: string;
   /**
    * Present when the repo looks like it holds more than one deployable service
-   * (app manifests in two or more directories; a compose file is reported when
-   * present but is not the trigger). Informational
+   * (app manifests in two or more directories, or a compose file beside
+   * Dockerfiles in two or more directories). Informational
    * only — drives a warning in the Analysis step, never blocks the wizard.
    */
   multiService?: MultiServiceHint | null;

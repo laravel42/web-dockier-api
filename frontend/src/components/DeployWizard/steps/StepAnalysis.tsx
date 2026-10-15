@@ -118,7 +118,7 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
       {analysis.multiService && (
         <Alert variant="warning">
           {analysis.multiService.composeFile
-            ? `A Docker Compose file (${analysis.multiService.composeFile}) and app manifests in ${analysis.multiService.serviceDirs.length} directories were found.`
+            ? `A Docker Compose file (${analysis.multiService.composeFile}) and ${analysis.multiService.serviceDirs.length} service directories were found.`
             : `App manifests were found in ${analysis.multiService.serviceDirs.length} directories.`}{" "}
           Dockier builds and deploys a single service from the repository root, so the other
           services here won't be deployed. Create one Dockier project per service, or deploy the
