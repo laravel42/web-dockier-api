@@ -79,7 +79,7 @@ describe("provisionGceInstance — happy path", () => {
   it("creates a VM and returns instance name, IP, and zone", async () => {
     const result = await provisionGceInstance(baseParams());
 
-    expect(result).toEqual({ instanceId: "dockier-abc12345", publicIp: "34.1.2.3", zone: "us-central1-b" });
+    expect(result).toEqual({ instanceId: "dockier-abc12345", publicIp: "34.1.2.3", zone: "us-central1-b", machineType: "e2-small" });
   });
 
   it("falls back to <region>-b when zone listing returns nothing", async () => {

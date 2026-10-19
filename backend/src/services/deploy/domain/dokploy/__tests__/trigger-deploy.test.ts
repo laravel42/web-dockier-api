@@ -373,6 +373,116 @@ describe("stageTriggerDeploy", () => {
     expect(result.failureReason).toMatch(/repository/i);
     expect(result.failureReason).not.toMatch(/No start command was detected/i);
   });
+  // ─── Build-log evidence ────────────────────────────────────────
+  // The live bug: Dokploy leaves `errorMessage` null when the BUILD (not its
+  // orchestration) fails, so the classifier was starved and a genuinely
+  // OOM-ing Nuxt build was reported as a missing start command. The real
+  // evidence only exists in the host log file at `logPath`.
+  const OOM_TAIL = `
+Deploy
+$ node .output/server/index.mjs
+
+<--- Last few GCs --->
+[1:0x7f8] 118456 ms: Mark-Compact 938.1 (960.4) -> 937.3 (960.4) MB
+
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+Aborted (core dumped)
+#22 ERROR: failed to build: failed to solve: process "npm run build" did not complete successfully: exit code: 134
+`;
+  const NUXT_HINT = {
+    buildType: "railpack",
+    framework: "nuxt",
+    kind: "server" as const,
+    startCommandApplied: false,
+    repoHasStartScript: false,
+  };
+  const FAILED_WITH_LOG = [{
+    deploymentId: "d1",
+    status: "error",
+    title: "Update identity to Morten in Tokyo",
+    errorMessage: null,
+    logPath: "/etc/dokploy/logs/app/app-2026-10-15:21:40:00.log",
+    createdAt: "x",
+  }];
+
+  it("diagnoses OOM from the fetched build log when errorMessage is null", async () => {
+    mockClient.listDeployments.mockResolvedValue(FAILED_WITH_LOG);
+    const fetchBuildLog = vi.fn().mockResolvedValue(OOM_TAIL);
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+      runtimeHint: NUXT_HINT,
+      fetchBuildLog,
+    });
+
+    expect(fetchBuildLog).toHaveBeenCalledWith("/etc/dokploy/logs/app/app-2026-10-15:21:40:00.log");
+    expect(result.failureReason).toMatch(/ran out of memory/i);
+    expect(result.failureReason).toContain("npm run build");
+    expect(result.failureReason).not.toMatch(/start command/i);
+    // The retrieval line is what makes the next live failure debuggable from
+    // the Dockier log alone.
+    expect(logLines.some((l) => /Retrieved the server build log for diagnosis/.test(l))).toBe(true);
+  });
+
+  it("falls back to the old reason, without throwing, when the log fetch fails", async () => {
+    mockClient.listDeployments.mockResolvedValue(FAILED_WITH_LOG);
+    const fetchBuildLog = vi.fn().mockRejectedValue(new Error("ssh timed out"));
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+      runtimeHint: NUXT_HINT,
+      fetchBuildLog,
+    });
+
+    expect(result.status).toBe("error");
+    expect(result.failureReason).toMatch(/No start command was detected/i);
+    expect(logLines.some((l) => /Retrieved the server build log/.test(l))).toBe(false);
+  });
+
+  it("does not attempt a fetch when the deployment has no logPath", async () => {
+    mockClient.listDeployments.mockResolvedValue([
+      { deploymentId: "d1", status: "error", title: "c", errorMessage: null, createdAt: "x" },
+    ]);
+    const fetchBuildLog = vi.fn();
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+      runtimeHint: NUXT_HINT,
+      fetchBuildLog,
+    });
+
+    expect(fetchBuildLog).not.toHaveBeenCalled();
+    expect(result.failureReason).toMatch(/No start command was detected/i);
+  });
+
+  it("still classifies on errorMessage when the log fetch returns nothing", async () => {
+    mockClient.listDeployments.mockResolvedValue([{
+      ...FAILED_WITH_LOG[0],
+      errorMessage: 'process "npm run build" did not complete successfully: exit code: 137',
+    }]);
+
+    const result = await stageTriggerDeploy({
+      applicationId: "app-1",
+      client: mockClient as unknown as DokployClient,
+      log: mockLog,
+      pollIntervalMs: 100,
+      runtimeHint: NUXT_HINT,
+      fetchBuildLog: vi.fn().mockResolvedValue(""),
+    });
+
+    expect(result.failureReason).toMatch(/ran out of memory/i);
+    expect(result.failureReason).toContain("npm run build");
+  });
+
   it("stops watching the build when the deployment is cancelled mid-poll", async () => {
     // Build never finishes; the user cancels while it runs.
     mockClient.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "running", createdAt: "x" }]);
@@ -476,6 +586,26 @@ describe("stageDeployWithRetry", () => {
     expect(mockInvokeDokployAI).toHaveBeenCalledTimes(1);
     expect(logLines.some((l) => l.includes("Applied automatic fix"))).toBe(true);
   });
+  it("threads the build-log fetch through to failure reporting", async () => {
+    mockClient.listDeployments.mockResolvedValue([
+      { deploymentId: "d1", status: "error", title: "c", errorMessage: null, logPath: "/etc/dokploy/logs/a/a-1.log", createdAt: "x" },
+    ]);
+    const fetchBuildLog = vi.fn().mockResolvedValue("");
+
+    await expect(
+      stageDeployWithRetry({
+        applicationId: "app-1",
+        client: mockClient as unknown as DokployClient,
+        log: mockLog,
+        maxAttempts: 1,
+        pollIntervalMs: 100,
+        fetchBuildLog,
+      }),
+    ).rejects.toThrow(/failed after 1 attempts/);
+
+    expect(fetchBuildLog).toHaveBeenCalledWith("/etc/dokploy/logs/a/a-1.log");
+  });
+
   it("returns without AI recovery or a second deploy when cancelled", async () => {
     mockClient.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "running", createdAt: "x" }]);
     const isCancelled = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);

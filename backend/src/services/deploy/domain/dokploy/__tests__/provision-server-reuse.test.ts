@@ -116,6 +116,24 @@ describe("stageProvisionServer — reuse liveness", () => {
     expect(deleteServerMapping).not.toHaveBeenCalled();
   });
 
+  it("reports the selected size only for a box Dockier launched", async () => {
+    getServer.mockResolvedValue(READY_SERVER);
+    ec2InstanceIsAlive.mockResolvedValue(true);
+    const mine = await stageProvisionServer({
+      projectId: "proj-1", providerId: "prov-1", instanceType: "t3.small", client: clientWithRecord(), log,
+    });
+    expect(mine.instanceType).toBe("t3.small");
+
+    // No instanceId = a server Dockier never launched (pre-provisioned/BYO):
+    // the selected plan says nothing about its hardware.
+    getServer.mockResolvedValue({ ...READY_SERVER, instanceId: null });
+    const byo = await stageProvisionServer({
+      projectId: "proj-1", providerId: "prov-1", instanceType: "t3.small", client: clientWithRecord(), log,
+    });
+    expect(byo.reused).toBe(true);
+    expect(byo.instanceType).toBeUndefined();
+  });
+
   it("does NOT reuse when the record exists but the VM is terminated", async () => {
     getServer.mockResolvedValue(READY_SERVER);
     ec2InstanceIsAlive.mockResolvedValue(false);

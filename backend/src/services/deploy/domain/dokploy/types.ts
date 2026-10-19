@@ -127,10 +127,10 @@ export interface DokployApplication {
 
 /**
  * A single Dokploy deployment record (from `deployment.all`). The full build
- * log lives in a host file at `logPath` and is streamed over websocket, so it
- * is not fetchable over REST — but the record's status, timestamps, commit
- * title, and (when set) `errorMessage` are enough to surface a meaningful
- * failure reason to the user.
+ * log lives in a host file at `logPath`; Dokploy's own UI streams it over a
+ * websocket and exposes no REST procedure for its content, so on a failure we
+ * read the tail of that file over SSH (see stages/build-log.ts) and classify it
+ * alongside the record's status, timestamps, commit title and `errorMessage`.
  */
 export interface DokployDeployment {
   deploymentId: string;

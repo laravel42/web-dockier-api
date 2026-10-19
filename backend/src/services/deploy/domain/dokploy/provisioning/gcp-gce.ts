@@ -54,6 +54,8 @@ export interface GceProvisionResult {
   instanceId: string;
   publicIp: string;
   zone: string;
+  /** The machine type actually launched (the caller's, or the default). */
+  machineType: string;
 }
 
 /**
@@ -127,7 +129,7 @@ export async function provisionGceInstance(params: GceProvisionParams): Promise<
   });
 
   await log(`Instance "${name}" is running at ${publicIp}`);
-  return { instanceId: name, publicIp, zone };
+  return { instanceId: name, publicIp, zone, machineType };
 }
 
 // ─── Teardown ────────────────────────────────────────────────────

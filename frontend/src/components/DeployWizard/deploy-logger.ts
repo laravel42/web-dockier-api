@@ -5,6 +5,8 @@
  * Eliminates repeated inline timestamp formatting across the deploy hooks.
  */
 
+import { platformLabel } from "@/utils/platformLabel";
+
 export function timestamp(): string {
   return new Date().toISOString().replace("T", " ").slice(0, 19);
 }
@@ -79,7 +81,7 @@ export function buildAnalysisLogs(analysis: {
     lines.push(logInfo(`Runtime: ${analysis.primaryLanguage}${analysis.aiAnalysis?.runtimeVersion ? " " + analysis.aiAnalysis.runtimeVersion : ""}`));
   }
   if (analysis.aiAnalysis?.framework) {
-    lines.push(logInfo(`Framework: ${analysis.aiAnalysis.framework}${analysis.aiAnalysis.frameworkVersion ? " " + analysis.aiAnalysis.frameworkVersion : ""}`));
+    lines.push(logInfo(`Framework: ${platformLabel(analysis.aiAnalysis.framework)}${analysis.aiAnalysis.frameworkVersion ? " " + analysis.aiAnalysis.frameworkVersion : ""}`));
   }
   if (analysis.techStack?.length) {
     lines.push(logInfo(`Tech stack: ${analysis.techStack.map(t => t.name).join(", ")}`));

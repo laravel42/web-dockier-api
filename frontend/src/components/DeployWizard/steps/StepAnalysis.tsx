@@ -4,6 +4,7 @@ import Alert from "@/components/ui/Alert";
 import DockerfileIcon from "@/components/icons/filled/DockerfileIcon";
 import { TriangleAlertIcon, ClockIcon, MailIcon, PlugIcon, SparklesIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
+import { platformLabel } from "@/utils/platformLabel";
 
 /** Service types that are auto-configured during deployment and should not appear as provisionable infrastructure components. */
 const AUTO_CONFIGURED_SERVICES = new Set(["scheduler"]);
@@ -92,8 +93,8 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
             <span className="font-semibold">AI Analysis:</span> {analysis.aiAnalysis.summary}
             {analysis.aiAnalysis.runtime && (
               <span className="ml-1 text-text-muted">
-                ({analysis.aiAnalysis.runtime} {analysis.aiAnalysis.runtimeVersion}
-                {analysis.aiAnalysis.framework ? ` / ${analysis.aiAnalysis.framework} ${analysis.aiAnalysis.frameworkVersion}` : ""})
+                ({platformLabel(analysis.aiAnalysis.runtime)} {analysis.aiAnalysis.runtimeVersion}
+                {analysis.aiAnalysis.framework ? ` / ${platformLabel(analysis.aiAnalysis.framework)} ${analysis.aiAnalysis.frameworkVersion}` : ""})
               </span>
             )}
           </div>

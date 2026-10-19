@@ -141,8 +141,14 @@ export async function stageConfigureApp(params: {
    * user what Dockier compensated for. Omitted in unit tests.
    */
   advise?: (advisory: Advisory) => void;
+  /**
+   * Size of the server that will run the build (e.g. "t3.small"), as reported
+   * by the provision-server stage. Sizes the build's Node heap; omit when
+   * unknown — an unknown or unrecognized size injects no limit at all.
+   */
+  instanceType?: string;
 }): Promise<ConfigureAppResult> {
-  const { projectId, projectName, environmentId, serverId, gitConfig, repoAnalysis, services = [], provisionedDatabases = [], envVars, client, log, advise } = params;
+  const { projectId, projectName, environmentId, serverId, gitConfig, repoAnalysis, services = [], provisionedDatabases = [], envVars, client, log, advise, instanceType } = params;
 
   // External-mode services need no provisioning — the app connects to them via
   // its own env credentials (RDS/Neon/Upstash/etc.). vps-mode services are
@@ -302,7 +308,10 @@ export async function stageConfigureApp(params: {
   const withPhpDefaults = withRailpackPhpDefaults(withDbEnv, buildType, repoAnalysis.primaryLanguage, hasDatabase, repoAnalysis.techStack ?? []);
   // Node railpack apps need PORT/HOST so the server listens where Traefik
   // routes (and on all interfaces). No-op for PHP/static/non-railpack.
-  const withNodeEnv = nodeRuntimeEnv(withPhpDefaults, buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? [], repoAnalysis.kind);
+  const withNodeEnv = nodeRuntimeEnv(withPhpDefaults, buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? [], repoAnalysis.kind, instanceType);
+  if (!envHas(withPhpDefaults, "NODE_OPTIONS") && envHas(withNodeEnv, "NODE_OPTIONS")) {
+    await log(`[stage:configure-app] Build heap limit set to ${buildHeapMb(instanceType)} MB for this ${instanceType} instance.`);
+  }
   // Hand Railpack an explicit start command when analysis derived one (e.g. SSR
   // Astro with no `start` script). Without this, Railpack finds no start
   // command and the container runs nothing → Bad Gateway.
@@ -698,6 +707,15 @@ export function resolveContainerPort(
  *    to localhost, which only accepts connections from inside the container —
  *    Traefik, in its own container, can't reach it. Binding all interfaces
  *    fixes the "connection refused"/Bad Gateway.
+ *  - NODE_OPTIONS=--max-old-space-size=N: Railpack forwards app env into the
+ *    build (the same channel as RAILPACK_PHP_EXTENSIONS above), so this also
+ *    raises the heap for `npm run build`. V8 derives its default ceiling
+ *    (~940 MB on a 2 GB box) from PHYSICAL memory and ignores the server's
+ *    swapfile, which is why framework builds abort with "JavaScript heap out
+ *    of memory" instead of spilling to swap. The ceiling also applies to the
+ *    serving process — intended: 75% of the box is a saner runtime limit than
+ *    a value V8 guessed from host memory it does not own. Omitted entirely
+ *    when the server's size is unknown, so V8 keeps deriving its own.
  *
  * Applied only to Node railpack apps, and never overrides a user-set value.
  * Skipped for static bundles: they are served by Caddy on 80, so injecting
@@ -709,6 +727,7 @@ function nodeRuntimeEnv(
   primaryLanguage: string | undefined,
   techStack: string[],
   kind?: "server" | "static",
+  instanceType?: string,
 ): Array<{ name: string; value: string }> {
   if (buildType !== "railpack" || kind === "static") return envVars;
   if (!isNodeApp(primaryLanguage, techStack)) return envVars;
@@ -717,8 +736,49 @@ function nodeRuntimeEnv(
   const additions: Array<{ name: string; value: string }> = [];
   if (!has("PORT")) additions.push({ name: "PORT", value: String(NODE_RAILPACK_PORT) });
   if (!has("HOST")) additions.push({ name: "HOST", value: "0.0.0.0" });
+  const heapMb = buildHeapMb(instanceType);
+  if (heapMb && !has("NODE_OPTIONS")) additions.push({ name: "NODE_OPTIONS", value: `--max-old-space-size=${heapMb}` });
 
   return additions.length > 0 ? [...envVars, ...additions] : envVars;
+}
+
+/**
+ * RAM, in MB, of the instance types Dockier launches WITH a swapfile.
+ *
+ * Only the AWS types are listed, deliberately: `provisionEc2Instance` adds a
+ * 4 GB swapfile at boot, while `provisionGceInstance` bootstraps nothing, so a
+ * GCE box has no swap to absorb a peak. 75% of physical RAM is only safe to
+ * promise V8 when swap is behind it — on a swapless 2 GB box it would trade
+ * the diagnosable V8 abort for a kernel OOM kill. GCE machine types are
+ * therefore absent and get no explicit ceiling (V8 keeps deriving its own).
+ *
+ * shortcut: instance RAM from a literal table, upgrade to an EC2 describe call
+ * if plans outgrow it; add the GCE types here once that path provisions swap.
+ */
+const INSTANCE_RAM_MB: Record<string, number> = {
+  "t3.micro": 1024,
+  "t3.small": 2048,
+  "t3.medium": 4096,
+  "t3.large": 8192,
+  "m6i.large": 8192,
+};
+
+/**
+ * Node heap ceiling for the build, at 75% of instance RAM so the rest of the
+ * build (buildkit, the OS) still fits — and backed by the provisioner's 4 GB
+ * swapfile if the build peaks over it. A flat 4096 would only trade a V8 abort
+ * for a kernel OOM kill on a 2 GB server.
+ *
+ * Returns undefined for an absent or unrecognized instance type (the value is
+ * free-form client input, a pre-provisioned server has no type at all, and a
+ * swapless GCE box is intentionally not in the table): no size is better than
+ * a guessed one, since guessing high is the kernel-OOM-kill failure this is
+ * meant to avoid.
+ */
+function buildHeapMb(instanceType?: string): number | undefined {
+  const totalMb = instanceType ? INSTANCE_RAM_MB[instanceType] : undefined;
+  if (!totalMb) return undefined;
+  return Math.max(768, Math.round(totalMb * 0.75));
 }
 
 /** True if an env list already contains a variable by name. */

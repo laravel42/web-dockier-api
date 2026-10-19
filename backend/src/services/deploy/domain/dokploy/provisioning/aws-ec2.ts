@@ -68,6 +68,8 @@ export interface ProvisionEc2Params {
 export interface ProvisionEc2Result {
   instanceId: string;
   publicIp: string;
+  /** The instance type actually launched (the caller's, or the default). */
+  instanceType: string;
 }
 
 /** Swap file size added at boot to absorb memory-spiky builds. */
@@ -213,7 +215,7 @@ export async function provisionEc2Instance(params: ProvisionEc2Params): Promise<
   });
 
   await log(`Instance ${instanceId} is running at ${publicIp}`);
-  return { instanceId, publicIp };
+  return { instanceId, publicIp, instanceType: type };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────

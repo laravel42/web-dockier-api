@@ -449,10 +449,12 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
       framework?: string;
       runtime?: string;
       phpVersion?: string;
+      kind?: "server" | "static";
     },
     envVars: Array<{ name: string; value: string }> = [],
+    instanceType?: string,
   ) =>
-    stageConfigureApp({ ...base, repoAnalysis, envVars, client: client as unknown as DokployClient });
+    stageConfigureApp({ ...base, repoAnalysis, envVars, instanceType, client: client as unknown as DokployClient });
 
   it("routes a Node railpack app (SSR Astro) to port 3000 and injects PORT + HOST", async () => {
     const result = await run(
@@ -464,6 +466,73 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
     const env = envMap();
     expect(env.PORT).toBe("3000");
     expect(env.HOST).toBe("0.0.0.0");
+  });
+
+  it("sizes the build heap to the server's RAM", async () => {
+    const node = { hasDockerfile: false, isStaticSite: false, primaryLanguage: "javascript", techStack: ["Node.js", "Nuxt"] };
+    const env = [{ name: "PUBLIC_URL", value: "https://example.com" }];
+
+    await run(node, env, "t3.small");
+    expect(envMap().NODE_OPTIONS).toBe("--max-old-space-size=1536");
+
+    await run(node, env, "t3.medium");
+    expect(envMap().NODE_OPTIONS).toBe("--max-old-space-size=3072");
+
+    // Smallest AWS plan: the 768 MB floor, not 75% of 1 GB.
+    await run(node, env, "t3.micro");
+    expect(envMap().NODE_OPTIONS).toBe("--max-old-space-size=768");
+  });
+
+  it("injects no heap limit on a GCE machine, which is provisioned without swap", async () => {
+    const node = { hasDockerfile: false, isStaticSite: false, primaryLanguage: "javascript", techStack: ["Node.js", "Nuxt"] };
+    const env = [{ name: "PUBLIC_URL", value: "https://example.com" }];
+
+    // 75% of RAM is only backable where the provisioner adds a swapfile, which
+    // the GCE path does not — promising it there invites a kernel OOM kill.
+    await run(node, env, "e2-small");
+    expect(envMap().NODE_OPTIONS).toBeUndefined();
+
+    await run(node, env, "e2-micro");
+    expect(envMap().NODE_OPTIONS).toBeUndefined();
+  });
+
+  it("injects no heap limit when the server's size is unknown", async () => {
+    const node = { hasDockerfile: false, isStaticSite: false, primaryLanguage: "javascript", techStack: ["Node.js", "Nuxt"] };
+    const env = [{ name: "PUBLIC_URL", value: "https://example.com" }];
+
+    // Pre-provisioned/BYO server — the provision stage reports no size.
+    await run(node, env);
+    expect(envMap().NODE_OPTIONS).toBeUndefined();
+
+    // Free-form instance string (the route accepts any string) — guessing a
+    // size here is what hands V8 a heap the box cannot back.
+    await run(node, env, "1 vCPU / 512 MB");
+    expect(envMap().NODE_OPTIONS).toBeUndefined();
+  });
+
+  it("never overrides a user-supplied NODE_OPTIONS", async () => {
+    await run(
+      { hasDockerfile: false, isStaticSite: false, primaryLanguage: "javascript", techStack: ["Node.js", "Nuxt"] },
+      [{ name: "NODE_OPTIONS", value: "--max-old-space-size=512" }],
+      "t3.medium",
+    );
+    expect(envMap().NODE_OPTIONS).toBe("--max-old-space-size=512");
+  });
+
+  it("injects no build heap limit for a PHP railpack app or a static Node bundle", async () => {
+    await run(
+      { hasDockerfile: false, isStaticSite: false, primaryLanguage: "php", techStack: ["PHP", "Laravel"] },
+      [{ name: "APP_ENV", value: "production" }],
+      "t3.small",
+    );
+    expect(envMap().NODE_OPTIONS).toBeUndefined();
+
+    await run(
+      { hasDockerfile: false, isStaticSite: false, primaryLanguage: "javascript", techStack: ["Node.js", "Vite"], kind: "static" },
+      [{ name: "PUBLIC_URL", value: "https://example.com" }],
+      "t3.small",
+    );
+    expect(envMap().NODE_OPTIONS).toBeUndefined();
   });
 
   it("does not override a user-set PORT or HOST", async () => {

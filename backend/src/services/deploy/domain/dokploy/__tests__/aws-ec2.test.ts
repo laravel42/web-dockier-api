@@ -151,7 +151,7 @@ describe("provisionEc2Instance — happy path", () => {
 
     const result = await provisionEc2Instance(baseParams());
 
-    expect(result).toEqual({ instanceId: "i-abc", publicIp: "1.2.3.4" });
+    expect(result).toEqual({ instanceId: "i-abc", publicIp: "1.2.3.4", instanceType: "t3.small" });
   });
 
   it("constructs the EC2 client with the tenant credentials + region", async () => {

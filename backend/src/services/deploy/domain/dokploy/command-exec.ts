@@ -117,7 +117,7 @@ export async function execInDokployContainer(
   command: string,
   opts: { timeoutMs?: number } = {},
 ): Promise<DokployCommandResult> {
-  const { serverIp, sshPrivateKey, appName } = target;
+  const { appName } = target;
 
   if (!SAFE_NAME.test(appName)) {
     return { exitCode: 1, output: `Invalid application name: "${appName}"`, timedOut: false };
@@ -126,7 +126,28 @@ export async function execInDokployContainer(
     return { exitCode: 0, output: "", timedOut: false };
   }
 
-  const remoteScript = buildRemoteScript(appName, command);
+  return execOnDokployHost(target, buildRemoteScript(appName, command), opts);
+}
+
+/**
+ * Run a command on the Dokploy HOST as root — NOT inside the app container.
+ *
+ * This is the ssh half of `execInDokployContainer`: write the Dockier key to a
+ * locked-down temp file, `ssh root@<serverIp> <remoteCommand>`, clean up. Use it
+ * for host-level work (reading Dokploy's own log files under `/etc/dokploy`);
+ * for anything that must see the app's runtime env, use
+ * `execInDokployContainer` instead.
+ *
+ * `remoteCommand` is passed to the remote shell verbatim, so the CALLER owns
+ * quoting/validation of anything interpolated into it. Never throws — every
+ * failure comes back as a result.
+ */
+export async function execOnDokployHost(
+  target: DokployCommandTarget,
+  remoteCommand: string,
+  opts: { timeoutMs?: number } = {},
+): Promise<DokployCommandResult> {
+  const { serverIp, sshPrivateKey } = target;
 
   let keyDir: string | undefined;
   try {
@@ -141,7 +162,7 @@ export async function execInDokployContainer(
       "-o", "ConnectTimeout=30",
       "-o", "LogLevel=ERROR",
       `root@${serverIp}`,
-      remoteScript,
+      remoteCommand,
     ];
 
     return await spawnWithTimeout("ssh", sshArgs, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);

@@ -1,15 +1,6 @@
 import DevIcon from "./DevIcon";
 import { chipCls } from "../utils/styles";
-
-const PLATFORM_NAMES: Record<string, string> = {
-  react: "React", nextjs: "Next.js", vue: "Vue", nuxt: "Nuxt", angular: "Angular", svelte: "Svelte",
-  sveltekit: "SvelteKit", laravel: "Laravel", django: "Django", flask: "Flask", fastapi: "FastAPI",
-  express: "Express", nestjs: "Nest.js", rails: "Rails", spring: "Spring", "spring-boot": "Spring Boot",
-  go: "Go", rust: "Rust", python: "Python", php: "PHP", ruby: "Ruby", java: "Java", kotlin: "Kotlin",
-  nodejs: "Node.js", astro: "Astro", remix: "Remix", gatsby: "Gatsby", solid: "Solid",
-  "react-native": "React Native", flutter: "Flutter", dotnet: ".NET", symfony: "Symfony",
-  hono: "Hono", fastify: "Fastify", bun: "Bun", deno: "Deno", elixir: "Elixir",
-};
+import { platformLabel } from "../utils/platformLabel";
 
 const PLATFORM_ICONS: Record<string, string> = {
   react: "react", nextjs: "nextdotjs", vue: "vuedotjs", nuxt: "nuxtdotjs", angular: "angular",
@@ -28,7 +19,7 @@ interface Props {
 }
 
 export default function PlatformBadge({ slug, version }: Props) {
-  const label = PLATFORM_NAMES[slug] || slug;
+  const label = platformLabel(slug);
   const icon = PLATFORM_ICONS[slug] || slug;
   const versionLabel = version?.trim();
 

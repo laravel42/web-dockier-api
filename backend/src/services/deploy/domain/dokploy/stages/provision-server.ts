@@ -37,6 +37,19 @@ export interface ProvisionServerResult {
    * their stale mappings and recreate them on the new server.
    */
   reused: boolean;
+  /**
+   * Size of the machine that will run the build, when Dockier knows it: the
+   * type it just launched, or the plan's type for a box it provisioned earlier.
+   * Undefined for a server Dockier never launched (pre-provisioned/BYO), where
+   * the selected plan says nothing about the hardware. Consumers must treat
+   * undefined as "unknown" rather than assuming a size.
+   *
+   * shortcut: a reused box reports the plan's type, not the type it was
+   * launched with, because the launched type is not persisted — a plan change
+   * between deploys is reported optimistically until the old box is replaced.
+   * Upgrade by storing the launched type on dokploy_servers.
+   */
+  instanceType?: string;
 }
 
 /**
@@ -76,6 +89,9 @@ export async function stageProvisionServer(params: {
         dokployServerId: existing.dokployServerId,
         serverIp: existing.serverIp,
         reused: true,
+        // No instanceId means Dockier never launched this box, so its size is
+        // unknown regardless of the selected plan.
+        instanceType: existing.instanceId ? instanceType : undefined,
       };
     }
 
@@ -171,6 +187,7 @@ async function provisionAwsServer(params: {
 
   let instanceId: string;
   let serverIp: string;
+  let launchedType: string;
   try {
     const result = await provisionEc2Instance({
       credentials: toAwsCredentials(credential, region),
@@ -184,6 +201,7 @@ async function provisionAwsServer(params: {
     });
     instanceId = result.instanceId;
     serverIp = result.publicIp;
+    launchedType = result.instanceType;
   } catch (err) {
     // Mark any prior server row as error so a later deploy re-provisions cleanly.
     if (await getServer(projectId)) await updateServerStatus(projectId, "error");
@@ -207,7 +225,7 @@ async function provisionAwsServer(params: {
     throw new Error(`Provisioned instance ${instanceId} (${serverIp}) did not become SSH-reachable in time`);
   }
 
-  return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, sshPrivateKey: dockierKey.privateKeyPem, client, log });
+  return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, instanceType: launchedType, sshPrivateKey: dockierKey.privateKeyPem, client, log });
 }
 
 /**
@@ -243,6 +261,7 @@ async function provisionGcpServer(params: {
 
   let instanceId: string;
   let serverIp: string;
+  let launchedType: string;
   try {
     const result = await provisionGceInstance({
       serviceAccountKey: toGcpServiceAccountKey(credential),
@@ -256,6 +275,7 @@ async function provisionGcpServer(params: {
     });
     instanceId = result.instanceId;
     serverIp = result.publicIp;
+    launchedType = result.machineType;
   } catch (err) {
     if (await getServer(projectId)) await updateServerStatus(projectId, "error");
     throw err;
@@ -274,7 +294,7 @@ async function provisionGcpServer(params: {
     throw new Error(`Provisioned instance ${instanceId} (${serverIp}) did not become SSH-reachable in time`);
   }
 
-  return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, sshPrivateKey: dockierKey.privateKeyPem, client, log });
+  return registerServerInDokploy({ projectId, providerId, serverIp, instanceId, instanceType: launchedType, sshPrivateKey: dockierKey.privateKeyPem, client, log });
 }
 
 /**
@@ -446,12 +466,14 @@ export async function registerServerInDokploy(params: {
   providerId: string;
   serverIp: string;
   instanceId?: string;
+  /** Size of the VM being registered, when Dockier launched it. */
+  instanceType?: string;
   /** Dockier-owned SSH private key (PEM) to persist encrypted for command execution. */
   sshPrivateKey?: string;
   client: DokployClient;
   log: (line: string) => Promise<void>;
 }): Promise<ProvisionServerResult> {
-  const { projectId, providerId, serverIp, instanceId, sshPrivateKey, client, log } = params;
+  const { projectId, providerId, serverIp, instanceId, instanceType, sshPrivateKey, client, log } = params;
 
   const sshKeyId = env.DOKPLOY_SSH_KEY_ID;
   if (!sshKeyId) {
@@ -518,5 +540,6 @@ export async function registerServerInDokploy(params: {
     dokployServerId: server.serverId,
     serverIp,
     reused: false,
+    instanceType,
   };
 }

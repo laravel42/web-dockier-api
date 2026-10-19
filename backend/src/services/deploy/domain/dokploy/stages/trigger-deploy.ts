@@ -7,6 +7,7 @@
 
 import type { DokployClient } from "../client.js";
 import { invokeDokployAI } from "./ai-recovery.js";
+import { classifyBuildFailure } from "./build-failure.js";
 import { sleep } from "../../../../../shared/utils/time.js";
 import { type Advisory, domainPortCorrectedAdvisory } from "../advisories.js";
 
@@ -71,8 +72,15 @@ export async function stageTriggerDeploy(params: {
    * deployments/DB module.
    */
   isCancelled?: () => Promise<boolean>;
+  /**
+   * Reads the tail of the server-side build log for a failed deployment, so the
+   * failure can be classified from what the build actually printed. Injected for
+   * the same reason as isCancelled — keeps this stage free of the DB module.
+   * Best-effort: resolves to "" when the log can't be read.
+   */
+  fetchBuildLog?: (logPath: string) => Promise<string>;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, containerPort = 3000, runtimeHint, advise, pollIntervalMs = 5000, timeoutMs = 1_200_000, isCancelled } = params;
+  const { applicationId, client, log, containerPort = 3000, runtimeHint, advise, pollIntervalMs = 5000, timeoutMs = 1_200_000, isCancelled, fetchBuildLog } = params;
 
   // Capture the set of existing deployment ids BEFORE triggering, so we can
   // identify the NEW deployment this trigger creates and follow only its
@@ -110,7 +118,7 @@ export async function stageTriggerDeploy(params: {
 
     if (status === "error") {
       await log("[stage:deploy] ✗ Deployment failed");
-      const failureReason = await reportBuildFailure(applicationId, client, log, runtimeHint);
+      const failureReason = await reportBuildFailure(applicationId, client, log, runtimeHint, fetchBuildLog);
       return { status: "error", appUrl: "", failureReason };
     }
 
@@ -140,8 +148,10 @@ export async function stageDeployWithRetry(params: {
   pollIntervalMs?: number;
   /** See stageTriggerDeploy — passed straight through. */
   isCancelled?: () => Promise<boolean>;
+  /** See stageTriggerDeploy — passed straight through. */
+  fetchBuildLog?: (logPath: string) => Promise<string>;
 }): Promise<DeployResult> {
-  const { applicationId, client, log, containerPort, runtimeHint, advise, maxAttempts = 3, pollIntervalMs, isCancelled } = params;
+  const { applicationId, client, log, containerPort, runtimeHint, advise, maxAttempts = 3, pollIntervalMs, isCancelled, fetchBuildLog } = params;
 
   let lastFailureReason: string | undefined;
 
@@ -157,6 +167,7 @@ export async function stageDeployWithRetry(params: {
       advise,
       pollIntervalMs,
       isCancelled,
+      fetchBuildLog,
     });
 
     if (result.status === "done") {
@@ -195,14 +206,15 @@ export async function stageDeployWithRetry(params: {
 /**
  * On a failed deploy, surface a user-facing reason in the deploy log.
  *
- * Dokploy streams the full build log over a websocket (not fetchable over
- * REST), so we can't echo the raw build output here. Instead we read the
- * latest deployment record and present what we do have — the failing commit
- * and timing — plus clear guidance that a failure at this stage almost always
- * originates in the application's own source (build/install scripts, missing
- * dependencies, code that needs a database at build time, etc.), not in the
- * Dockier platform. Users don't have Dokploy access, so this message is their
- * only window into why the build failed.
+ * Evidence comes from the latest deployment record's `errorMessage` (set only
+ * when Dokploy's own orchestration throws, so usually empty) plus — when
+ * `fetchBuildLog` is injected — the tail of the host-side build log file that
+ * holds what the builder actually printed. Both are best-effort; with neither,
+ * we still present the failing commit plus clear guidance that a failure at
+ * this stage almost always originates in the application's own source
+ * (build/install scripts, missing dependencies, code that needs a database at
+ * build time, etc.), not in the Dockier platform. Users don't have Dokploy
+ * access, so this message is their only window into why the build failed.
  *
  * Returns a short reason string (also appended to the thrown error), or a
  * generic message if the deployment record can't be read. Never throws.
@@ -212,8 +224,10 @@ async function reportBuildFailure(
   client: DokployClient,
   log: (line: string) => Promise<void>,
   runtimeHint?: RuntimeHint,
+  fetchBuildLog?: (logPath: string) => Promise<string>,
 ): Promise<string> {
   let commit = "";
+  let evidence = "";
   try {
     const deployments = await client.listDeployments(applicationId);
     const latest = deployments.find((d) => d.status === "error") ?? deployments[0];
@@ -222,7 +236,25 @@ async function reportBuildFailure(
       commit = latest.title.split("\n")[0].trim();
     }
     if (latest?.errorMessage) {
+      evidence = latest.errorMessage;
       await log(`[stage:deploy] Build error: ${latest.errorMessage}`);
+    }
+    // The builder's own output lives only in the host log file; without it the
+    // classifier below has nothing to go on and falls back to repo heuristics.
+    if (latest?.logPath && fetchBuildLog) {
+      try {
+        const tail = await fetchBuildLog(latest.logPath);
+        if (tail) {
+          evidence = [evidence, tail].filter(Boolean).join("\n");
+          // Logged on success only: its absence tells a reader that the
+          // diagnosis below ran WITHOUT the build output.
+          await log(
+            `[stage:deploy] Retrieved the server build log for diagnosis (${Math.max(1, Math.round(tail.length / 1024))} KB from ${latest.logPath}).`,
+          );
+        }
+      } catch {
+        // Best-effort — classify on whatever errorMessage gave us.
+      }
     }
   } catch {
     // Best-effort — fall through to the generic guidance below.
@@ -233,6 +265,24 @@ async function reportBuildFailure(
     await log(`[stage:deploy] Failing commit: ${commit}`);
   }
 
+  // What the build actually reported outranks any heuristic about the repo (see
+  // build-failure.ts); the branches below only format the diagnosis.
+  const diagnosis = classifyBuildFailure(evidence, runtimeHint);
+  const onCommit = commit ? ` (commit "${commit}")` : "";
+
+  if (diagnosis.kind === "oom") {
+    const step = diagnosis.step ?? "the build step";
+    await log(
+      `[stage:deploy] The build ran out of memory while running "${step}". Raise the build's memory ` +
+      'ceiling (set NODE_OPTIONS="--max-old-space-size=<MB>" in the project env), select a larger plan ' +
+      "with more memory, or make the build less memory-hungry (fewer parallel workers, no source maps).",
+    );
+    return (
+      `The build ran out of memory while running "${step}"${onCommit}. ` +
+      "Select a larger plan with more memory, or reduce the build's memory use (fewer parallel workers, no source maps)."
+    );
+  }
+
   // Framework-aware guidance for the most common self-inflicted case: a
   // server app (Railpack Node) with no start command. When the repo declares
   // no `start` script AND we couldn't derive one, Railpack builds the app but
@@ -241,7 +291,7 @@ async function reportBuildFailure(
   // since they can't see the raw build log.
   // A platform-adapter build has no startable Node server; the fix is to change
   // the adapter, not to add a start script.
-  if (runtimeHint?.platformAdapter) {
+  if (diagnosis.kind === "platform-adapter") {
     await log(
       "[stage:deploy] This Astro app is built with a platform adapter (Vercel/Netlify/Cloudflare), which " +
       "produces a serverless handler rather than a Node server. Switch to @astrojs/node with " +
@@ -252,13 +302,7 @@ async function reportBuildFailure(
       : 'This Astro app uses a platform adapter (Vercel/Netlify/Cloudflare) and has no Node server to run. Switch to @astrojs/node with mode: "standalone".';
   }
 
-  const missingStart =
-    runtimeHint?.buildType === "railpack" &&
-    runtimeHint.kind === "server" &&
-    !runtimeHint.startCommandApplied &&
-    !runtimeHint.repoHasStartScript;
-
-  if (missingStart) {
+  if (diagnosis.kind === "missing-start") {
     const suggested = runtimeHint?.framework === "astro" ? "node ./dist/server/entry.mjs" : "your server entry (e.g. node ./dist/server/entry.mjs)";
     await log(
       `[stage:deploy] No production start command was detected for this ${runtimeHint?.framework ?? "server"} app. ` +

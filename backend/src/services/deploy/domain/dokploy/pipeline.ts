@@ -35,6 +35,7 @@ import { stageProvisionDatabases } from "./stages/provision-databases.js";
 import { stageConfigureApp } from "./stages/configure-app.js";
 import { resolveRuntimeStartCommand } from "./stages/resolve-runtime.js";
 import { stageDeployWithRetry } from "./stages/trigger-deploy.js";
+import { fetchBuildLogTail } from "./stages/build-log.js";
 import { stageVerifyDeploy } from "./stages/verify-deploy.js";
 import { createAdvisoryCollector, renderAdvisories } from "./advisories.js";
 import { stageRunPostDeploy } from "./stages/run-post-deploy.js";
@@ -193,6 +194,10 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       client,
       log,
       advise: advisories.add,
+      // Sizes the build's Node heap to the server that will run it. Comes from
+      // the provision stage, not the request: a pre-provisioned/BYO server
+      // reports no size, and the selected plan says nothing about its hardware.
+      instanceType: serverResult.instanceType,
     });
     await checkpoint();
 
@@ -221,6 +226,10 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       // Lets a cancel issued mid-build stop the watch instead of polling to the
       // timeout and reporting the user's cancel as a build failure.
       isCancelled,
+      // Injected here (not imported by the stage) because the fetch resolves the
+      // server/app mapping from the DB. Keyed on the real projectId — the
+      // mappings are not keyed by deploymentId.
+      fetchBuildLog: projectId ? (logPath: string) => fetchBuildLogTail({ projectId, logPath }) : undefined,
     });
 
     // Unwind without touching the "cancelled" status the cancel route wrote.

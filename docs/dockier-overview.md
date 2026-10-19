@@ -262,7 +262,7 @@ The AI receives the finding context (rule, file, snippet, severity) and generate
 
 | Runtime | Frameworks | Package Managers |
 |---|---|---|
-| Node.js | Next.js, Nuxt.js, SvelteKit, Angular, Astro, Remix, React SPA, Vue SPA, generic | npm, pnpm, yarn, bun |
+| Node.js | Next.js, Nuxt, SvelteKit, Angular, Astro, Remix, React SPA, Vue SPA, generic | npm, pnpm, yarn, bun |
 | PHP | Laravel, Symfony, WordPress, Statamic, generic | Composer |
 | Python | Django, Flask, FastAPI, generic | pip, pipenv, poetry |
 | Go | Generic | go modules |

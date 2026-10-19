@@ -173,6 +173,16 @@ describe("executeDokployPipeline", () => {
     );
   });
 
+  // The previous fix was inert in production because the classifier was only
+  // ever fed an empty errorMessage; the stage cannot read the build log unless
+  // THIS call site injects the fetch.
+  it("injects the build-log fetch so a failed build can be classified from real output", async () => {
+    await executeDokployPipeline(basePipelineInput);
+
+    const args = mockDeployWithRetry.mock.calls[0][0] as { fetchBuildLog?: unknown };
+    expect(typeof args.fetchBuildLog).toBe("function");
+  });
+
   it("transitions status: pending → building → deploying → success", async () => {
     await executeDokployPipeline(basePipelineInput);
 
