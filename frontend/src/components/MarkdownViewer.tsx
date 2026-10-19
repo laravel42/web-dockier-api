@@ -1,54 +1,32 @@
-import { Crepe } from "@milkdown/crepe";
-import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
+import { lazy, Suspense } from "react";
+import ErrorBoundary from "./ErrorBoundary";
+import Spinner from "./Spinner";
 
 interface Props {
   markdown: string;
   className?: string;
 }
 
-/** Drop leading blank lines so Crepe doesn't emit an empty first <p>. */
-function normalizeMarkdown(markdown: string): string {
-  return markdown.replace(/^\s+/, "");
-}
-
 /**
- * Read-only Milkdown (Crepe) surface for rendering markdown as WYSIWYG prose.
- * Remounts when `markdown` changes so the editor always mirrors the source.
+ * Milkdown/Crepe plus its theme CSS is the single largest thing the frontend
+ * ships, and nothing on a project-detail page needs it until a markdown
+ * surface actually renders. Fetched on demand; the boundary below keeps a
+ * failed chunk load from leaving a blank area.
  */
-function MilkdownReadonly({ markdown }: { markdown: string }) {
-  useEditor((root) => {
-    const crepe = new Crepe({
-      root,
-      defaultValue: markdown,
-      features: {
-        // Viewer only — strip chrome meant for editing.
-        [Crepe.Feature.Toolbar]: false,
-        [Crepe.Feature.TopBar]: false,
-        [Crepe.Feature.BlockEdit]: false,
-        [Crepe.Feature.Placeholder]: false,
-        [Crepe.Feature.AI]: false,
-        [Crepe.Feature.Latex]: false,
-      },
-    });
-    crepe.setReadonly(true);
-    return crepe;
-  }, []);
-
-  return <Milkdown />;
-}
+const MarkdownViewerCrepe = lazy(() => import("./MarkdownViewerCrepe"));
 
 export default function MarkdownViewer({ markdown, className = "" }: Props) {
-  const source = normalizeMarkdown(markdown);
-
   return (
-    <div className={`milkdown-viewer ${className}`.trim()}>
-      {/*
-        Key remounts the provider when the source changes — Crepe has no
-        lightweight "replace markdown" path that avoids a full recreate.
-      */}
-      <MilkdownProvider key={source}>
-        <MilkdownReadonly markdown={source} />
-      </MilkdownProvider>
-    </div>
+    <ErrorBoundary title="Couldn't load the markdown viewer">
+      <Suspense
+        fallback={
+          <div className="flex min-h-24 items-center justify-center">
+            <Spinner className="size-5" />
+          </div>
+        }
+      >
+        <MarkdownViewerCrepe markdown={markdown} className={className} />
+      </Suspense>
+    </ErrorBoundary>
   );
 }

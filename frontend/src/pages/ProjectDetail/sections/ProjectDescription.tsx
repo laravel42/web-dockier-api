@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, lazy, Suspense, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import type { RepoAnalysis, SensitiveField, Dependency } from "@/components/DeployWizard";
@@ -11,12 +11,10 @@ import {
   type Alarm,
 } from "../navAlarms";
 import type { Deployment } from "@/types";
-import MDEditor from "@uiw/react-md-editor";
 import { cardCls, segmentActiveCls, segmentIdleCls } from "@/utils/styles";
 import SensitivityBadge, { getSensitivityStyle } from "@/components/badges/SensitivityBadge";
 import { gitApi } from "@/services/api";
 import type { Project } from "@/types";
-import OverviewEditor from "./OverviewEditor";
 import ProjectCommandsTab from "./ProjectCommandsTab";
 import ProjectProcessesTab from "./ProjectProcessesTab";
 import ProjectNetworkTab from "./ProjectNetworkTab";
@@ -38,6 +36,18 @@ import { FileTextIcon, XIcon, KeyRoundIcon, UserIcon, CreditCardIcon, LockKeyhol
 import Button from "@/components/ui/Button";
 import { TabPanelHeader, tabPanelContentCls } from "@/components/TabPanelHeader";
 import EmptyState from "@/components/ui/EmptyState";
+import ErrorBoundary from "@/components/ErrorBoundary";
+
+/*
+  Both editors are fetched on demand. The overview tab is the default one, but
+  BlockNote (OverviewEditor) and the md-editor preview (vulnerability details)
+  are megabytes that a visit to any other tab never needs, and even on Overview
+  the fetch now overlaps the README request instead of blocking the route chunk.
+*/
+const OverviewEditor = lazy(() => import("./OverviewEditor"));
+const MarkdownPreview = lazy(() =>
+  import("@uiw/react-md-editor").then((m) => ({ default: m.default.Markdown })),
+);
 
 interface Props {
   analysis: RepoAnalysis | null;
@@ -700,7 +710,11 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
                 {details ? (
                   <div>
                     <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Details</p>
-                    <MDEditor.Markdown source={details} style={{ background: "transparent", color: "inherit", fontSize: "0.875rem" }} />
+                    <ErrorBoundary title="Couldn't load the details renderer">
+                      <Suspense fallback={<TabSpinner label="Loading details…" />}>
+                        <MarkdownPreview source={details} style={{ background: "transparent", color: "inherit", fontSize: "0.875rem" }} />
+                      </Suspense>
+                    </ErrorBoundary>
                   </div>
                 ) : (
                   <p className="text-xs text-text-muted py-2">No additional details available.</p>
@@ -1292,12 +1306,16 @@ export default function ProjectDescription({
               permissionsLoading ? (
                 <TabSpinner label="Loading overview…" />
               ) : (
-                <OverviewEditor
-                  project={project}
-                  editable={canEditOverview}
-                  onProjectUpdate={onProjectUpdate}
-                  clipOverflow={clipOverview}
-                />
+                <ErrorBoundary title="Couldn't load the overview">
+                  <Suspense fallback={<TabSpinner label="Loading overview…" />}>
+                    <OverviewEditor
+                      project={project}
+                      editable={canEditOverview}
+                      onProjectUpdate={onProjectUpdate}
+                      clipOverflow={clipOverview}
+                    />
+                  </Suspense>
+                </ErrorBoundary>
               )
             ) : (
               renderMainTabContent()
