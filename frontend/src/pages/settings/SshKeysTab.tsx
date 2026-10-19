@@ -14,6 +14,7 @@ import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import Alert from "@/components/ui/Alert";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { KeyRoundIcon, PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
 
@@ -28,9 +29,27 @@ export default function SshKeysTab() {
   const [showForm, setShowForm] = useState(false);
   const [viewingKey, setViewingKey] = useState<(typeof keyList)[number] | null>(null);
   const [form, setForm] = useState({ label: "", publicKey: "" });
-  const [confirmRemove, setConfirmRemove] = useState(false);
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const {
+    showModal: confirmRemove,
+    execute: removeKey,
+    open: openRemoveConfirm,
+    close: closeRemoveConfirm,
+  } = useConfirmableAction(
+    async () => {
+      if (!viewingKey) return;
+      await deployApi.deleteSshKey(viewingKey.id);
+    },
+    {
+      onSuccess: () => {
+        setViewingKey(null);
+        reload();
+      },
+      errorFallback: "Failed to remove SSH key",
+    },
+  );
 
   const normalizeSshPublicKey = (key: string) => {
     const parts = key.trim().split(/\s+/);
@@ -120,7 +139,7 @@ export default function SshKeysTab() {
             </div>
             {canManage && (
               <SettingsModalFooter
-                onDelete={() => setConfirmRemove(true)}
+                onDelete={openRemoveConfirm}
                 deleteAriaLabel={`Remove ${viewingKey.label}`}
               >
                 <button type="button" onClick={() => setViewingKey(null)} className="h-9 px-4 text-sm font-medium rounded-lg border border-border text-text-muted hover:bg-secondary-50 transition-colors">
@@ -169,12 +188,8 @@ export default function SshKeysTab() {
       )}
       <ConfirmModal
         open={confirmRemove}
-        onClose={() => setConfirmRemove(false)}
-        onConfirm={() => {
-          if (viewingKey) deployApi.deleteSshKey(viewingKey.id).then(reload);
-          setViewingKey(null);
-          setConfirmRemove(false);
-        }}
+        onClose={closeRemoveConfirm}
+        onConfirm={removeKey}
         message="Are you sure you want to remove this SSH key?"
       />
     </div>

@@ -134,6 +134,13 @@ export const tableHeadCls = "bg-card/60 text-left text-text-muted";
 export const tableCellCls = "text-text";
 export const tableCellMutedCls = "text-text-muted";
 
+/**
+ * Row link in a list table's first cell. The row itself keeps its click
+ * handler as a convenience, but this is the keyboard-operable path into the
+ * record (WCAG 2.1.1) — a <tr> cannot be focused without lying about its role.
+ */
+export const tableRowLinkCls = "hover:text-primary transition-colors";
+
 /** Small metadata chip (branch, source, etc.) */
 export const chipCls =
   "inline-flex items-center gap-1 rounded-md border border-border/60 bg-card/40 px-1.5 py-0.5 text-ui-sm text-text-muted shrink-0";

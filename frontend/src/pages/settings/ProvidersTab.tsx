@@ -15,6 +15,7 @@ import { usePermissions } from "@/context/PermissionsContext";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
 import MetadataBar from "./components/MetadataBar";
@@ -52,9 +53,27 @@ export default function ProvidersTab() {
   const [addProviderKind, setAddProviderKind] = useState<ProviderKind>("aws");
   const [form, setForm] = useState<CredentialForm>(EMPTY_FORM);
   const [showSecret, setShowSecret] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const fetch_ = reload;
+
+  const {
+    showModal: confirmRemove,
+    execute: removeProvider,
+    open: openRemoveConfirm,
+    close: closeRemoveConfirm,
+  } = useConfirmableAction(
+    async () => {
+      if (!editingProvider) return;
+      await deployApi.deleteProvider(editingProvider.id);
+    },
+    {
+      onSuccess: () => {
+        setEditingProvider(null);
+        fetch_();
+      },
+      errorFallback: "Failed to remove provider",
+    },
+  );
 
   const resetAddForm = () => {
     setForm(EMPTY_FORM);
@@ -240,7 +259,7 @@ export default function ProvidersTab() {
 
               {/* Footer */}
               <SettingsModalFooter
-                onDelete={canManage ? () => setConfirmRemove(true) : undefined}
+                onDelete={canManage ? openRemoveConfirm : undefined}
                 deleteAriaLabel={`Remove ${editForm.label || "provider"}`}
               >
                 <Button type="submit">Save Changes</Button>
@@ -248,7 +267,7 @@ export default function ProvidersTab() {
             </form>
         )}
       </Modal>
-      <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingProvider) deployApi.deleteProvider(editingProvider.id).then(fetch_); setEditingProvider(null); setConfirmRemove(false); }} message="Are you sure you want to remove this provider?" />
+      <ConfirmModal open={confirmRemove} onClose={closeRemoveConfirm} onConfirm={removeProvider} message="Are you sure you want to remove this provider?" />
 
       {loading ? (
         <PageLoading />

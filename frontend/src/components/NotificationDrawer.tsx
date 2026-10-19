@@ -4,6 +4,7 @@ import { notificationsApi } from "../services/api";
 import type { Notification } from "../types";
 import { getNotificationDetailPath } from "../utils/notificationContent";
 import { notifyNotificationsRead } from "../hooks/useUnreadNotificationCount";
+import { clickableProps } from "../utils/a11y";
 import {
   Drawer,
   DrawerContent,
@@ -46,8 +47,7 @@ function NotificationDrawerItem({
 
   return (
     <div
-      role={to ? "link" : undefined}
-      onClick={handleClick}
+      {...clickableProps(handleClick)}
       className={`border-b border-border/40 px-5 py-3 transition-colors hover:bg-muted/40 ${to ? "cursor-pointer" : ""} ${!notification.read ? "bg-primary/5" : ""}`}
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -83,6 +83,9 @@ function NotificationDrawerItem({
             e.stopPropagation();
             onMarkRead(notification.id);
           }}
+          // The row itself is keyboard-activatable; without this, Enter/Space on
+          // this button would bubble up and navigate away instead.
+          onKeyDown={(e) => e.stopPropagation()}
         >
           Mark as read
         </Button>

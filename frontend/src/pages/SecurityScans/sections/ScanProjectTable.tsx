@@ -1,7 +1,8 @@
+import { Link } from "react-router-dom";
 import TechCell from "@/components/TechCell";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import DataTable, { tableRowCls } from "@/components/ui/DataTable";
-import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "@/utils/styles";
+import { tableCellCls, tableCellMutedCls, typeCardDateCls, tableRowLinkCls } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import type { Scan, Project, TechBadgeInfo } from "@/types";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
@@ -52,7 +53,11 @@ export default function ScanProjectTable({
         if (!hasScans) {
           return (
             <tr key={projectId} onClick={() => onSelectEmpty(projectId)} className={tableRowCls}>
-              <td className={`${tableCellCls} font-medium`}>{project?.name || projectId.slice(0, 8)}</td>
+              <td className={`${tableCellCls} font-medium`}>
+                <Link to={`/security/project/${projectId}`} onClick={(e) => e.stopPropagation()} className={tableRowLinkCls}>
+                  {project?.name || projectId.slice(0, 8)}
+                </Link>
+              </td>
               <td>{techCell}</td>
               <td>
                 {project?.branch ? (
@@ -79,7 +84,11 @@ export default function ScanProjectTable({
 
         return (
           <tr key={projectId} onClick={() => onSelectScan(latest.id)} className={tableRowCls}>
-            <td className={`${tableCellCls} font-medium`}>{project?.name || projectId.slice(0, 8)}</td>
+            <td className={`${tableCellCls} font-medium`}>
+              <Link to={`/security/${latest.id}`} onClick={(e) => e.stopPropagation()} className={tableRowLinkCls}>
+                {project?.name || projectId.slice(0, 8)}
+              </Link>
+            </td>
             <td>{techCell}</td>
             <td>
               {project?.branch ? (

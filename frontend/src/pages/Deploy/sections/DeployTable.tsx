@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import TechCell from "@/components/TechCell";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { getRepoSlug } from "@/utils/parseOwnerRepo";
@@ -5,6 +6,7 @@ import {
   tableCellCls,
   tableCellMutedCls,
   typeCardDateCls,
+  tableRowLinkCls,
 } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import DataTable, { tableRowCls } from "@/components/ui/DataTable";
@@ -31,7 +33,11 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
 
         return (
           <tr key={groupKey} onClick={() => onSelect(latest.id)} className={tableRowCls}>
-            <td className={`${tableCellCls} font-medium`}>{proj?.name || latest.repo}</td>
+            <td className={`${tableCellCls} font-medium`}>
+              <Link to={`/deploy/${latest.id}`} onClick={(e) => e.stopPropagation()} className={tableRowLinkCls}>
+                {proj?.name || latest.repo}
+              </Link>
+            </td>
             <td className={`${tableCellMutedCls} lowercase`}>{repoLabel}</td>
             <td>
               <BranchCommitLabel

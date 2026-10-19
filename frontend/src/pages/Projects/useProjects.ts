@@ -5,6 +5,7 @@ import { useProjectBadges } from "@/hooks/useProjectBadges";
 import { useProjectRepoFavicons } from "@/hooks/useProjectRepoFavicon";
 import { useViewMode } from "@/hooks/useViewMode";
 import { usePaginatedData } from "@/hooks/usePaginatedData";
+import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 
 const PAGE_SIZE = 50;
 
@@ -40,9 +41,19 @@ export function useProjects() {
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const confirmDelete = () => {
-    if (deleteId) projectsApi.delete(deleteId).then(fetchProjects);
-  };
+  const { execute: confirmDelete } = useConfirmableAction(
+    async () => {
+      if (!deleteId) return;
+      await projectsApi.delete(deleteId);
+    },
+    {
+      onSuccess: () => {
+        setDeleteId(null);
+        fetchProjects();
+      },
+      errorFallback: "Failed to delete project",
+    },
+  );
 
   // ── Form modal ─────────────────────────────────────────────────
 

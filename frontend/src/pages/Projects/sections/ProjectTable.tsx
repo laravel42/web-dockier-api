@@ -1,7 +1,8 @@
+import { Link } from "react-router-dom";
 import TechCell from "@/components/TechCell";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { getRepoSlug } from "@/utils/parseOwnerRepo";
-import { tableCellCls, tableCellMutedCls, typeCardDateCls } from "@/utils/styles";
+import { tableCellCls, tableCellMutedCls, typeCardDateCls, tableRowLinkCls } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import DataTable, { tableRowCls } from "@/components/ui/DataTable";
 import type { Project, TechBadgeInfo } from "@/types";
@@ -19,7 +20,11 @@ export default function ProjectTable({ projects, projectLangs, projectBadgeLoadi
       {projects.map((p) => {
         return (
           <tr key={p.id} onClick={() => onSelect(p.id)} className={tableRowCls}>
-            <td className={`${tableCellCls} font-medium`}>{p.name}</td>
+            <td className={`${tableCellCls} font-medium`}>
+              <Link to={`/projects/${p.id}`} onClick={(e) => e.stopPropagation()} className={tableRowLinkCls}>
+                {p.name}
+              </Link>
+            </td>
             <td className={`${tableCellMutedCls} lowercase`}>{p.repository ? getRepoSlug(p.repository) : "—"}</td>
             <td>
               <BranchCommitLabel branch={p.branch || "main"} onClick={() => onSelect(p.id)} />

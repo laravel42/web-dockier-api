@@ -12,6 +12,7 @@ import { usePermissions } from "@/context/PermissionsContext";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { notifyInAppNotificationsChanged } from "@/hooks/useInAppNotificationsEnabled";
 import { BellIcon, LinkIcon, MailIcon, PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
@@ -29,9 +30,27 @@ export default function NotificationChannelsTab() {
   const [editingChannel, setEditingChannel] = useState<{ id: string; type: string; config: Record<string, string>; enabled: boolean } | null>(null);
   const [editEnabled, setEditEnabled] = useState(true);
   const [editConfigValue, setEditConfigValue] = useState("");
-  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const fetch_ = reload;
+
+  const {
+    showModal: confirmRemove,
+    execute: removeChannel,
+    open: openRemoveConfirm,
+    close: closeRemoveConfirm,
+  } = useConfirmableAction(
+    async () => {
+      if (!editingChannel) return;
+      await notificationsApi.deleteChannel(editingChannel.id);
+    },
+    {
+      onSuccess: () => {
+        setEditingChannel(null);
+        fetch_();
+      },
+      errorFallback: "Failed to remove channel",
+    },
+  );
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,7 +189,7 @@ export default function NotificationChannelsTab() {
 
             {/* Footer */}
             <SettingsModalFooter
-              onDelete={canManage && editingChannel.type !== "in_app" ? () => setConfirmRemove(true) : undefined}
+              onDelete={canManage && editingChannel.type !== "in_app" ? openRemoveConfirm : undefined}
               deleteAriaLabel={`Remove ${chName} channel`}
             >
               <Button type="submit">Save Changes</Button>
@@ -179,7 +198,7 @@ export default function NotificationChannelsTab() {
           );
         })()}
       </Modal>
-      <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingChannel) notificationsApi.deleteChannel(editingChannel.id).then(fetch_); setEditingChannel(null); setConfirmRemove(false); }} message="Are you sure you want to remove this channel?" />
+      <ConfirmModal open={confirmRemove} onClose={closeRemoveConfirm} onConfirm={removeChannel} message="Are you sure you want to remove this channel?" />
 
       {loading ? (
         <PageLoading />

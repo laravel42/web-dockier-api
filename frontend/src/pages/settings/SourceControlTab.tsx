@@ -14,6 +14,7 @@ import { useToast } from "@/context/useToast";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
 import MetadataBar from "./components/MetadataBar";
@@ -32,9 +33,27 @@ export default function SourceControlTab() {
   const [editingConn, setEditingConn] = useState<{ id: string; provider: string; label: string; endpoint?: string; createdAt?: string } | null>(null);
   const [editForm, setEditForm] = useState({ label: "", personalToken: "", endpoint: "" });
   const [form, setForm] = useState({ provider: "github", personalToken: "", label: "", endpoint: "" });
-  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const fetch_ = reload;
+
+  const {
+    showModal: confirmRemove,
+    execute: removeConnection,
+    open: openRemoveConfirm,
+    close: closeRemoveConfirm,
+  } = useConfirmableAction(
+    async () => {
+      if (!editingConn) return;
+      await gitApi.deleteConnection(editingConn.id);
+    },
+    {
+      onSuccess: () => {
+        setEditingConn(null);
+        fetch_();
+      },
+      errorFallback: "Failed to remove connection",
+    },
+  );
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,7 +181,7 @@ export default function SourceControlTab() {
 
             {/* Footer */}
             <SettingsModalFooter
-              onDelete={canManage ? () => setConfirmRemove(true) : undefined}
+              onDelete={canManage ? openRemoveConfirm : undefined}
               deleteAriaLabel={`Remove ${editForm.label || "connection"}`}
             >
               <Button type="submit">Save Changes</Button>
@@ -170,7 +189,7 @@ export default function SourceControlTab() {
           </form>
         )}
       </Modal>
-      <ConfirmModal open={confirmRemove} onClose={() => setConfirmRemove(false)} onConfirm={() => { if (editingConn) gitApi.deleteConnection(editingConn.id).then(fetch_); setEditingConn(null); setConfirmRemove(false); }} message="Are you sure you want to remove this connection?" />
+      <ConfirmModal open={confirmRemove} onClose={closeRemoveConfirm} onConfirm={removeConnection} message="Are you sure you want to remove this connection?" />
 
       {loading ? (
         <PageLoading />
