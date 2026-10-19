@@ -47,7 +47,7 @@ function NotificationDrawerItem({
 
   return (
     <div
-      {...clickableProps(handleClick)}
+      {...clickableProps(handleClick, Boolean(to) || !notification.read)}
       className={`border-b border-border/40 px-5 py-3 transition-colors hover:bg-muted/40 ${to ? "cursor-pointer" : ""} ${!notification.read ? "bg-primary/5" : ""}`}
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
