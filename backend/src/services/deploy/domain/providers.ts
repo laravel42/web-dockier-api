@@ -6,7 +6,7 @@ import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../..
 import type { ProviderRow } from "../types.js";
 import { rowToProvider } from "./mappers.js";
 import { nowIso } from "../../../shared/utils/time.js";
-import { buildProviderCredential, parseProviderCredential, type ProviderCredential } from "../../../lib/provider-credentials.js";
+import { buildProviderCredential, hasUsableCredential, parseProviderCredential, type ProviderCredential } from "../../../lib/provider-credentials.js";
 
 export const DeployError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "precondition_failed" | "internal">("DeployError");
 export type DeployError = InstanceType<typeof DeployError>;
@@ -99,14 +99,26 @@ export async function updateProvider(params: UpdateProviderParams) {
   // key rotation (new id + secret) working while allowing single-field edits.
   if (credentials !== undefined) {
     let existingRaw: unknown;
+    let readable = true;
     try {
       existingRaw = readEncryptedOr(existing.credentials_encrypted, existing.credentials);
     } catch {
-      throw new DeployError(
-        "Could not decrypt this provider's stored credentials. Re-enter every credential field for this provider.",
-        "internal",
-      );
+      readable = false;
     }
+
+    if (!readable) {
+      // A full re-entry needs nothing from the unreadable blob, and it is the
+      // recovery this error tells the user to perform.
+      const supplied = buildProviderCredential(existing.provider, credentials);
+      if (!hasUsableCredential(supplied)) {
+        throw new DeployError(
+          "Could not decrypt this provider's stored credentials. Re-enter every credential field for this provider.",
+          "internal",
+        );
+      }
+      existingRaw = supplied;
+    }
+
     updates.credentials_encrypted = encryptJson(mergeCredential(existing.provider, existingRaw, credentials));
     // Blank the legacy plaintext blob so a rotated credential is not left behind in the clear.
     updates.credentials = {};

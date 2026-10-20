@@ -13,7 +13,7 @@ vi.mock("../../../../shared/supabase/client.js", () => ({
   supabaseAdmin: { from: (...args: unknown[]) => mockFrom(...args) },
 }));
 
-const { createConnection, getConnection, updateConnection } = await import("../connections.js");
+const { createConnection, deleteConnection, getConnection, updateConnection } = await import("../connections.js");
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -114,6 +114,29 @@ describe("git connections — token encryption at rest", () => {
     );
 
     await expect(getConnection(CONNECTION_ID)).rejects.toThrow(/Re-enter the token/);
+  });
+
+  it("lets an undecryptable connection still be re-tokenised and deleted", async () => {
+    const broken = legacyRow({ personal_token_encrypted: "not-a-valid-payload" });
+    const readChain = createChain({ data: broken, error: null });
+    const writeChain = createChain({ data: null, error: null });
+
+    let call = 0;
+    mockFrom.mockImplementation(() => {
+      call += 1;
+      return call % 2 === 1 ? readChain : writeChain;
+    });
+
+    await updateConnection({
+      connectionId: CONNECTION_ID,
+      tenantId: TEST_TENANT_ID,
+      label: "Primary",
+      personalToken: "ghp_ReplacementToken",
+    });
+    await deleteConnection(CONNECTION_ID, TEST_TENANT_ID);
+
+    expect((writeChain.update as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    expect((writeChain.delete as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 
   it("rotation writes the encrypted column and blanks the plaintext one", async () => {

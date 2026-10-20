@@ -22,19 +22,24 @@ export interface ConnectionRow {
   created_at: string;
 }
 
-/**
- * Fetch a connection by ID. Throws on DB errors and not-found.
- */
-export async function getConnection(connectionId: string): Promise<ConnectionRow> {
+/** The stored row, token still encrypted. */
+async function fetchConnectionRow(connectionId: string): Promise<ConnectionRow> {
   const { data, error } = await supabaseAdmin
     .from("git_connections")
     .select("id,organization_id,provider,personal_token,personal_token_encrypted,label,repo_url,endpoint,created_at")
     .eq("id", connectionId)
     .single();
-  const row = unwrapQuery(data, error, GitIntegrationError, {
+  return unwrapQuery(data, error, GitIntegrationError, {
     notFoundMsg: "Connection not found",
     internalMsg: "Failed to fetch connection",
   }) as ConnectionRow;
+}
+
+/**
+ * Fetch a connection by ID. Throws on DB errors and not-found.
+ */
+export async function getConnection(connectionId: string): Promise<ConnectionRow> {
+  const row = await fetchConnectionRow(connectionId);
 
   try {
     return { ...row, personal_token: readEncryptedOr(row.personal_token_encrypted, row.personal_token) };
@@ -53,6 +58,17 @@ export async function getConnectionForTenant(connectionId: string, tenantId: str
   const conn = await getConnection(connectionId);
   assertOwnership(conn, tenantId, GitIntegrationError, "Not your connection");
   return conn;
+}
+
+/**
+ * Same ownership check without decrypting the token, for the update and delete
+ * paths: a row whose token cannot be decrypted must still be re-tokenisable and
+ * removable, which is the recovery getConnection's error message prescribes.
+ */
+async function getConnectionRowForTenant(connectionId: string, tenantId: string): Promise<ConnectionRow> {
+  const row = await fetchConnectionRow(connectionId);
+  assertOwnership(row, tenantId, GitIntegrationError, "Not your connection");
+  return row;
 }
 
 export interface CreateConnectionParams {
@@ -126,7 +142,7 @@ export async function listConnections(tenantId: string) {
 }
 
 export async function deleteConnection(connectionId: string, tenantId: string) {
-  const conn = await getConnectionForTenant(connectionId, tenantId);
+  const conn = await getConnectionRowForTenant(connectionId, tenantId);
   const { error } = await supabaseAdmin.from("git_connections").delete().eq("id", conn.id);
   throwOnError(error, GitIntegrationError, { internalMsg: "Failed to delete connection" });
 }
@@ -140,7 +156,7 @@ export interface UpdateConnectionParams {
 
 export async function updateConnection(params: UpdateConnectionParams) {
   const { connectionId, tenantId, label, personalToken } = params;
-  const conn = await getConnectionForTenant(connectionId, tenantId);
+  const conn = await getConnectionRowForTenant(connectionId, tenantId);
 
   const updates: Database["public"]["Tables"]["git_connections"]["Update"] = { label };
   if (personalToken) {

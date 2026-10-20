@@ -101,6 +101,46 @@ describe("provider credentials — encryption at rest", () => {
     await expect(getProviderCredentials(TEST_PROVIDER_ID)).rejects.toThrow(/Re-enter them in Settings/);
   });
 
+  it("accepts a full re-entry on a provider whose stored credentials cannot be decrypted", async () => {
+    const existing = makeProviderRow({ credentials: {}, credentials_encrypted: "not-a-valid-payload" });
+    const readChain = createChain({ data: existing, error: null });
+    const updateChain = createChain({ data: makeProviderRow(), error: null });
+
+    let call = 0;
+    mockFrom.mockImplementation(() => {
+      call += 1;
+      return call === 1 ? readChain : updateChain;
+    });
+
+    await updateProvider({
+      providerId: TEST_PROVIDER_ID,
+      tenantId: TEST_TENANT_ID,
+      credentials: { accessKeyId: "AKIANEW", secretAccessKey: "new-secret" },
+    });
+
+    const update = updateChain.update as ReturnType<typeof vi.fn>;
+    const updates = update.mock.calls[0][0] as Record<string, unknown>;
+    expect(decryptJson(updates.credentials_encrypted as string)).toEqual({
+      kind: "aws",
+      accessKeyId: "AKIANEW",
+      secretAccessKey: "new-secret",
+    });
+  });
+
+  it("still rejects a partial rotation when the stored credentials cannot be decrypted", async () => {
+    mockFrom.mockReturnValue(
+      createChain({ data: makeProviderRow({ credentials: {}, credentials_encrypted: "not-a-valid-payload" }), error: null }),
+    );
+
+    await expect(
+      updateProvider({
+        providerId: TEST_PROVIDER_ID,
+        tenantId: TEST_TENANT_ID,
+        credentials: { secretAccessKey: "only-the-secret" },
+      }),
+    ).rejects.toThrow(/Re-enter every credential field/);
+  });
+
   it("partial rotation writes the encrypted column and blanks the plaintext one", async () => {
     const existing = makeProviderRow({
       credentials: {},
