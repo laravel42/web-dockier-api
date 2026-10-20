@@ -12,6 +12,7 @@
  * of the deploy pipeline — a hanging query here blocks the entire deployment.
  */
 
+import { readEncryptedOr } from "../auth/crypto.js";
 import { supabaseAdmin } from "../supabase/client.js";
 import { logger } from "../logger.js";
 import { withRetry } from "../utils/retry.js";
@@ -47,7 +48,7 @@ export async function getGitConnectionCredentials(connectionId: string): Promise
       async () => {
         const result = await supabaseAdmin
           .from("git_connections")
-          .select("provider, personal_token, endpoint")
+          .select("provider, personal_token, personal_token_encrypted, endpoint")
           .eq("id", connectionId)
           .maybeSingle();
 
@@ -73,7 +74,9 @@ export async function getGitConnectionCredentials(connectionId: string): Promise
 
     return {
       provider: data.provider || "",
-      token: data.personal_token || "",
+      // A failed decrypt throws into the outer catch, which is this function's
+      // documented contract: logger.warn + null for the caller to handle.
+      token: readEncryptedOr(data.personal_token_encrypted, data.personal_token || ""),
       endpoint: data.endpoint || "",
     };
   } catch (err) {

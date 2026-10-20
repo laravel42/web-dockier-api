@@ -62,7 +62,8 @@ const envSchema = z
     RESEND_API_KEY: optionalEnv(z.string().min(1)),
     RESEND_FROM_EMAIL: optionalEnv(z.string()),
     DATABASE_URL: optionalEnv(z.string().min(1)),
-    ENV_ENCRYPTION_KEY: optionalEnv(z.string().min(32)),
+    /** AES-256-GCM key for every secret encrypted at rest. getEncryptionKey() accepts exactly 64 hex chars, so validate that here. */
+    ENV_ENCRYPTION_KEY: optionalEnv(z.string().regex(/^[0-9a-f]{64}$/i)),
     /** Deploy provider: "native" for CloudFormation/Pulumi, "dokploy" for Dokploy-based pipeline. */
     DEPLOY_PROVIDER: z.enum(["native", "dokploy"]).default("native"),
     /** Dokploy instance base API URL (required when DEPLOY_PROVIDER=dokploy). */
@@ -161,6 +162,12 @@ function parseEnv(): AppEnv {
     }
     if (!parsed.WEBHOOK_SECRET) {
       throw new Error("WEBHOOK_SECRET is required in production (webhook endpoints will reject all requests).");
+    }
+    if (!parsed.ENV_ENCRYPTION_KEY) {
+      throw new Error(
+        "ENV_ENCRYPTION_KEY is required in production (git tokens, provider credentials, SSH keys, PM integrations and network passwords are encrypted at rest with it). " +
+        "Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+      );
     }
     if (!parsed.INTERNAL_SERVICE_TOKEN) {
       // Fall back to WEBHOOK_SECRET but warn — this preserves backward compat

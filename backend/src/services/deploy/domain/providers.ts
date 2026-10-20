@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { encryptJson, readEncryptedOr } from "../../../shared/auth/crypto.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
@@ -39,7 +40,9 @@ export async function createProvider(params: CreateProviderParams) {
     organization_id: tenantId,
     provider,
     label,
-    credentials: credential as unknown as Record<string, unknown>,
+    // The JSONB column is NOT NULL and kept until a later migration drops it.
+    credentials: {} as Record<string, unknown>,
+    credentials_encrypted: encryptJson(credential),
     region: region ?? "",
     created_at: now,
   };
@@ -64,7 +67,7 @@ export async function listProviders(tenantId: string) {
 export async function getProviderForTenant(providerId: string, tenantId: string) {
   const { data, error } = await supabaseAdmin
     .from("server_providers")
-    .select("id,provider,label,region,credentials,created_at,organization_id")
+    .select("id,provider,label,region,credentials,credentials_encrypted,created_at,organization_id")
     .eq("id", providerId)
     .single();
   const provider = unwrapQuery(data, error, DeployError, {
@@ -95,7 +98,18 @@ export async function updateProvider(params: UpdateProviderParams) {
   // preserves the other fields rather than blanking them. This keeps full AWS
   // key rotation (new id + secret) working while allowing single-field edits.
   if (credentials !== undefined) {
-    updates.credentials = mergeCredential(existing.provider, existing.credentials, credentials) as unknown as Record<string, unknown>;
+    let existingRaw: unknown;
+    try {
+      existingRaw = readEncryptedOr(existing.credentials_encrypted, existing.credentials);
+    } catch {
+      throw new DeployError(
+        "Could not decrypt this provider's stored credentials. Re-enter every credential field for this provider.",
+        "internal",
+      );
+    }
+    updates.credentials_encrypted = encryptJson(mergeCredential(existing.provider, existingRaw, credentials));
+    // Blank the legacy plaintext blob so a rotated credential is not left behind in the clear.
+    updates.credentials = {};
   }
 
   if (Object.keys(updates).length === 0) return rowToProvider(existing);

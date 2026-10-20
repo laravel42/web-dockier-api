@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { encryptJson, readEncryptedOr } from "../../../shared/auth/crypto.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
@@ -12,7 +13,9 @@ export interface ConnectionRow {
   id: string;
   organization_id: string;
   provider: string;
+  /** Always the plaintext token in memory, decrypted from personal_token_encrypted on read. */
   personal_token: string;
+  personal_token_encrypted?: string | null;
   label: string;
   repo_url: string;
   endpoint: string;
@@ -25,13 +28,22 @@ export interface ConnectionRow {
 export async function getConnection(connectionId: string): Promise<ConnectionRow> {
   const { data, error } = await supabaseAdmin
     .from("git_connections")
-    .select("id,organization_id,provider,personal_token,label,repo_url,endpoint,created_at")
+    .select("id,organization_id,provider,personal_token,personal_token_encrypted,label,repo_url,endpoint,created_at")
     .eq("id", connectionId)
     .single();
-  return unwrapQuery(data, error, GitIntegrationError, {
+  const row = unwrapQuery(data, error, GitIntegrationError, {
     notFoundMsg: "Connection not found",
     internalMsg: "Failed to fetch connection",
   }) as ConnectionRow;
+
+  try {
+    return { ...row, personal_token: readEncryptedOr(row.personal_token_encrypted, row.personal_token) };
+  } catch {
+    throw new GitIntegrationError(
+      "Could not decrypt this connection's access token. Re-enter the token for this connection to restore it.",
+      "internal",
+    );
+  }
 }
 
 /**
@@ -72,7 +84,9 @@ export async function createConnection(params: CreateConnectionParams) {
     id,
     organization_id: tenantId,
     provider,
-    personal_token: personalToken,
+    // The plaintext column is NOT NULL and kept until a later migration drops it.
+    personal_token: "",
+    personal_token_encrypted: encryptJson(personalToken),
     label,
     repo_url: repoUrl,
     endpoint,
@@ -129,7 +143,11 @@ export async function updateConnection(params: UpdateConnectionParams) {
   const conn = await getConnectionForTenant(connectionId, tenantId);
 
   const updates: Database["public"]["Tables"]["git_connections"]["Update"] = { label };
-  if (personalToken) updates.personal_token = personalToken;
+  if (personalToken) {
+    updates.personal_token_encrypted = encryptJson(personalToken);
+    // Blank the plaintext column so a rotated token is not left behind in the clear.
+    updates.personal_token = "";
+  }
 
   const { error } = await supabaseAdmin.from("git_connections").update(updates).eq("id", connectionId);
   throwOnError(error, GitIntegrationError, {

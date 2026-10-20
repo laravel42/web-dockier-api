@@ -12,6 +12,7 @@
     "lint:fix": "eslint . --fix",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
     "cleanup:scans": "tsx src/scripts/cleanup-scans.ts",
+    "backfill:encrypt-secrets": "tsx src/scripts/backfill-secret-encryption.ts",
     "smoke:ai-review": "tsx src/scripts/ai-review-smoke.ts",
     "preflight:dokploy": "tsx src/scripts/dokploy-preflight.ts",
     "migrations:manifest": "tsx src/scripts/generate-migration-manifest.ts",

@@ -74,4 +74,5 @@ export const MIGRATION_VERSIONS: readonly string[] = [
   "0073",
   "0075",
   "0076",
+  "0077",
 ];

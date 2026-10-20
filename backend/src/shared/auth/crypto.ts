@@ -56,6 +56,20 @@ export function encryptJson(data: unknown): string {
 }
 
 /**
+ * Read a secret that is being migrated to encryption at rest.
+ *
+ * shortcut: lee el campo en claro mientras existan filas sin backfill,
+ * eliminalo cuando se borre la columna.
+ *
+ * Deliberately does not catch: a corrupt payload or a rotated key must fail
+ * loudly at the call site, which owns the user-facing message.
+ */
+export function readEncryptedOr<T>(encrypted: string | null | undefined, plaintextFallback: T): T {
+  if (!encrypted) return plaintextFallback;
+  return decryptJson(encrypted) as T;
+}
+
+/**
  * Decrypt a string produced by encryptJson back into the original value.
  */
 export function decryptJson(encoded: string): unknown {

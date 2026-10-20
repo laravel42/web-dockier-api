@@ -5,12 +5,16 @@
  * credential model. This is the single source of truth for credential access —
  * the deploy service, commands, network, and image-builder all consume it.
  *
- * Credentials are stored as a JSONB `credentials` blob whose shape is
- * discriminated on `kind` (which mirrors the `provider` column):
+ * Credentials are a blob whose shape is discriminated on `kind` (which mirrors
+ * the `provider` column):
  *   AWS: { kind: "aws", accessKeyId, secretAccessKey }
  *   GCP: { kind: "gcp", serviceAccountKey }  // full service-account JSON string
+ *
+ * Writes go to `credentials_encrypted` (encryptJson); the legacy JSONB
+ * `credentials` column is only read as a fallback until the backfill runs.
  */
 
+import { readEncryptedOr } from "../shared/auth/crypto.js";
 import { supabaseAdmin } from "../shared/supabase/client.js";
 import { createDomainErrorClass } from "../shared/supabase/errors.js";
 import { unwrapQuery } from "../shared/supabase/query.js";
@@ -153,7 +157,7 @@ export function toGcpServiceAccountKey(credential: ProviderCredential): string {
 export async function getProviderCredentials(providerId: string): Promise<ResolvedProvider> {
   const { data, error } = await supabaseAdmin
     .from("server_providers")
-    .select("provider,region,credentials")
+    .select("provider,region,credentials,credentials_encrypted")
     .eq("id", providerId)
     .single();
 
@@ -162,10 +166,20 @@ export async function getProviderCredentials(providerId: string): Promise<Resolv
     internalMsg: "Failed to fetch provider credentials",
   });
 
+  let raw: unknown;
+  try {
+    raw = readEncryptedOr(row.credentials_encrypted, row.credentials);
+  } catch {
+    throw new CredentialError(
+      "Could not decrypt this provider's credentials. Re-enter them in Settings → Providers.",
+      "internal",
+    );
+  }
+
   return {
     provider: row.provider,
     region: row.region ?? "",
-    credential: parseProviderCredential(row.provider, row.credentials),
+    credential: parseProviderCredential(row.provider, raw),
   };
 }
 

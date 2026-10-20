@@ -140,6 +140,8 @@ export type Database = {
           organization_id: string;
           provider: string;
           personal_token: string;
+          /** encryptJson payload of the PAT. Null on rows created before 0077. Never returned by the API. */
+          personal_token_encrypted: string | null;
           label: string;
           repo_url: string;
           endpoint: string;
@@ -362,6 +364,8 @@ export type Database = {
           label: string;
           /** Per-provider credential blob. See StoredProviderCredentials in lib/provider-credentials.ts. */
           credentials: Record<string, unknown>;
+          /** encryptJson payload of the credential blob. Null on rows created before 0077. Never returned by the API. */
+          credentials_encrypted: string | null;
           region: string;
           created_at: string;
         };
