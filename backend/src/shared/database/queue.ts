@@ -237,8 +237,9 @@ export function createWorker<T>(
     // the process for its whole lifetime, revisit if /readyz is wired to a probe.
     // register() is needed because run-server.ts only registers workers when the
     // boot-time start succeeded — a lazily started queue would otherwise persist
-    // jobs with no consumer.
-    if (!isQueueReady() && (await startQueue())) {
+    // jobs with no consumer. Attempted on every enqueue (both calls are a no-op
+    // once they have succeeded) so a failed registration is retried.
+    if (await startQueue()) {
       await register().catch((err) => logger.error({ err }, `[${queueName}] Worker registration after a lazy queue start failed`));
     }
 

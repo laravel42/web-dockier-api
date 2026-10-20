@@ -58,8 +58,8 @@ export function encryptJson(data: unknown): string {
 /**
  * Read a secret that is being migrated to encryption at rest.
  *
- * shortcut: lee el campo en claro mientras existan filas sin backfill,
- * eliminalo cuando se borre la columna.
+ * shortcut: reads the plaintext column while un-backfilled rows exist,
+ * remove it when that column is dropped.
  *
  * Deliberately does not catch: a corrupt payload or a rotated key must fail
  * loudly at the call site, which owns the user-facing message.

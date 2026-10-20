@@ -66,6 +66,20 @@ describe("queue start retry", () => {
     expect(handler).toHaveBeenCalledWith({ id: "1" });
   });
 
+  it("retries the worker registration on a later enqueue when it failed", async () => {
+    start.mockResolvedValue(undefined);
+    work.mockRejectedValueOnce(new Error("work failed"));
+    const { createWorker } = await import("../queue.js");
+
+    const worker = createWorker<{ id: string }>("test-queue", vi.fn(async () => {}));
+
+    expect(await worker.enqueue({ id: "1" })).toEqual({ queued: true });
+    expect(work).toHaveBeenCalledTimes(1);
+
+    expect(await worker.enqueue({ id: "2" })).toEqual({ queued: true });
+    expect(work).toHaveBeenCalledTimes(2);
+  });
+
   it("collapses concurrent enqueues onto a single start attempt", async () => {
     start.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 20)));
     const { createWorker } = await import("../queue.js");
