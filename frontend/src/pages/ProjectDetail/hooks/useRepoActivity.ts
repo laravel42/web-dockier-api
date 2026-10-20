@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { gitApi } from "@/services/api";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import { useAsyncData } from "@/hooks/useAsyncData";
@@ -11,10 +11,7 @@ import type { Project, CommitInfo, RepoIssue, RepoPullRequest } from "@/types";
  * loading/error state, stale-request cancellation, and manual reload.
  */
 export function useRepoActivity(project: Project | null) {
-  const parsed = useMemo(
-    () => (project?.repository ? parseOwnerRepo(project.repository) : null),
-    [project?.repository],
-  );
+  const parsed = project?.repository ? parseOwnerRepo(project.repository) : null;
 
   const enabled = !!(
     project?.connectionId &&
