@@ -17,7 +17,7 @@ import { env } from "../config.js";
 
 let boss: PgBoss | null = null;
 let queueStarted = false;
-let queueInitFailed = false;
+let starting: Promise<boolean> | null = null;
 
 export function isQueueReady(): boolean {
   return queueStarted && boss !== null;
@@ -30,7 +30,6 @@ export function isQueueReady(): boolean {
  */
 export function getQueue(): PgBoss | null {
   if (boss) return boss;
-  if (queueInitFailed) return null;
 
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) {
@@ -70,8 +69,17 @@ export function getQueue(): PgBoss | null {
  */
 export async function startQueue(): Promise<boolean> {
   if (queueStarted) return true;
-  if (queueInitFailed) return false;
+  // One attempt in flight: concurrent enqueues wait on the same promise instead
+  // of opening N connections at once. Cleared on settle so a failure can retry.
+  if (!starting) {
+    starting = startQueueOnce().finally(() => {
+      starting = null;
+    });
+  }
+  return starting;
+}
 
+async function startQueueOnce(): Promise<boolean> {
   const queue = getQueue();
   if (!queue) return false;
 
@@ -83,7 +91,6 @@ export async function startQueue(): Promise<boolean> {
   } catch (err) {
     const message = getErrMsg(err);
     logger.error(`[queue] pg-boss failed to start — background jobs disabled: ${message}`);
-    queueInitFailed = true;
     queueStarted = false;
     await queue.stop().catch(() => {});
     boss = null;
@@ -225,6 +232,16 @@ export function createWorker<T>(
   }
 
   async function enqueue(input: T, singletonKey?: string): Promise<EnqueueResult> {
+    // shortcut: with Postgres genuinely down every enqueue pays one connection
+    // attempt bounded by connectionTimeoutMillis (10_000); accepted over degrading
+    // the process for its whole lifetime, revisit if /readyz is wired to a probe.
+    // register() is needed because run-server.ts only registers workers when the
+    // boot-time start succeeded — a lazily started queue would otherwise persist
+    // jobs with no consumer.
+    if (!isQueueReady() && (await startQueue())) {
+      await register().catch((err) => logger.error({ err }, `[${queueName}] Worker registration after a lazy queue start failed`));
+    }
+
     if (isQueueReady() && boss) {
       await boss.send(queueName, input as unknown as Record<string, unknown>, {
         retryLimit,
