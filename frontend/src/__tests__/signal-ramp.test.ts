@@ -94,6 +94,16 @@ describe("signal ramp contrast", () => {
     });
   }
 
+  // bg-terminal is the same near-black in both themes, so the per-theme ramp
+  // inks fail on it in light. These two must stay theme-invariant.
+  it("terminal inks clear AA on bg-terminal and are not overridden in light", () => {
+    const terminal = token("terminal", "dark");
+    for (const name of ["terminal-success", "terminal-danger"]) {
+      expect(ratio(token(name, "dark"), terminal), `${name} on terminal`).toBeGreaterThanOrEqual(AA);
+      const light = CSS.slice(CSS.indexOf('[data-theme="light"] {'));
+      expect(light.includes(`--color-${name}:`), `${name} overridden in light`).toBe(false);
+    }
+  });
   it("defines every signal in both themes", () => {
     for (const theme of ["dark", "light"] as const) {
       for (const s of SIGNALS) {

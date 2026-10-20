@@ -4,18 +4,20 @@ import { tablePanelCls, tableHeadCls } from "@/utils/styles";
 interface Props {
   children: ReactNode;
   columns: string[];
+  /** Accessible name for the table, announced instead of "table with 6 columns". */
+  label: string;
   className?: string;
 }
 
-export default function DataTable({ children, columns, className = "" }: Props) {
+export default function DataTable({ children, columns, label, className = "" }: Props) {
   return (
     <div className={`${tablePanelCls} ${className}`}>
       <div className="overflow-x-auto">
-        <table className="w-full table-compact">
+        <table className="w-full table-compact" aria-label={label}>
           <thead className={tableHeadCls}>
             <tr>
               {columns.map((col) => (
-                <th key={col} className="font-medium">
+                <th key={col} scope="col" className="font-medium">
                   {col}
                 </th>
               ))}

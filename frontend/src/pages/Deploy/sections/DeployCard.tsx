@@ -1,4 +1,5 @@
-import type { Deployment, Project, TechBadgeInfo } from "@/types";
+import type { Deployment, TechBadgeInfo } from "@/types";
+import type { DeployListProject } from "../useDeploy";
 import ProjectTechBadges from "@/components/ProjectTechBadges";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { cardInteractiveCls, typeCardDateCls, typeCardMeta, typeCardTitle } from "@/utils/styles";
@@ -11,7 +12,7 @@ import { projectInfraDotClass } from "@/utils/projectInfraDot";
 interface Props {
   repo: string;
   deploys: Deployment[];
-  project: Project | undefined;
+  project: DeployListProject | undefined;
   badges: TechBadgeInfo[] | undefined;
   badgeLoading?: boolean;
   onClick: () => void;
@@ -20,7 +21,8 @@ interface Props {
 export default function DeployCard({ repo, deploys, project, badges, badgeLoading, onClick }: Props) {
   const sorted = [...deploys].sort((a, b) => compareByTime(a, b, "updated"));
   const latest = sorted[0];
-  const statusDot = projectInfraDotClass(project?.infraState, latest.status);
+  // Deployment rows carry no infra state, so the dot falls back to deploy status.
+  const statusDot = projectInfraDotClass(undefined, latest.status);
 
   return (
     <div {...clickableProps(onClick)} className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}>

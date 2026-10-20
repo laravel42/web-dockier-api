@@ -145,12 +145,13 @@ The primary deploy path (`DEPLOY_PROVIDER=dokploy`) delegates build and deployme
 ## Frontend conventions
 
 - Located in `frontend/` with its own `package.json` — run `pnpm install` there separately.
-- React 19 with functional components and hooks only. No class components.
+- React 19 with functional components and hooks only. The one exception is `frontend/src/components/ErrorBoundary.tsx`, which must be a class — React still provides no hook equivalent of `getDerivedStateFromError`. Do not add other class components.
 - Tailwind CSS v4 for styling. Dark mode is the default.
 - Routing via `react-router-dom`.
 - API calls go through `frontend/src/services/` — one file per backend service.
 - Auth state managed via React Context (`frontend/src/context/`).
-- Shared components in `frontend/src/components/`, page components in `frontend/src/pages/`.
+- Shared components in `frontend/src/components/`, page components in `frontend/src/pages/`. Primitives live in `frontend/src/components/ui/` — check there before writing a new one. Already present and used across pages: `PageHeader`, `PageLoading`, `PageError`, `EmptyState`, `DataTable`, `ViewModeToggle`, `ListToolbar`, `ListSearchBar`, `Pagination`, `TabSpinner`.
+- Cross-cutting hooks and helpers that are easy to miss and must not be reimplemented: `hooks/useViewMode.ts` (card/table preference, owns the `ViewMode` type), `hooks/useProjectBadges.ts` (tech badges), `hooks/useConfirmableAction.ts` (destructive actions — try/catch, error toast, running state), `hooks/useAsyncData.ts` / `usePaginatedData.ts`, `utils/a11y.ts → clickableProps()` (keyboard-operable non-button elements), `services/request.ts` (the single `fetch` wrapper — auth, timeout, retry, 401 handling).
 - Shell layout uses `TopNavbar` (not a sidebar); main nav items in `frontend/src/config/nav.ts`.
 - Settings pages use `settingsBadgeCls` from `frontend/src/utils/styles.ts` for status/category pills.
 - Use TypeScript types from `frontend/src/types/`.
@@ -162,15 +163,17 @@ The primary deploy path (`DEPLOY_PROVIDER=dokploy`) delegates build and deployme
   - `projects-view`
   - `deployments-view`
   - `security-scans-view`
-- Table components live under each page’s `sections/` folder (`ProjectTable`, `DeployTable`, `ScanProjectTable`).
+- Table components live under each page’s `sections/` folder (`ProjectTable`, `DeployTable`, `ScanProjectTable`), but the table chrome itself is shared: `components/ui/DataTable.tsx` renders the panel, `<thead>` (with `scope="col"`) and the `aria-label`, and exports `tableRowCls`.
+- The toggle itself is `components/ui/ViewModeToggle.tsx` (already carries `aria-label`, `title` and `aria-pressed`); persistence is `hooks/useViewMode.ts`. Toolbar and search are `components/ui/ListToolbar.tsx` and `ListSearchBar.tsx`. Loading, error and empty states are `components/ui/PageLoading`, `PageError` and `EmptyState`. All three pages use all of these — do not re-implement any of them.
 - Page hooks expose `viewMode` and `changeViewMode` (see `useProjects`, `useDeploy`, `useSecurityScans`).
+- Table rows navigate by a real `<Link>` in the first cell (`tableRowLinkCls` in `utils/styles.ts`); the `<tr>` keeps its `onClick` only as a mouse convenience. A `<tr>` cannot be given `clickableProps()` without destroying its row semantics.
 
 ### Tech badges on list pages
 
 - Shared hook: `frontend/src/hooks/useProjectBadges.ts`
 - Cache utilities: `frontend/src/utils/projectBadgeCache.ts`
   - `localStorage` cache per project (invalidated when repo, branch, or connection changes)
-  - `selectProjectBadges()` returns top **4** items sorted by `confidence` (no whitelist filter)
+  - `selectProjectBadges()` filters by `BADGE_WHITELIST`, applies the `BADGE_SUPERSEDES` suppression pass and the `BADGE_SECONDARY` demotion, then returns the top **4** sorted by `confidence`
 - Data source: `GET /git/repo-badges` (see git-integration docs for resolution order)
 - Cards and tables show up to 4 badges; tables may show 3 in the Tech column for layout
 - `PlatformBadge` fallback when no tech badges are available
@@ -199,6 +202,9 @@ cd frontend && pnpm dev       # Start frontend dev server (localhost:5173)
 cd frontend && pnpm build     # Production build
 cd frontend && pnpm lint      # ESLint (includes Tailwind canonical-class checks)
 cd frontend && pnpm lint:fix  # ESLint with auto-fix (canonical Tailwind classes, etc.)
+cd frontend && pnpm test      # Vitest unit tests (single run)
+cd frontend && pnpm test:watch # Vitest in watch mode
+cd frontend && pnpm test:e2e  # Playwright e2e (run pnpm test:e2e:install once first)
 ```
 
 ## Code style rules

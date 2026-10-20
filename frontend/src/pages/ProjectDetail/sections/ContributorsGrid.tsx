@@ -9,7 +9,7 @@ const MAX_VISIBLE = 5;
 
 function Avatar({ name, avatarUrl }: { name: string; avatarUrl: string }) {
   if (avatarUrl) {
-    return <img src={avatarUrl} alt="" className="size-6 shrink-0 rounded-full" />;
+    return <img src={avatarUrl} alt="" loading="lazy" width={24} height={24} className="size-6 shrink-0 rounded-full" />;
   }
   return (
     <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary-100 text-ui-sm font-semibold text-text-muted">

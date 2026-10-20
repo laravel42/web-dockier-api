@@ -16,7 +16,7 @@ interface Props {
 
 export default function ProjectTable({ projects, projectLangs, projectBadgeLoading, onSelect }: Props) {
   return (
-    <DataTable columns={["Name", "Repository", "Branch", "Tech", "Created"]}>
+    <DataTable label="Projects" columns={["Name", "Repository", "Branch", "Tech", "Created"]}>
       {projects.map((p) => {
         return (
           <tr key={p.id} onClick={() => onSelect(p.id)} className={tableRowCls}>

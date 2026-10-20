@@ -37,6 +37,7 @@ import Button from "@/components/ui/Button";
 import { TabPanelHeader, tabPanelContentCls } from "@/components/TabPanelHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import TabSpinner from "@/components/ui/TabSpinner";
 
 /*
   Both editors are fetched on demand. The overview tab is the default one, but
@@ -281,16 +282,7 @@ function parseSqlSchema(sql: string): SensitiveField[] {
   return results;
 }
 
-// ─── Loading Spinner ───
 
-function TabSpinner({ label }: { label?: string }) {
-  return (
-    <div className="flex items-center gap-3 pb-8 justify-center">
-      <div className="size-5  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-      <span className="text-sm text-text-muted">{label || "Loading…"}</span>
-    </div>
-  );
-}
 
 // ─── AI Sensitive Data Result Type ───
 
@@ -424,7 +416,7 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
         </div>
       )}
       {error && (
-        <p className="text-xs text-red-400 mt-2 text-center">{error}</p>
+        <p className="text-xs text-danger-ink mt-2 text-center">{error}</p>
       )}
     </div>
   );

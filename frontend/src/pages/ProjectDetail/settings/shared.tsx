@@ -1,17 +1,8 @@
 import { useState } from "react";
-import Spinner from "@/components/Spinner";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 export { TabPanelHeader as SectionTitle } from "@/components/TabPanelHeader";
-
-export function TabSpinner({ label }: { label: string }) {
-  return (
-    <div className="flex items-center justify-center gap-2 py-10">
-      <Spinner className="size-4" />
-      <span className="text-sm text-text-muted">{label}</span>
-    </div>
-  );
-}
+export { default as TabSpinner } from "@/components/ui/TabSpinner";
 
 export function SettingsRow({
   label,

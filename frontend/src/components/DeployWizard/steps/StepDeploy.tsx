@@ -145,8 +145,8 @@ export default function StepDeploy({ state }: { state: WizardState }) {
           <div ref={logsRef} className="mt-2 rounded-lg bg-terminal p-3 max-h-56 overflow-y-auto scrollbar-hide font-mono text-xs/relaxed">
             {state.deployLogs.map((line, i) => (
               <div key={i} className={
-                line.includes("✓") ? "text-green-400" :
-                line.includes("✗") ? "text-red-400" :
+                line.includes("✓") ? "text-terminal-success" :
+                line.includes("✗") ? "text-terminal-danger" :
                 line.includes("──") ? "text-primary-500" :
                 line.includes("ℹ") ? "text-primary-500" :
                 line.includes("▶") ? "text-warning-ink" :

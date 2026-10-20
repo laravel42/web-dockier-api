@@ -9,6 +9,8 @@ export default function DockierMark({ className = "size-7 shrink-0" }: Props) {
       src="/dockier-mark.svg"
       alt=""
       aria-hidden
+      width={28}
+      height={28}
       className={className}
     />
   );

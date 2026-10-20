@@ -20,6 +20,7 @@ import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 import DropdownPortal from "@/components/DropdownPortal";
 import { dnsBannerCopy } from "@/utils/dnsBannerCopy";
+import TabSpinner from "@/components/ui/TabSpinner";
 
 interface Props {
   project: Project;
@@ -34,14 +35,6 @@ const MENU_EST_HEIGHT = 180;
 // Keep the menu this far from the viewport edges when clamping/flipping.
 const VIEWPORT_MARGIN = 8;
 
-function TabSpinner({ label }: { label: string }) {
-  return (
-    <div className="flex items-center justify-center gap-2 py-10">
-      <Spinner className="size-4" />
-      <span className="text-sm text-text-muted">{label}</span>
-    </div>
-  );
-}
 
 // ─── Domain Row ───
 

@@ -134,7 +134,7 @@ export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
             >
               {selectedFramework ? (
                 <>
-                  <img src={selectedFramework.icon} alt={selectedFramework.name} className="size-5 shrink-0" />
+                  <img src={selectedFramework.icon} alt={selectedFramework.name} width={20} height={20} className="size-5 shrink-0" />
                   <span className="truncate">{selectedFramework.name}</span>
                 </>
               ) : (
@@ -163,7 +163,7 @@ export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
                               : "text-text hover:bg-secondary-50"
                           }`}
                         >
-                          <img src={fw.icon} alt={fw.name} className="size-5 shrink-0" />
+                          <img src={fw.icon} alt={fw.name} loading="lazy" width={20} height={20} className="size-5 shrink-0" />
                           <span className="font-medium">{fw.name}</span>
                           {platform === fw.id && (
                             <CheckIcon className="size-4 ml-auto text-primary-500" />

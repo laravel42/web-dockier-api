@@ -35,7 +35,7 @@ export default function ScanProjectTable({
   onSelectEmpty,
 }: Props) {
   return (
-    <DataTable columns={["Name", "Tech", "Branch", "Scans", "Findings", "Last scan"]}>
+    <DataTable label="Security scans by project" columns={["Name", "Tech", "Branch", "Scans", "Findings", "Last scan"]}>
       {sortedProjectIds.map((projectId) => {
         const project = projects[projectId];
         const projectScans = grouped[projectId];

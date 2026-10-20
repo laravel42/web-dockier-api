@@ -8,6 +8,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preload" as="font" type="font/woff2" href="/fonts/space-grotesk.woff2" crossorigin="anonymous" />
     <title>Dockier</title>
+    <script>
+      // Applies the persisted theme before first paint; ThemeContext would only
+      // reach it in an effect, which paints dark once for every light-theme user.
+      // Must mirror ThemeProvider's key, values and "dark" default exactly.
+      try {
+        var pref = localStorage.getItem("theme");
+        document.documentElement.setAttribute(
+          "data-theme",
+          pref === "light" || pref === "dark"
+            ? pref
+            : pref === "system" && !window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "light"
+              : "dark",
+        );
+      } catch (e) {
+        // localStorage can throw in private modes; the CSS default already covers it.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

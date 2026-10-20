@@ -14,6 +14,7 @@ import { destructiveReason } from "../destructiveCommand";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 import DropdownPortal from "@/components/DropdownPortal";
+import TabSpinner from "@/components/ui/TabSpinner";
 
 const PAGE_SIZE = 10;
 const POLL_INTERVAL_MS = 3000;
@@ -29,14 +30,6 @@ interface Props {
   project: Project;
 }
 
-function TabSpinner({ label }: { label: string }) {
-  return (
-    <div className="flex items-center justify-center gap-2 py-10">
-      <Spinner className="size-4" />
-      <span className="text-sm text-text-muted">{label}</span>
-    </div>
-  );
-}
 
 function StatusBadge({ status }: { status: Command["status"] }) {
   const labels: Record<Command["status"], string> = {

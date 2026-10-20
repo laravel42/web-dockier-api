@@ -100,7 +100,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
                   <>
                     <div className="relative z-10 shrink-0">
                       {row.commit.authorAvatar ? (
-                        <img src={row.commit.authorAvatar} alt={row.commit.author} className="size-8 rounded-full ring-2 ring-border" />
+                        <img src={row.commit.authorAvatar} alt={row.commit.author} loading="lazy" width={32} height={32} className="size-8 rounded-full ring-2 ring-border" />
                       ) : (
                         <div className="size-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-xs ring-2 ring-border">
                           {row.commit.author.charAt(0).toUpperCase()}

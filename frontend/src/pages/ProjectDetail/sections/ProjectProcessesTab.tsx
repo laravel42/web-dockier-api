@@ -23,6 +23,7 @@ import { settingsBadgeCls } from "@/utils/styles";
 import { useUrlSection } from "@/hooks/useUrlSection";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
+import TabSpinner from "@/components/ui/TabSpinner";
 
 interface Props {
   project: Project;
@@ -56,14 +57,6 @@ function getDefaultRuntime(platform?: string): string {
   return options[0]?.value ?? "node";
 }
 
-function TabSpinner({ label }: { label: string }) {
-  return (
-    <div className="flex items-center justify-center gap-2 py-10">
-      <Spinner className="size-4" />
-      <span className="text-sm text-text-muted">{label}</span>
-    </div>
-  );
-}
 
 function ProcessLogsModal({
   projectId,

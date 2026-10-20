@@ -10,13 +10,14 @@ import {
 } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import DataTable, { tableRowCls } from "@/components/ui/DataTable";
-import type { Deployment, Project, TechBadgeInfo } from "@/types";
+import type { Deployment, TechBadgeInfo } from "@/types";
+import type { DeployListProject } from "../useDeploy";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
 import { projectInfraDotClass } from "@/utils/projectInfraDot";
 
 interface Props {
   grouped: Array<[string, Deployment[]]>;
-  projectById: Record<string, Project>;
+  projectById: Record<string, DeployListProject>;
   projectLangs: Record<string, TechBadgeInfo[]>;
   projectBadgeLoading: ReadonlySet<string>;
   onSelect: (deployId: string) => void;
@@ -24,7 +25,7 @@ interface Props {
 
 export default function DeployTable({ grouped, projectById, projectLangs, projectBadgeLoading, onSelect }: Props) {
   return (
-    <DataTable columns={["Name", "Repository", "Branch", "Deploys", "Tech", "Last deploy"]}>
+    <DataTable label="Deployments" columns={["Name", "Repository", "Branch", "Deploys", "Tech", "Last deploy"]}>
       {grouped.map(([groupKey, repoDeploys]) => {
         const proj = projectById[groupKey];
         const sorted = [...repoDeploys].sort((a, b) => compareByTime(a, b, "updated"));
@@ -56,7 +57,8 @@ export default function DeployTable({ grouped, projectById, projectLangs, projec
             </td>
             <td>
               <div className="flex items-center gap-1.5">
-                <span className={`size-2 rounded-full shrink-0 ${projectInfraDotClass(proj?.infraState, latest.status)}`} />
+                {/* Deployment rows carry no infra state, so the dot falls back to deploy status. */}
+                <span className={`size-2 rounded-full shrink-0 ${projectInfraDotClass(undefined, latest.status)}`} />
                 <span className={typeCardDateCls}>
                   {formatCardDateTime(getSortTimestamp(latest, "updated"))}
                 </span>

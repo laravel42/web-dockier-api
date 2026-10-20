@@ -21,6 +21,8 @@ const sizeClasses = {
   md: "size-10 text-sm rounded-xl",
   lg: "size-12 text-lg rounded-xl",
 };
+/** Intrinsic dimensions matching sizeClasses, so the box is reserved before the image lands. */
+const sizePixels = { sm: 32, md: 40, lg: 48 };
 
 function LetterFallback({
   project,
@@ -58,6 +60,8 @@ function CustomAvatarImage({
     <img
       src={url}
       alt={alt}
+      width={sizePixels[size]}
+      height={sizePixels[size]}
       className={`${sizeClasses[size]} shrink-0 object-cover ${className}`}
       onError={onFailed}
     />
@@ -92,6 +96,8 @@ function FaviconImage({
       <img
         src={url}
         alt={alt}
+        width={sizePixels[size]}
+        height={sizePixels[size]}
         className="size-full object-contain object-center"
         onError={onFailed}
         onLoad={(event) => {

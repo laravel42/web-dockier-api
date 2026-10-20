@@ -10,19 +10,12 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { EyeIcon, EyeOffIcon, PlusIcon, XIcon } from "lucide-react";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
+import TabSpinner from "@/components/ui/TabSpinner";
 
 interface Props {
   project: Project;
 }
 
-function TabSpinner({ label }: { label: string }) {
-  return (
-    <div className="flex items-center justify-center gap-2 py-10">
-      <Spinner className="size-4" />
-      <span className="text-sm text-text-muted">{label}</span>
-    </div>
-  );
-}
 
 // ─── Security Rules Section ───
 

@@ -1,6 +1,8 @@
 import { LayoutGridIcon, MenuIcon } from "lucide-react";
 
-export type ViewMode = "cards" | "table";
+import type { ViewMode } from "@/hooks/useViewMode";
+
+export type { ViewMode };
 
 interface Props {
   mode: ViewMode;

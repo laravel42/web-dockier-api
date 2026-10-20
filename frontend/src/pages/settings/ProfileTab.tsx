@@ -346,7 +346,7 @@ export default function ProfileTab() {
         ) : (
           <div className="space-y-4">
             <div className="text-center">
-              <img src={qrCode} alt="Scan this QR code with your authenticator app" className="mx-auto" />
+              <img src={qrCode} alt="Scan this QR code with your authenticator app" loading="lazy" className="mx-auto" />
               <p className="text-xs text-text-muted mt-2">
                 Or enter manually: <code className="bg-secondary-50 px-2 py-0.5 rounded text-text-secondary">{secret}</code>
               </p>

@@ -11,6 +11,15 @@ async function fetchDeployments(): Promise<Deployment[]> {
   return res.deployments;
 }
 
+/**
+ * The only project fields a deployment row can supply. Deliberately not a
+ * `Project` — the list has no infra state and no real connection or platform.
+ */
+export type DeployListProject = Pick<
+  Project,
+  "id" | "name" | "repository" | "branch" | "connectionId" | "platform"
+>;
+
 export function useDeploy() {
   const navigate = useNavigate();
   const { viewMode, changeViewMode } = useViewMode("deployments-view");
@@ -18,8 +27,8 @@ export function useDeploy() {
 
   const allDeployments = deployments ?? [];
 
-  // Build a lightweight Project-like lookup from deployment data for badges/display
-  const projectById: Record<string, Pick<Project, "id" | "name" | "repository" | "branch" | "connectionId" | "platform">> = {};
+  // Build a lightweight project lookup from deployment data for badges/display
+  const projectById: Record<string, DeployListProject> = {};
   for (const d of allDeployments) {
     if (d.projectId && !projectById[d.projectId]) {
       projectById[d.projectId] = {
@@ -33,7 +42,7 @@ export function useDeploy() {
     }
   }
 
-  const projectsForBadges = Object.values(projectById) as Project[];
+  const projectsForBadges = Object.values(projectById);
   const { badges: projectLangs, loadingIds: projectBadgeLoading } = useProjectBadges(projectsForBadges);
 
   const sortedDeployments = [...allDeployments].sort((a, b) => compareByTime(a, b, "updated"));
@@ -54,7 +63,7 @@ export function useDeploy() {
     reload,
     projectLangs,
     projectBadgeLoading,
-    projectById: projectById as Record<string, Project>,
+    projectById,
     grouped,
     viewMode,
     changeViewMode,
