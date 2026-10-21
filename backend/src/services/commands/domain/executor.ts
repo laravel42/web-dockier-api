@@ -2,11 +2,13 @@
  * Command Executor
  *
  * Handles actual command execution on remote servers via:
- * - SSH (GCP Compute, AWS EC2 fallback)
  * - AWS SSM SendCommand (AWS EC2)
  * - AWS ECS RunTask (AWS ECS/Fargate)
  * - GCP Cloud Run Jobs (GCP Cloud Run)
  * - Local Docker exec (dev fallback)
+ *
+ * Dokploy-deployed projects do NOT come through here — they are routed to
+ * deploy/domain/dokploy/command-exec.ts, which SSHes into the swarm task.
  */
 
 import { spawn } from "node:child_process";
@@ -23,10 +25,6 @@ const SAFE_CONTAINER_NAME = /^[a-z0-9][a-z0-9._-]*$/i;
 export interface ExecutionTarget {
   /** AWS EC2 instance ID — triggers SSM execution path */
   instanceId?: string;
-  /** Server IP for SSH execution */
-  serverIp?: string;
-  /** Path to SSH deploy key */
-  deployKeyPath?: string;
   /** Container name on the server (for docker exec) */
   containerName: string;
   /** AWS/GCP credentials (discriminated on kind) */
@@ -57,9 +55,8 @@ export interface ExecutionResult {
  * Routes to the appropriate method based on available target fields:
  * 1. ECS cluster → ECS RunTask
  * 2. Cloud Run service → Cloud Run Jobs
- * 3. SSH (serverIp + deployKeyPath) → SSH docker exec
- * 4. SSM (instanceId + credentials) → SSM SendCommand
- * 5. Fallback → local docker exec
+ * 3. SSM (instanceId + credentials) → SSM SendCommand
+ * 4. Fallback → local docker exec
  */
 export async function executeCommand(
   target: ExecutionTarget,
@@ -82,11 +79,6 @@ export async function executeCommand(
   // Cloud Run Jobs (managed GCP)
   if (target.cloudRunService && target.credentials && target.region) {
     return executeViaCloudRunJob(target, command);
-  }
-
-  // SSH (VPS)
-  if (target.serverIp && target.deployKeyPath) {
-    return executeViaSSH(target, command);
   }
 
   // SSM (AWS EC2)
@@ -307,29 +299,6 @@ async function executeViaCloudRunJob(
     const msg = getErrMsg(err);
     return { exitCode: 1, output: `Cloud Run execution failed: ${msg}`, timedOut: false };
   }
-}
-
-// ─── SSH Execution ─────────────────────────────────────────────────
-
-async function executeViaSSH(
-  target: ExecutionTarget,
-  command: string,
-): Promise<ExecutionResult> {
-  const { serverIp, deployKeyPath, containerName } = target;
-
-  const sshOpts = [
-    "-i", deployKeyPath!,
-    "-o", "StrictHostKeyChecking=no",
-    "-o", "UserKnownHostsFile=/dev/null",
-    "-o", "ConnectTimeout=30",
-    "-o", "LogLevel=ERROR",
-  ];
-
-  // Escape single quotes in the command for safe shell interpolation
-  const escaped = command.replace(/'/g, "'\\''");
-  const remoteCmd = `docker exec ${containerName} sh -c '${escaped}'`;
-
-  return runCmdWithTimeout("ssh", [...sshOpts, `root@${serverIp}`, remoteCmd]);
 }
 
 // ─── SSM Execution (AWS EC2) ───────────────────────────────────────

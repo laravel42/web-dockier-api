@@ -121,7 +121,7 @@ export async function resolveExecutionTarget(
   }
 
   if (deployment.deployStrategy === "vps") {
-    return resolveVpsTarget(deploymentInfo, provider, containerName, tenantId);
+    return resolveVpsTarget(deploymentInfo, provider, containerName);
   }
 
   if (deployment.deployStrategy === "managed") {
@@ -199,7 +199,6 @@ async function resolveVpsTarget(
   deployment: DeploymentInfo,
   provider: ProviderInfo,
   containerName: string,
-  tenantId: string,
 ): Promise<{ target: ExecutionTarget | null; errorMessage?: string }> {
   if (provider.provider === "aws") {
     // AWS EC2 always uses SSM — SSH is not viable because we don't store private keys
@@ -226,32 +225,9 @@ async function resolveVpsTarget(
     };
   }
 
-  // GCP Compute: use SSH via server IP
-  const serverIp = extractIpFromUrl(deployment.app_url);
-  if (!serverIp) {
-    return {
-      target: null,
-      errorMessage: `Cannot determine server IP from deployment URL "${deployment.app_url}". The deployment may not have a publicly accessible IP.`,
-    };
-  }
-
-  // For GCP, the deploy key was generated during provisioning and stored in
-  // the Pulumi state. We need to retrieve it. Check if the deploy key file
-  // exists from a recent deployment, or fall back to error.
-  const { data: keys } = await supabaseAdmin
-    .from("ssh_keys")
-    .select("id")
-    .eq("organization_id", tenantId)
-    .limit(1);
-
-  if (!keys || keys.length === 0) {
-    return { target: null, errorMessage: "No SSH key configured. Add an SSH key in Settings → SSH Keys to enable remote command execution on GCP VPS deployments." };
-  }
-
-  // Note: For GCP Compute, the deploy pipeline generates an ephemeral key pair
-  // and stores it in the Pulumi workspace dir. Since we don't persist private keys
-  // in the DB (correct security practice), GCP VPS commands require the original
-  // deploy workspace to still be available or a re-deploy to regenerate keys.
+  // GCP Compute: unsupported. The deploy pipeline generates an ephemeral key
+  // pair and leaves it in the Pulumi workspace dir; we deliberately do not
+  // persist private keys in the DB, so there is no key to SSH with afterwards.
   // TODO: Implement persistent secure key storage for GCP VPS command execution.
   return {
     target: null,

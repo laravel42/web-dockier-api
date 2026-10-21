@@ -16,23 +16,6 @@ import type { BackgroundProcessRow } from "../schemas.js";
 
 const db = supabaseAdmin;
 
-// ─── Security ──────────────────────────────────────────────────────
-
-/** Validate that a process command doesn't contain shell injection patterns. */
-const DANGEROUS_PATTERNS = /[`$]|\beval\b|\bexec\b.*\||\brm\s+-rf\s+\/|&&\s*rm|;\s*rm/i;
-
-function assertSafeCommand(command: string): void {
-  if (DANGEROUS_PATTERNS.test(command)) {
-    throw new ProcessesError(
-      "Command contains potentially unsafe patterns. Review and simplify the command.",
-      "bad_request",
-    );
-  }
-  if (command.length > 2000) {
-    throw new ProcessesError("Command exceeds maximum length (2000 characters).", "bad_request");
-  }
-}
-
 /**
  * Fetch a process row and assert it belongs to the given tenant + project.
  * Throws not_found if the row doesn't exist or doesn't match the scope.
@@ -88,8 +71,10 @@ export async function startProcess(params: {
   // Fetch the process config — scoped to tenant + project with ownership assertion
   const process = await fetchProcessOrThrow(processId, projectId, tenantId);
 
-  // Validate the command before execution
-  assertSafeCommand(process.command);
+  // The command is deliberately NOT filtered: the user is authorised to run
+  // anything inside their own container, so `$VAR` and `$(...)` must work.
+  // Length is capped by the route schema, and the shell boundary is the
+  // quoting in commands/domain/executor.ts.
 
   // Resolve execution target
   const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
