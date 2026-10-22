@@ -19,31 +19,14 @@ export interface NavItemConfig {
   permission?: PermissionKey;
 }
 
-export interface NavGroupConfig {
-  label?: string;
-  items: NavItemConfig[];
-}
-
-export const sidebarNavGroups: NavGroupConfig[] = [
-  {
-    items: [{ to: "/dashboard", label: "Dashboard", icon: "dashboard", exact: true }],
-  },
-  {
-    label: "Workspace",
-    items: [
-      { to: "/projects", label: "Projects", icon: "projects" },
-      { to: "/deploy", label: "Deploy", icon: "deploy", permission: "deploy:view" },
-      { to: "/security", label: "Security", icon: "security", permission: "scan:view" },
-    ],
-  },
-  {
-    label: "Account",
-    items: [{ to: "/settings", label: "Settings", icon: "settings" }],
-  },
+/** Main nav items, in display order. Rendered by TopNavbar as a flat list. */
+export const sidebarNavItems: NavItemConfig[] = [
+  { to: "/dashboard", label: "Dashboard", icon: "dashboard", exact: true },
+  { to: "/projects", label: "Projects", icon: "projects" },
+  { to: "/deploy", label: "Deploy", icon: "deploy", permission: "deploy:view" },
+  { to: "/security", label: "Security", icon: "security", permission: "scan:view" },
+  { to: "/settings", label: "Settings", icon: "settings" },
 ];
-
-/** Flat sidebar list — admin-style single column */
-export const sidebarNavItems: NavItemConfig[] = sidebarNavGroups.flatMap((g) => g.items);
 
 export function isNavItemActive(pathname: string, item: NavItemConfig): boolean {
   if (item.exact) {

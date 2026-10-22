@@ -6,23 +6,10 @@
 @custom-variant light (&:where([data-theme=light], [data-theme=light] *));
 
 /*
- * Dockier app tokens — aligned with web-dockier admin (graphite + sand/ochre).
- * Legacy berry scales kept for severity / marketing accents only.
+ * Dockier app tokens — graphite neutral base with a sand/ochre primary accent.
  */
 
 @theme {
-  /* Legacy berry — errors, brand marks only */
-  --color-dockier-50: #FEEBEB;
-  --color-dockier-100: #F8BCBC;
-  --color-dockier-200: #EC8D8D;
-  --color-dockier-300: #DC6162;
-  --color-dockier-400: #C63E40;
-  --color-dockier-500: #AB2022;
-  --color-dockier-600: #8B1819;
-  --color-dockier-700: #6A1012;
-  --color-dockier-800: #470A0B;
-  --color-dockier-900: #240505;
-
   --color-seed-300: #FFD376;
   --color-seed-400: #F5C25A;
   --color-seed-500: #E3AF45;

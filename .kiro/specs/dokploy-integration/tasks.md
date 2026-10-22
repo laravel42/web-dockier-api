@@ -165,7 +165,7 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
   - [x] 16.5 Test idempotency (re-running pipeline doesn't duplicate resources)
 
 - [ ] 17. Remove Legacy Code (Deferred)
-  - [ ] 17.1 After `DEPLOY_PROVIDER=dokploy` is validated in production, remove: CloudFormation templates (`domain/cfn-templates/`), Pulumi templates (`domain/pulumi-templates/`), Legacy adapters (`domain/adapters/aws-ec2.ts`, `aws-ecs.ts`, `aws-s3.ts`, etc.), Build pipeline (`lib/build-pipeline.ts` image building), Tofu generation endpoint (`/deploy/tofu/generate`), Dockerfile preview endpoint, `StepCompose` component (already done in Task 4.1)
+  - [ ] 17.1 After `DEPLOY_PROVIDER=dokploy` is validated in production, remove: CloudFormation templates (`domain/cfn-templates/`), ~~Pulumi templates (`domain/pulumi-templates/`)~~ — done ahead of the flag: it had zero importers, the live Pulumi program comes from `generateTofuPreview` in `domain/planning/planner.ts`, Legacy adapters (`domain/adapters/aws-ec2.ts`, `aws-ecs.ts`, `aws-s3.ts`, etc.), Build pipeline (`lib/build-pipeline.ts` image building), Tofu generation endpoint (`/deploy/tofu/generate`), Dockerfile preview endpoint, `StepCompose` component (already done in Task 4.1)
   - [ ] 17.2 Keep `DEPLOY_PROVIDER` flag until migration complete
 
 - [ ] 18. Documentation

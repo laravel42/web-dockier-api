@@ -10,7 +10,6 @@ export { deployApi } from "./deploy";
 export { projectsApi } from "./projects";
 export { codeAnalysisApi } from "./code-analysis";
 export { sastApi } from "./sast";
-export { imageBuilderApi } from "./image-builder";
 export { integrationsApi } from "./integrations";
 export { commandsApi } from "./commands";
 export { networkApi } from "./network";

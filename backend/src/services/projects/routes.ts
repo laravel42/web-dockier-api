@@ -3,30 +3,25 @@
  *
  * Registers all project sub-route modules.
  * Each module handles a focused domain:
- *   - projects (this file): CRUD and AI overview chat
+ *   - projects (this file): CRUD
  *   - tags: organization tags and per-project tag assignments
  *   - env: encrypted environment file management
  */
 
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { pipeUIMessageStreamToResponse } from "ai";
 import { z } from "zod";
 import { getAuth } from "../../shared/auth/auth.js";
 import { projectConfigSchema, projectSchema, projectSettingsSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
-import { tenantRateLimit } from "../../shared/http/rate-limit.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema, paginatedResponse } from "../../shared/schemas/responses.js";
-import { env } from "../../shared/config.js";
 import {
   createProject,
   getProject,
   listProjects,
   updateProject,
   deleteProject,
-  ProjectsError,
 } from "./domain/projects.js";
-import { createOverviewAiStream } from "./domain/overview-ai.js";
 import { teardownProjectInfrastructure } from "../deploy/domain/lifecycle/project-teardown.js";
 import { registerTagRoutes } from "./routes/tags.js";
 import { registerEnvRoutes } from "./routes/env.js";
@@ -189,44 +184,6 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = getAuth(request);
       return await teardownProjectInfrastructure(request.params.projectId, auth.tenantId);
-    },
-  );
-
-  // ─── AI Overview Chat ───
-
-  typed.post(
-    "/projects/overview-ai/chat",
-    {
-      preHandler: [app.requirePermission(PERMISSIONS.PROJECT_MANAGE), tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "ai-chat" })],
-      handlerTimeout: 90_000,
-      schema: {
-        tags: ["projects"],
-        summary: "BlockNote AI chat for project overview editor",
-        body: z.object({
-          messages: z.array(z.record(z.string(), z.unknown())),
-          toolDefinitions: z.record(z.string(), z.unknown()).optional(),
-        }),
-      },
-    },
-    async (request, reply) => {
-      if (!env.OPENAI_API_KEY) {
-        throw new ProjectsError("AI is not configured on this server", "service_unavailable");
-      }
-
-      // Create the stream before hijacking the response — if this throws,
-      // the global error handler maps it to a proper HTTP error.
-      const result = await createOverviewAiStream({
-        messages: request.body.messages as unknown as Parameters<typeof createOverviewAiStream>[0]["messages"],
-        toolDefinitions: request.body.toolDefinitions as Parameters<
-          typeof createOverviewAiStream
-        >[0]["toolDefinitions"],
-      });
-
-      reply.hijack();
-      pipeUIMessageStreamToResponse({
-        response: reply.raw,
-        stream: result.toUIMessageStream(),
-      });
     },
   );
 

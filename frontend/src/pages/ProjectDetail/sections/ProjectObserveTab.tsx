@@ -20,6 +20,7 @@ import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { useUrlSection } from "@/hooks/useUrlSection";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { getErrorMessage } from "@/utils/errors";
+import { timeAgo } from "@/utils/timeAgo";
 import TabSpinner from "@/components/ui/TabSpinner";
 
 interface Props {
@@ -56,25 +57,6 @@ const LOG_TYPES: { value: LogType; label: string }[] = [
   { value: "nginx_access", label: "Nginx Access Log" },
   { value: "nginx_error", label: "Nginx Error Log" },
 ];
-
-// ─── Helpers ───
-
-
-function formatRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const date = new Date(dateStr).getTime();
-  const diff = now - date;
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 7) return `${Math.floor(days / 7)} week${Math.floor(days / 7) > 1 ? "s" : ""} ago`;
-  if (days > 0) return `${days}d ago`;
-  if (hours > 0) return `${hours}h ago`;
-  if (minutes > 0) return `${minutes}m ago`;
-  return "just now";
-}
 
 // ─── Heartbeats Section ───
 
@@ -154,7 +136,7 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
                   <p className="text-sm font-medium text-text truncate">{hb.name}</p>
                   <p className="text-xs text-text-muted">
                     {FREQUENCY_OPTIONS.find((f) => f.value === hb.frequency)?.label ?? hb.frequency}
-                    {hb.lastPingedAt && ` · Last ping ${formatRelativeTime(hb.lastPingedAt)}`}
+                    {hb.lastPingedAt && ` · Last ping ${timeAgo(hb.lastPingedAt)}`}
                   </p>
                 </div>
               </div>
@@ -534,7 +516,7 @@ function ActivitySection({ project }: { project: Project }) {
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-xs text-text-muted">
-                  {formatRelativeTime(entry.createdAt)}
+                  {timeAgo(entry.createdAt)}
                   {entry.actorName && (
                     <> by <span className="font-medium text-text">{entry.actorName}</span></>
                   )}
@@ -629,7 +611,7 @@ function ActivityDetailModal({
             {timestamp}
           </span>
           <span className="text-xs text-text-muted">
-            {formatRelativeTime(entry.createdAt)}
+            {timeAgo(entry.createdAt)}
             {entry.actorName && <> by {entry.actorName}</>}
           </span>
         </div>

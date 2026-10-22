@@ -90,28 +90,6 @@ export async function setupPulumiWorkspace(opts: {
 }
 
 /**
- * Install npm deps and init a Pulumi stack.
- */
-export async function initPulumiStack(opts: {
-  pulumiDir: string;
-  providerEnv: Record<string, string>;
-  stackName: string;
-  runCmd: RunCmdFn;
-}): Promise<{ installCode: number; installOutput: string; initCode: number; initOutput: string }> {
-  const { pulumiDir, providerEnv, stackName, runCmd } = opts;
-
-  const installResult = await runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: pulumiDir, env: providerEnv });
-  const initResult = await runCmd("pulumi", ["stack", "init", stackName, "--non-interactive"], { cwd: pulumiDir, env: providerEnv });
-
-  return {
-    installCode: installResult.code,
-    installOutput: installResult.output,
-    initCode: initResult.code,
-    initOutput: initResult.output,
-  };
-}
-
-/**
  * Shared provisioning preamble for the GCP adapters:
  * set up the workspace, install npm deps, init the stack, and set the
  * `resourceSuffix` config used to avoid cross-stack name collisions.

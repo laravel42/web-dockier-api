@@ -52,9 +52,6 @@ vi.mock("../routes/env.js", () => ({
   registerEnvRoutes: vi.fn(),
 }));
 
-vi.mock("../domain/overview-ai.js", () => ({
-  createOverviewAiStream: vi.fn(),
-}));
 
 // ─── App Setup ─────────────────────────────────────────────────────
 

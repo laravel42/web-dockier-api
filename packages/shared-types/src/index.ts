@@ -84,16 +84,6 @@ export type {
   SslCertificateStatus,
 } from "./domain.js";
 
-export type {
-  Build,
-  BuildListItem,
-  BuildImage,
-  BuildLogs,
-  BuildDeployStatus,
-  BuildDeployTarget,
-  BuildDeployParams,
-  StartBuildInput,
-} from "./image-builder.js";
 
 export type {
   SecurityRule,
