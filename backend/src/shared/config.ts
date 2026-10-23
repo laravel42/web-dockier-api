@@ -64,8 +64,17 @@ const envSchema = z
     DATABASE_URL: optionalEnv(z.string().min(1)),
     /** AES-256-GCM key for every secret encrypted at rest. getEncryptionKey() accepts exactly 64 hex chars, so validate that here. */
     ENV_ENCRYPTION_KEY: optionalEnv(z.string().regex(/^[0-9a-f]{64}$/i)),
-    /** Deploy provider: "native" for CloudFormation/Pulumi, "dokploy" for Dokploy-based pipeline. */
-    DEPLOY_PROVIDER: z.enum(["native", "dokploy"]).default("native"),
+    /**
+     * Deploy provider for server deploys. Defaults to "dokploy": it is the only
+     * pipeline that runs in production, since the native path shells out to the
+     * Pulumi CLI, which `backend/Dockerfile` does not install. "native" is kept
+     * for local experiments only.
+     *
+     * Static-site deploys ignore this entirely — `routePipeline` in
+     * `services/deploy/domain/worker.ts` always sends them to the native
+     * object-storage + CDN adapters, which need no Pulumi CLI.
+     */
+    DEPLOY_PROVIDER: z.enum(["native", "dokploy"]).default("dokploy"),
     /** Dokploy instance base API URL (required when DEPLOY_PROVIDER=dokploy). */
     DOKPLOY_API_URL: optionalEnv(z.string().url()),
     /** Dokploy API token for authentication (required when DEPLOY_PROVIDER=dokploy). */

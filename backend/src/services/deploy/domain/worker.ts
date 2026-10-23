@@ -5,8 +5,8 @@
  * When a deployment is created, a job is enqueued and this worker picks it up
  * for background processing with retry semantics and crash recovery.
  *
- * Routes to either the native pipeline (CloudFormation/Pulumi) or the
- * Dokploy pipeline based on the DEPLOY_PROVIDER environment variable.
+ * Routes static-site deploys to the native object-storage + CDN pipeline and
+ * every other deploy to Dokploy. See routePipeline below.
  */
 
 import { createWorker, DEPLOY_QUEUE } from "../../../shared/database/queue.js";
@@ -25,9 +25,10 @@ import { env } from "../../../shared/config.js";
  * equivalent target — its own "static" build type only copies build output that
  * is already committed to the repo, which is a different thing entirely.
  *
- * Otherwise:
- * - "dokploy" → Dokploy PaaS pipeline (project → server → app → deploy)
- * - "native"  → Legacy CloudFormation/Pulumi pipeline (clone → build → provision)
+ * Every other strategy goes to Dokploy (project → server → app → deploy).
+ * DEPLOY_PROVIDER defaults to "dokploy" and production never changes it;
+ * "native" for a server deploy is a local-only escape hatch, since that path
+ * shells out to the Pulumi CLI, which the backend image does not install.
  *
  * Validates required configuration before dispatching to prevent opaque
  * failures deep inside the pipeline.

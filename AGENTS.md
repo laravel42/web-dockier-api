@@ -124,7 +124,12 @@ The primary deploy path (`DEPLOY_PROVIDER=dokploy`) delegates build and deployme
 
 **AI recovery:** Uses Dokploy's built-in AI (NOT OpenAI directly). Non-fatal — failures never block the pipeline.
 
-**Feature flag:** `DEPLOY_PROVIDER` env var gates the pipeline. `"dokploy"` activates the new flow; `"native"` (default) keeps the legacy CloudFormation/Pulumi pipeline.
+**Pipeline routing — this is the rule, not a flag to tune.** `routePipeline` in `deploy/domain/worker.ts` decides, in this order:
+
+1. `deployStrategy === "static"` → **native** pipeline (`executePipeline`), always, whatever `DEPLOY_PROVIDER` says. Object storage + CDN is cheaper and faster than nginx on a VPS, and Dokploy has no equivalent target. Same inversion applies to teardown (`isNativeOnlyStack` in `lifecycle/project-teardown.ts`) — a static site torn down through the Dokploy path leaves its bucket, distribution and CFN stack running and billing.
+2. Everything else → **Dokploy**. `DEPLOY_PROVIDER` defaults to `"dokploy"` and production never sets it to anything else.
+
+`DEPLOY_PROVIDER=native` for a *server* deploy is a local-only escape hatch, not a supported rollback: the native pipeline shells out to the `pulumi` CLI (`deploy/domain/infra/pulumi-workspace.ts`) and `backend/Dockerfile` does not install it, so it fails with "command not found" in any container. Do not write new code behind the `native` branch, and do not treat `"dokploy"` as conditional — the only real conditional in deploy routing is the static strategy.
 
 **Frontend wizard:** 4 steps — Provider → Analysis → Plan → Deploy. The Build step was removed (Dokploy handles build internally). The Deploy step shows a real-time vertical timeline of pipeline stages parsed from `[stage:xxx]` log markers.
 

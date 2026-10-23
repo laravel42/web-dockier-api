@@ -5,7 +5,20 @@ description: Set up and operate the Dokploy-backed deploy pipeline.
 
 Dockier's active deploy pipeline delegates build and deployment to a self-hosted **Dokploy** instance. For each project, a VPS is provisioned **on the deploying user's own AWS or GCP account**, registered in Dokploy as a remote server, and used as the deploy target. Dockier owns no shared compute.
 
-This runbook covers standing up Dokploy, wiring the required configuration, and the operational model. It does **not** require the legacy CloudFormation/Pulumi pipeline.
+This runbook covers standing up Dokploy, wiring the required configuration, and the operational model.
+
+## Which pipeline runs
+
+Dokploy handles **every** deploy except static sites. The one branch is the project's deploy strategy, not a configuration choice:
+
+| Deploy strategy | Pipeline | Target |
+|---|---|---|
+| `static` | Native (`executePipeline`) | Object storage + CDN — S3 + CloudFront, or GCS + Cloud CDN, on the user's account |
+| `vps`, `managed` | Dokploy | A VPS provisioned on the user's account and registered as a Dokploy remote server |
+
+Static sites bypass Dokploy because object storage behind a CDN is cheaper and faster for them than running nginx on a VPS: no instance is consumed and the content is served from the edge instead of one region. Dokploy has no equivalent target — its own `static` *build type* only serves build output already committed to the repo, which is a different thing. The same inversion applies to teardown: a static project is destroyed through the native adapters, because the Dokploy teardown would find no `dokploy_*` records and leave the bucket, the CDN distribution and the CloudFormation stack running.
+
+`DEPLOY_PROVIDER` defaults to `dokploy`, and static deploys ignore it entirely. Setting `DEPLOY_PROVIDER=native` for a *server* deploy is a local-only escape hatch, **not** a production rollback: that path shells out to the `pulumi` CLI, which the backend container image does not install, so it fails with "command not found" wherever the backend is actually hosted.
 
 ## Architecture at a glance
 
@@ -52,11 +65,12 @@ Copy the `sshKeyId` value — this is `DOKPLOY_SSH_KEY_ID`. The provision stage 
 Set these on the backend (Railway variables or the Cloudflare secrets bridge):
 
 ```env
-DEPLOY_PROVIDER=dokploy
 DOKPLOY_API_URL=https://dokploy.example.com/api
 DOKPLOY_API_TOKEN=<token from step 2>
 DOKPLOY_SSH_KEY_ID=<sshKeyId from step 3>
 ```
+
+`DEPLOY_PROVIDER` is not in that list on purpose — it already defaults to `dokploy`. Leave it unset.
 
 Cloud credentials are **not** env vars — they are per-tenant rows in `server_providers`, resolved by the deployment's `providerId`. AWS stores an access key + secret; GCP stores the full service-account JSON in `api_key`.
 
