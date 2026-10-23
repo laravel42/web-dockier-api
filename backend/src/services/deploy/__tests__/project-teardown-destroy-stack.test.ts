@@ -127,3 +127,41 @@ describe("destroyStack — failure modes", () => {
     expect(result.message).toContain("No deploy adapter registered");
   });
 });
+
+// ─── Resolved identity passthrough ─────────────────────────────────
+//
+// resolveRowStack prefers the deployment's persisted infra.stackName, which is
+// the only value that still matches reality once the repo has been renamed —
+// stackNameFor() is a pure function of the repo name. destroyStack must hand
+// that resolved name to the adapter instead of letting it re-derive one: the
+// adapter would then delete a stack that does not exist and report success,
+// while the real stack kept its bucket and CDN distribution running and billing.
+
+describe("destroyStack — hands the resolved identity to the adapter", () => {
+  it("passes the resolved stackName through, not one derived from the repo", async () => {
+    mockDestroy.mockResolvedValue({ success: true, message: "ok", errors: [] });
+
+    // Persisted name and current repo disagree, as after a repo rename.
+    await destroyStack(stack({ stackName: "image-builder-app-old-name", repo: "acme/renamed-app" }));
+
+    const ctx = mockDestroy.mock.calls[0][0];
+    expect(ctx.stackName).toBe("image-builder-app-old-name");
+    expect(ctx.stackName).not.toContain("renamed-app");
+  });
+
+  it("passes the persisted static bucket through when the deployment recorded one", async () => {
+    mockDestroy.mockResolvedValue({ success: true, message: "ok", errors: [] });
+
+    await destroyStack(stack({ deployStrategy: "static", staticBucket: "dockier-123-old-name-static" }));
+
+    expect(mockDestroy.mock.calls[0][0].staticBucket).toBe("dockier-123-old-name-static");
+  });
+
+  it("leaves staticBucket undefined when the deployment recorded none, so the adapter derives it", async () => {
+    mockDestroy.mockResolvedValue({ success: true, message: "ok", errors: [] });
+
+    await destroyStack(stack({ deployStrategy: "static" }));
+
+    expect(mockDestroy.mock.calls[0][0].staticBucket).toBeUndefined();
+  });
+});

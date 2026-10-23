@@ -16,7 +16,7 @@
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { logger as obsLogger } from "../../../../shared/logger.js";
 import type { ContextualLogger } from "../../../../lib/logging.js";
-import { containerNameFor, stackNameFor } from "../../../../lib/naming.js";
+import { containerNameFor } from "../../../../lib/naming.js";
 import { toDetectedStack } from "../../../../lib/repo-analyzer/index.js";
 import type { RepoConfig } from "../../../../lib/repo-analyzer/types.js";
 import type { AdapterContext, ProvisionResult, DeployAdapter } from "../adapters/types.js";
@@ -151,12 +151,16 @@ export function buildAdapterContext(ctx: {
   repoConfig: RepoConfig;
   actualImage: string;
   runCmd: RunCmdFn;
+  stackName: string;
+  priorStaticBucket?: string;
 }): AdapterContext {
   const detectedStack = toDetectedStack(ctx.repoConfig);
 
   return {
     deploymentId: ctx.deploymentId,
     repoName: ctx.repoName,
+    stackName: ctx.stackName,
+    priorStaticBucket: ctx.priorStaticBucket,
     shortId: ctx.shortId,
     region: ctx.region,
     repoDir: ctx.repoDir,
@@ -228,6 +232,7 @@ function buildInfraMetadata(ctx: {
   deployStrategy: string;
   adapter: DeployAdapter;
   provision: ProvisionResult;
+  stackName: string;
 }): InfraMetadata {
   const containerName = containerNameFor(ctx.repoName, ctx.provider);
 
@@ -237,7 +242,10 @@ function buildInfraMetadata(ctx: {
     service: service as InfraMetadata["service"],
     region: ctx.region,
     containerName,
-    stackName: stackNameFor(ctx.repoName),
+    // The name actually used, not a fresh derivation — otherwise a deploy that
+    // correctly inherited the previous stack would persist a different name and
+    // the next one would inherit the wrong one.
+    stackName: ctx.stackName,
   };
 
   if (ctx.provision.outputs?.InstanceId) infra.instanceId = ctx.provision.outputs.InstanceId;
@@ -293,6 +301,8 @@ export async function finalizeDeploy(ctx: {
     deployStrategy: ctx.deployStrategy,
     adapter: ctx.adapter,
     provision: ctx.provision,
+    // The adapter context carries the name the adapter actually acted on.
+    stackName: ctx.adapterCtx.stackName,
   });
 
   await ctx.logger.section("Complete");

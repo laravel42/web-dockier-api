@@ -17,9 +17,9 @@ import type { RunCmdFn } from "../run-cmd.js";
 import type { DeployAdapter } from "../adapters/types.js";
 import type { AdapterContext, ProvisionResult } from "../adapters/types.js";
 import type { TemplateConfig } from "../planning/project-templates.js";
-import { deriveRepoName } from "../../../../lib/naming.js";
+import { deriveRepoName, stackNameFor } from "../../../../lib/naming.js";
 import type { PipelineInput } from "./shared.js";
-import type { CloudProvider } from "../../types.js";
+import type { CloudProvider, InfraMetadata } from "../../types.js";
 import type { ProviderCredential } from "../../../../lib/provider-credentials.js";
 
 export class PipelineContext {
@@ -50,6 +50,12 @@ export class PipelineContext {
   knownPlatform = "";
   healthCheckEnabled = false;
   healthCheckUrl = "";
+  /**
+   * Infra recorded by this project's last successful deployment, when there is
+   * one. Read so a redeploy acts on the resources the project already owns
+   * instead of whatever its current repo name happens to derive to.
+   */
+  priorInfra: InfraMetadata | null = null;
 
   // ─── Stage 4: Analyze ─────────────────────────────────────────
   repoConfig!: RepoConfig;
@@ -76,6 +82,22 @@ export class PipelineContext {
 
   get isStaticDeploy(): boolean {
     return this.deployStrategy === "static";
+  }
+
+  /**
+   * The stack this deployment acts on.
+   *
+   * Prefers the name the project's last successful deployment recorded, and only
+   * derives a fresh one when there is nothing to inherit. `stackNameFor` is a
+   * pure function of the repo name, so deriving unconditionally means a repo
+   * rename silently points the deploy at a stack that does not exist: a second
+   * stack gets created, the first keeps the CDN distribution serving the live
+   * domain, and nothing reports a problem.
+   *
+   * Must be read AFTER stageLoadProjectContext, which populates `priorInfra`.
+   */
+  get stackName(): string {
+    return this.priorInfra?.stackName || stackNameFor(this.repoName);
   }
 
   // ─── Constructor ──────────────────────────────────────────────

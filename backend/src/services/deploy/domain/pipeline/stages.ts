@@ -14,6 +14,7 @@ import { cloneRepo, analyzeAndGenerate } from "../../../../lib/build-pipeline.js
 import { containerNameFor } from "../../../../lib/naming.js";
 import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials.js";
 import { getGitConnectionCredentials } from "../../../../shared/service-clients/git-connections.js";
+import { getActiveDeployment } from "../../../../shared/service-clients/deployments.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { getAdapter } from "../adapters/index.js";
 import { extractRegionFromScript } from "../infra/gcp-helpers.js";
@@ -91,6 +92,16 @@ export async function stageLoadProjectContext(ctx: PipelineContext): Promise<voi
   ctx.knownPlatform = result.knownPlatform;
   ctx.healthCheckEnabled = result.healthCheckEnabled;
   ctx.healthCheckUrl = result.healthCheckUrl;
+
+  // What the project already owns, so provision updates those resources rather
+  // than deriving new names from the current repo name (see ctx.stackName).
+  // A projectless deploy has nothing to inherit. A lookup failure is left as
+  // null deliberately: falling back to derivation is what every deploy did
+  // before this, so the deploy proceeds rather than failing on a transient read.
+  if (ctx.event.projectId) {
+    const prior = await getActiveDeployment(ctx.event.projectId, ctx.event.tenantId);
+    ctx.priorInfra = prior?.infra ?? null;
+  }
 }
 
 // ─── Stage 4: Analyze & Generate Dockerfile ─────────────────────────
@@ -178,6 +189,8 @@ export async function stageProvision(ctx: PipelineContext): Promise<void> {
     repoConfig: ctx.repoConfig,
     actualImage: ctx.actualImage,
     runCmd: ctx.runCmd,
+    stackName: ctx.stackName,
+    priorStaticBucket: ctx.priorInfra?.staticBucket,
   });
   ctx.adapterCtx = adapterCtx;
 

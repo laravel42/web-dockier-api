@@ -58,6 +58,24 @@ export interface AdapterState {
 export interface AdapterContext {
   deploymentId: string;
   repoName: string;
+  /**
+   * The stack name this deployment must act on.
+   *
+   * Resolved once by the pipeline as `priorInfra.stackName || stackNameFor(repoName)`,
+   * so a project keeps updating the stack it already owns. Required, not optional:
+   * an adapter that re-derives the name from `repoName` silently orphans live
+   * infrastructure the moment the name changes (a repo rename is enough), and that
+   * failure is invisible — the deploy reports success while the old CDN
+   * distribution keeps serving the domain and billing.
+   */
+  stackName: string;
+  /**
+   * The static-site bucket a previous deploy of this project created, when there
+   * was one. Same reasoning as `stackName`: the name is derived from the repo, so
+   * recomputing it after a rename uploads to a brand-new bucket and abandons the
+   * one the CDN origin points at. Absent on a first deploy.
+   */
+  priorStaticBucket?: string;
   shortId: string;
   region: string;
   repoDir: string;
@@ -99,6 +117,16 @@ export interface DestroyContext {
   deploymentId: string;
   repoName: string;
   appName: string;
+  /**
+   * The stack to destroy, already resolved from the deployment's persisted
+   * `infra.stackName` by `resolveRowStack`. Required so an adapter cannot
+   * re-derive it: teardown resolved the right name, and recomputing it from
+   * `appName` discarded that answer and deleted a stack that may not exist,
+   * leaving the real one — bucket, CDN distribution and all — running.
+   */
+  stackName: string;
+  /** Persisted static-site bucket, when the deployment recorded one. */
+  staticBucket?: string;
   region: string;
   credential: ProviderCredential;
   /** The full tofu_script column value (Pulumi program + optional state after STATE marker) */

@@ -17,7 +17,6 @@ import {
   readCfnTemplate,
   destroyCfnStack,
 } from "../infra/aws-helpers.js";
-import { stackNameFor } from "../../../../lib/naming.js";
 import { getAwsAccountId, ensureS3Bucket, type AwsCredentials } from "../../../../lib/aws.js";
 import { toAwsCredentials } from "../../../../lib/provider-credentials.js";
 import { NATIVE_STAGE, stageMarker } from "../../../../lib/logging.js";
@@ -217,8 +216,13 @@ export class AwsS3Adapter implements DeployAdapter {
         "No index.html in build output. Static S3 hosting requires exported HTML (e.g. Next.js output: 'export', Vite dist/, or Nuxt generate).",
       );
     }
-    // 4. Create S3 bucket if it doesn't exist
-    const websiteBucket = staticSiteBucketName(accountId, repoName);
+    // 4. Create S3 bucket if it doesn't exist.
+    //
+    // Reuse the bucket a previous deploy of this project created. The derived
+    // name depends on the repo name, so after a repo rename a fresh derivation
+    // uploads the site to a new bucket while the CloudFront origin still points
+    // at the old one — the deploy reports success and serves stale content.
+    const websiteBucket = ctx.priorStaticBucket || staticSiteBucketName(accountId, repoName);
     await appendLog(`${stageMarker(NATIVE_STAGE.UPLOAD)} ── Upload to S3 ───────────────────`);
     await appendLog(`ℹ Bucket: ${websiteBucket}`);
 
@@ -278,7 +282,7 @@ export class AwsS3Adapter implements DeployAdapter {
     // naming rule lives in one place (staticSiteBucketName) instead of being
     // duplicated in YAML. AppName is only used for human-facing labels — the
     // OAC name, the distribution comment, and tags.
-    const stackName = stackNameFor(repoName);
+    const stackName = ctx.stackName;
     const params = [
       { ParameterKey: "AppName", ParameterValue: sanitizeBucketFragment(repoName, 40) },
       { ParameterKey: "SourceBucket", ParameterValue: websiteBucket },
@@ -432,7 +436,7 @@ export class AwsS3Adapter implements DeployAdapter {
   async destroy(ctx: DestroyContext): Promise<DestroyResult> {
     const errors: string[] = [];
     const credentials: AwsCredentials = toAwsCredentials(ctx.credential);
-    const stackName = stackNameFor(ctx.appName);
+    const stackName = ctx.stackName;
 
     await ctx.appendLog("── Destroy AWS S3 Resources ───────");
 
@@ -441,22 +445,28 @@ export class AwsS3Adapter implements DeployAdapter {
 
     // Delete S3 static site bucket (empty objects first, do this before stack finishes deleting).
     //
-    // The bucket name is account-scoped, and DestroyContext carries no account id,
-    // so resolve it via STS. Without it we cannot name the bucket and would leave
-    // a paid-for bucket behind, so a failure here is reported rather than ignored.
+    // Prefer the bucket the deployment recorded. Re-deriving it is only a
+    // fallback for rows that predate `infra.staticBucket`, and it is wrong
+    // whenever the repo was renamed after the deploy — it would compute a name
+    // that was never created and leave the real bucket paid for. The derivation
+    // is account-scoped and DestroyContext carries no account id, so it costs an
+    // STS call; with a persisted name we skip that too.
     try {
-      const accountId = await getAwsAccountId(ctx.region, credentials);
-      if (!accountId) {
-        errors.push("Could not determine AWS account ID — static site bucket not deleted");
-        return {
-          success: false,
-          message: `Destroyed stack ${stackName}; bucket left in place: ${errors.join("; ")}`,
-          errors,
-        };
+      let bucketName = ctx.staticBucket;
+      if (!bucketName) {
+        const accountId = await getAwsAccountId(ctx.region, credentials);
+        if (!accountId) {
+          errors.push("Could not determine AWS account ID — static site bucket not deleted");
+          return {
+            success: false,
+            message: `Destroyed stack ${stackName}; bucket left in place: ${errors.join("; ")}`,
+            errors,
+          };
+        }
+        bucketName = staticSiteBucketName(accountId, ctx.appName);
       }
       const { S3Client, ListObjectsV2Command, DeleteObjectsCommand, DeleteBucketCommand } = await getS3();
       const s3 = new S3Client({ region: ctx.region, credentials });
-      const bucketName = staticSiteBucketName(accountId, ctx.appName);
       let continuationToken: string | undefined;
       do {
         const listed = await s3.send(new ListObjectsV2Command({ Bucket: bucketName, ContinuationToken: continuationToken }));

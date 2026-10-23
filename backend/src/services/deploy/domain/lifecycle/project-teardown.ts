@@ -30,6 +30,8 @@ export interface ResolvedStack {
   deployStrategy: string;
   /** CloudFormation / Pulumi stack name */
   stackName: string;
+  /** Static-site bucket recorded by the deployment, when it recorded one. */
+  staticBucket?: string;
   /** Cloud region */
   region: string;
   /** Provider credential id (server_providers.id) */
@@ -108,6 +110,7 @@ async function resolveRowStack(
       provider: infra.provider,
       deployStrategy: row.deploy_strategy || "managed",
       stackName: infra.stackName || stackNameFor(deriveRepoName(row.repo)),
+      staticBucket: infra.staticBucket,
       region: infra.region,
       providerId: row.provider_id ?? "",
       repo: row.repo,
@@ -176,6 +179,12 @@ export async function destroyStack(resolved: ResolvedStack): Promise<DestroyResu
     deploymentId: resolved.sampleDeploymentId,
     repoName,
     appName: sanitizeEcrRepoName(repoName),
+    // Pass the resolved name through rather than letting the adapter re-derive
+    // it: resolveRowStack already preferred the deployment's persisted
+    // infra.stackName, which is the only value that still matches reality after
+    // the repo has been renamed.
+    stackName: resolved.stackName,
+    staticBucket: resolved.staticBucket,
     region: resolved.region || "us-east-1",
     credential: creds.credential,
     tofuScript: resolved.tofuScript,
