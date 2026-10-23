@@ -115,6 +115,10 @@ export async function stageAnalyze(ctx: PipelineContext): Promise<void> {
     // Lets the review from the pre-deploy preview be reused, so the built
     // Dockerfile matches the one the user approved in the wizard.
     commitHash: ctx.commitHash,
+    // A static deploy uploads build output to object storage and never builds
+    // an image. The analysis below is still needed — the static builder reads
+    // the package manager and tech stack from it.
+    skipDockerfile: ctx.isStaticDeploy,
   });
 
   ctx.repoConfig = repoConfig;

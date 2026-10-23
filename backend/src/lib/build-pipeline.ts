@@ -79,6 +79,17 @@ export interface AnalyzeOptions {
    * Does not change any other observable behavior.
    */
   capture?: boolean;
+  /**
+   * Skip Dockerfile generation, the AI review and `.dockerignore` entirely, and
+   * return only the repo analysis.
+   *
+   * For a static-site deploy: it publishes the build output to object storage
+   * and never builds an image, so a generated Dockerfile is dead weight and the
+   * review on top of it is a paid OpenAI call for a file nothing reads. The
+   * analysis itself is still needed — the static build reads the detected
+   * package manager and tech stack from it.
+   */
+  skipDockerfile?: boolean;
 }
 
 export interface AnalyzeResult {
@@ -260,7 +271,9 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
 
   const hasExistingDockerfile = existsSync(join(repoDir, "Dockerfile"));
 
-  if (hasExistingDockerfile && skipExistingDockerfile) {
+  if (opts.skipDockerfile) {
+    await logger.info("Static site — no image is built, skipping Dockerfile generation and review");
+  } else if (hasExistingDockerfile && skipExistingDockerfile) {
     // Use existing Dockerfile — just detect port from it
     try {
       const df = await readFile(join(repoDir, "Dockerfile"), "utf-8");
@@ -356,8 +369,8 @@ export async function analyzeAndGenerate(opts: AnalyzeOptions): Promise<AnalyzeR
     }
   }
 
-  // Generate .dockerignore if not present
-  if (!existsSync(join(repoDir, ".dockerignore"))) {
+  // Generate .dockerignore if not present. Pointless without a Docker build.
+  if (!opts.skipDockerfile && !existsSync(join(repoDir, ".dockerignore"))) {
     await writeFile(join(repoDir, ".dockerignore"), DEFAULT_DOCKERIGNORE, "utf-8");
   }
 

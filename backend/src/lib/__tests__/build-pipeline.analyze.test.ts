@@ -96,3 +96,68 @@ describe("analyzeAndGenerate — AI review integration safety", () => {
     expect(existsSync(join(repoDir, "Dockerfile"))).toBe(true);
   });
 });
+
+// ─── skipDockerfile (static deploys) ───────────────────────────────
+//
+// A static deploy publishes build output to object storage and never builds an
+// image, so generating a Dockerfile is dead weight and reviewing it is a paid
+// OpenAI call for a file nothing reads. Observed in a live static deploy before
+// this option existed: `✓ AI improved Dockerfile [3.8s]`.
+
+describe("analyzeAndGenerate — skipDockerfile", () => {
+  let repoDir: string;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    repoDir = mkdtempSync(join(tmpdir(), "skip-dockerfile-test-"));
+    writeFileSync(
+      join(repoDir, "package.json"),
+      JSON.stringify({ name: "sample", scripts: { start: "node index.js" } }),
+    );
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    mockEnv.OPENAI_API_KEY = undefined;
+    rmSync(repoDir, { recursive: true, force: true });
+  });
+
+  it("writes no Dockerfile and makes no OpenAI call, even with a key and the review enabled", async () => {
+    mockEnv.OPENAI_API_KEY = "sk-test";
+    mockEnv.AI_DOCKERFILE_REVIEW = "on";
+
+    const result = await analyzeAndGenerate({ repoDir, logger: noopLogger, skipDockerfile: true });
+
+    expect(existsSync(join(repoDir, "Dockerfile"))).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.dockerfileGenerated).toBe(false);
+    expect(result.aiReviewed).toBeFalsy();
+  });
+
+  it("still returns the repo analysis the static build depends on", async () => {
+    const result = await analyzeAndGenerate({ repoDir, logger: noopLogger, skipDockerfile: true });
+
+    // The static builder reads these: installDeps picks the package manager,
+    // buildSite picks the build command from the detected stack.
+    expect(result.repoConfig.runtime).toBe("node");
+    expect(result.repoConfig.packageManager).toBeTruthy();
+    expect(result.detectedStack).toBeTruthy();
+  });
+
+  it("writes no .dockerignore either", async () => {
+    await analyzeAndGenerate({ repoDir, logger: noopLogger, skipDockerfile: true });
+
+    expect(existsSync(join(repoDir, ".dockerignore"))).toBe(false);
+  });
+
+  it("leaves a Dockerfile the repo already had untouched", async () => {
+    writeFileSync(join(repoDir, "Dockerfile"), "FROM scratch\n# mine\n");
+
+    await analyzeAndGenerate({ repoDir, logger: noopLogger, skipDockerfile: true });
+
+    expect(readFileSync(join(repoDir, "Dockerfile"), "utf-8")).toBe("FROM scratch\n# mine\n");
+  });
+});
