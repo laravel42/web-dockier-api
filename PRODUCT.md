@@ -164,7 +164,7 @@ What the implementation already establishes as de facto baseline:
 | Jobs | pg-boss (Postgres-backed queue) for deploy/scan/notification workers |
 | Hosting | Railway (API), Cloudflare Pages (SPA), Cloudflare Secrets Store |
 
-**Backend services (gateway):** `auth`, `users`, `projects`, `roles`, `deploy`, `notifications`, `integrations`, `code-analysis`, `git-integration`, `image-builder`.
+**Backend services (gateway):** `auth`, `users`, `projects`, `roles`, `deploy`, `notifications`, `integrations`, `code-analysis`, `git-integration`.
 
 **Migrations:** Single source of truth in `supabase/migrations/` (see `legacy-index.md` for historical mapping).
 

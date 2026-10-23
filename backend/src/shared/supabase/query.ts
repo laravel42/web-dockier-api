@@ -226,8 +226,8 @@ export async function deleteOrThrow<E extends Error>(
  *
  * @example
  * ```ts
- * const build = unwrapQuery(data, error, ImageBuilderError, { notFoundMsg: "Build not found" });
- * assertOwnership(build, tenantId, ImageBuilderError, "Not your build");
+ * const deployment = unwrapQuery(data, error, DeployError, { notFoundMsg: "Deployment not found" });
+ * assertOwnership(deployment, tenantId, DeployError, "Not your deployment");
  * ```
  */
 export function assertOwnership<T extends { organization_id: string }, E extends Error>(

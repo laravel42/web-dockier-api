@@ -11,7 +11,8 @@ import { logger } from "../shared/logger.js";
 
 /**
  * A logger that can be threaded through pipeline steps.
- * Deploy service writes to DB (user-visible), image-builder writes to console.
+ * The deploy pipeline writes to the DB (user-visible); background callers such
+ * as the scan worker write to the console.
  */
 export interface ContextualLogger {
   info(message: string): Promise<void> | void;
@@ -143,7 +144,8 @@ export function createDeployLogger(
 }
 
 /**
- * Console logger used by the image-builder service.
+ * Console logger for work with no user-visible deploy log to write to
+ * (scan worker, Dockerfile preview).
  * Routes structured messages through the shared pino logger so server-side
  * observability output matches the rest of the app.
  */

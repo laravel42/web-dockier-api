@@ -2,7 +2,7 @@
  * Shared static site builder utilities.
  *
  * Consolidates the duplicated install → build → find output dir logic
- * used by aws-s3, gcp-storage, and image-builder/source-bundler.
+ * used by the aws-s3 and gcp-storage static adapters.
  */
 
 import { join, extname } from "node:path";

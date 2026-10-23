@@ -20,7 +20,6 @@ export const SERVICE_NAMES = [
   "integrations",
   "code-analysis",
   "git-integration",
-  "image-builder",
 ] as const;
 
 export type ServiceName = (typeof SERVICE_NAMES)[number];

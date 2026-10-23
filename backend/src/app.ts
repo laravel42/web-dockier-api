@@ -15,7 +15,6 @@ import { registerAuthRoutes } from "./services/auth/routes.js";
 import { registerCodeAnalysisRoutes } from "./services/code-analysis/routes.js";
 import { registerDeployRoutes } from "./services/deploy/routes.js";
 import { registerGitIntegrationRoutes } from "./services/git-integration/routes.js";
-import { registerImageBuilderRoutes } from "./services/image-builder/routes.js";
 import { registerIntegrationsRoutes } from "./services/integrations/routes.js";
 import { registerNotificationsRoutes } from "./services/notifications/routes.js";
 import { registerProjectsRoutes } from "./services/projects/routes.js";
@@ -48,7 +47,6 @@ const serviceRegistry: Record<MigratedServiceName, RegisterFn> = {
   integrations: registerIntegrationsRoutes,
   "code-analysis": registerCodeAnalysisRoutes,
   "git-integration": registerGitIntegrationRoutes,
-  "image-builder": registerImageBuilderRoutes,
 };
 
 async function registerCoreRoutesByService(app: FastifyInstance, service: ServiceName) {

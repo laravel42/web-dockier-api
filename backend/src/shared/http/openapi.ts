@@ -72,7 +72,6 @@ export async function registerPlatformPlugins(app: FastifyInstance, serviceName:
         { name: "integrations", description: "Project management integrations" },
         { name: "code-analysis", description: "Security scans, findings, and rule management" },
         { name: "git-integration", description: "Git provider connections and repository intelligence" },
-        { name: "image-builder", description: "Build orchestration and image/deploy status" },
       ],
     },
     transform: jsonSchemaTransform,

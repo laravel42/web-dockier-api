@@ -30,7 +30,6 @@ describe("SERVICE_NAMES", () => {
       "integrations",
       "code-analysis",
       "git-integration",
-      "image-builder",
     ];
     expect(SERVICE_NAMES).toEqual(expected);
   });

@@ -2,8 +2,8 @@
  * Git Connections Service Client
  *
  * Thin cross-service accessor for git connection credentials.
- * Used by deploy and image-builder services that need clone credentials
- * without depending directly on the git-integration domain module.
+ * Used by services that need clone credentials without depending directly on
+ * the git-integration domain module.
  *
  * This is the canonical point of access — when the underlying table schema
  * or access pattern changes, only this file needs updating.

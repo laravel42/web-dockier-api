@@ -33,7 +33,6 @@
               "api/code-analysis",
               "api/sast-workers",
               "api/git-integration",
-              "api/image-builder",
               "api/migration-status"
             ]
           },

@@ -6,7 +6,6 @@ import { startQueue, stopQueue } from "./shared/database/queue.js";
 import { destroyPermissionCache } from "./shared/permissions/authorization.js";
 import { destroyRateLimitStore } from "./shared/http/rate-limit.js";
 import { registerDeployWorker } from "./services/deploy/domain/worker.js";
-import { registerImageBuildWorker } from "./services/image-builder/domain/worker.js";
 import { registerScanWorker } from "./services/code-analysis/domain/worker.js";
 import { registerCommandWorker } from "./services/commands/domain/worker.js";
 import { registerConfigApplyWorker } from "./shared/workers/config-apply.js";
@@ -44,7 +43,6 @@ const workerRegistry: WorkerEntry[] = [
       warnIfDokployMisconfigured((msg) => logger.warn(msg));
     },
   },
-  { services: ["image-builder"], register: registerImageBuildWorker },
   {
     services: ["code-analysis"],
     register: async () => {

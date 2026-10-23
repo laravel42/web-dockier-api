@@ -3,7 +3,7 @@
  *
  * Owns the raw DB lookup for server_providers credentials and the per-provider
  * credential model. This is the single source of truth for credential access —
- * the deploy service, commands, network, and image-builder all consume it.
+ * the deploy, commands, network and domains services all consume it.
  *
  * Credentials are a blob whose shape is discriminated on `kind` (which mirrors
  * the `provider` column):
@@ -204,8 +204,8 @@ export async function getProviderCredentialsSafe(providerId: string): Promise<Re
  * Resolve AWS credentials for a given providerId.
  *
  * Returns null if the providerId is empty, the provider is not found/not AWS,
- * or the credentials are incomplete. Used by image-builder and other services
- * that want graceful degradation on missing/invalid providers.
+ * or the credentials are incomplete. Used by services that want graceful
+ * degradation on missing/invalid providers.
  */
 export async function resolveAwsCredentials(providerId: string): Promise<ResolvedCredentials | null> {
   if (!providerId) return null;

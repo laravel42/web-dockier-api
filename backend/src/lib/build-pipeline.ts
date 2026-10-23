@@ -1,9 +1,9 @@
 /**
  * Shared build pipeline steps: clone → analyze → generate Dockerfile.
  *
- * Used by both the deploy processor (pipeline.ts) and the image-builder
- * (source-bundler.ts). Each service provides its own logger implementation
- * so logging goes to the right destination.
+ * Used by the deploy pipeline (stages.ts), the Dockerfile preview endpoint and
+ * the code-analysis scan worker. Each caller provides its own logger
+ * implementation so logging goes to the right destination.
  */
 
 import { join } from "node:path";

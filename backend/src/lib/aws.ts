@@ -1,5 +1,5 @@
 /**
- * Shared AWS utilities used by both deploy and image-builder services.
+ * Shared AWS utilities for the deploy and domains services.
  *
  * Provides common AWS operations (STS identity lookup, credential types)
  * so that each service doesn't need its own copy.
