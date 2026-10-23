@@ -1,0 +1,12 @@
+-- Drop the `builds` table left behind by the removed image-builder service.
+--
+-- The service (backend/src/services/image-builder/) was deleted once its
+-- frontend client and shared types were gone: an authenticated API surface with
+-- no consumer. `builds` was its only table and nothing else ever read it — the
+-- deploy service tracks its own work in `deployments`.
+--
+-- Unconditional DROP rather than a soft rename: the table carries no data worth
+-- keeping, and the service that wrote it no longer exists to write more. The
+-- CASCADE covers the five indexes created with it in 0026_builds.sql plus any
+-- RLS policy or grant attached since.
+DROP TABLE IF EXISTS builds CASCADE;

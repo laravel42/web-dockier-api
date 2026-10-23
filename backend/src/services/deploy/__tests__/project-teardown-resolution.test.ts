@@ -94,39 +94,39 @@ describe("resolveProjectStacks — dedup (Property 2)", () => {
     // Generate N duplicate rows referencing the same stack.
     for (const n of [1, 2, 5, 25, 100]) {
       const rows = Array.from({ length: n }, (_, i) =>
-        infraRow({ id: `d${i}`, provider: "aws", stackName: "image-builder-app-my-app" }),
+        infraRow({ id: `d${i}`, provider: "aws", stackName: "dockier-app-my-app" }),
       );
       mockOrder.mockResolvedValueOnce({ data: rows, error: null });
 
       const stacks = await resolveProjectStacks(PROJECT, TENANT);
       expect(stacks).toHaveLength(1);
       expect(stacks[0].provider).toBe("aws");
-      expect(stacks[0].stackName).toBe("image-builder-app-my-app");
+      expect(stacks[0].stackName).toBe("dockier-app-my-app");
     }
   });
 
   it("returns one entry per distinct (provider, stackName) pair", async () => {
     const rows = [
-      infraRow({ id: "d1", provider: "aws", stackName: "image-builder-app-alpha" }),
-      infraRow({ id: "d2", provider: "aws", stackName: "image-builder-app-alpha" }), // dup
-      infraRow({ id: "d3", provider: "gcp", stackName: "image-builder-app-alpha" }), // same name, diff provider
-      infraRow({ id: "d4", provider: "aws", stackName: "image-builder-app-beta" }),
+      infraRow({ id: "d1", provider: "aws", stackName: "dockier-app-alpha" }),
+      infraRow({ id: "d2", provider: "aws", stackName: "dockier-app-alpha" }), // dup
+      infraRow({ id: "d3", provider: "gcp", stackName: "dockier-app-alpha" }), // same name, diff provider
+      infraRow({ id: "d4", provider: "aws", stackName: "dockier-app-beta" }),
     ];
     mockOrder.mockResolvedValueOnce({ data: rows, error: null });
 
     const stacks = await resolveProjectStacks(PROJECT, TENANT);
     const keys = stacks.map((s) => `${s.provider}:${s.stackName}`).sort();
     expect(keys).toEqual([
-      "aws:image-builder-app-alpha",
-      "aws:image-builder-app-beta",
-      "gcp:image-builder-app-alpha",
+      "aws:dockier-app-alpha",
+      "aws:dockier-app-beta",
+      "gcp:dockier-app-alpha",
     ]);
   });
 
   it("keeps the most recent occurrence (rows are newest-first)", async () => {
     const rows = [
-      infraRow({ id: "newest", provider: "aws", stackName: "image-builder-app-x", region: "eu-west-1" }),
-      infraRow({ id: "older", provider: "aws", stackName: "image-builder-app-x", region: "us-east-1" }),
+      infraRow({ id: "newest", provider: "aws", stackName: "dockier-app-x", region: "eu-west-1" }),
+      infraRow({ id: "older", provider: "aws", stackName: "dockier-app-x", region: "us-east-1" }),
     ];
     mockOrder.mockResolvedValueOnce({ data: rows, error: null });
 
@@ -147,14 +147,14 @@ describe("resolveProjectStacks — legacy fallback", () => {
     const stacks = await resolveProjectStacks(PROJECT, TENANT);
     expect(stacks).toHaveLength(1);
     expect(stacks[0].provider).toBe("aws");
-    expect(stacks[0].stackName).toBe("image-builder-app-legacy-app");
+    expect(stacks[0].stackName).toBe("dockier-app-legacy-app");
   });
 
   it("dedupes legacy rows against metadata rows targeting the same stack", async () => {
     mockGetCreds.mockResolvedValue({ provider: "aws", region: "us-east-1", credential: { kind: "aws", accessKeyId: "k", secretAccessKey: "s" } });
     const rows = [
-      infraRow({ id: "d1", provider: "aws", stackName: "image-builder-app-my-app", repo: "acme/my-app" }),
-      legacyRow({ id: "d2", repo: "acme/my-app" }), // derives image-builder-app-my-app → same key
+      infraRow({ id: "d1", provider: "aws", stackName: "dockier-app-my-app", repo: "acme/my-app" }),
+      legacyRow({ id: "d2", repo: "acme/my-app" }), // derives dockier-app-my-app → same key
     ];
     mockOrder.mockResolvedValueOnce({ data: rows, error: null });
 

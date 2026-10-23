@@ -118,10 +118,11 @@ See `requirements.md` and `design.md`. Verify file:line references against the c
   - [ ] 12.1 Nothing in the codebase calls CloudFront directly — there is no invalidation on redeploy. Not currently a correctness bug: the distribution uses CachingOptimized, which respects origin `Cache-Control`, and the adapter uploads HTML as `no-cache` with hashed assets as `immutable`. It matters for forced refreshes and for sites with unhashed assets.
   - [ ] 12.2 Add `cloudfront:CreateInvalidation` to the documented IAM policy at the same time — deliberately omitted today rather than granted unused.
 
-- [ ] 13. Migrate the rest of the AWS resource namespace to `dockier-*` (needs a migration plan)
-  - [ ] 13.1 `stackNameFor()` in `lib/naming.ts` produces `image-builder-app-<name>` and is shared by the EC2, ECS and S3 adapters. **Live EC2/ECS deployments use these stack names** — renaming would make Dockier lose track of every existing stack, so teardown would target a non-existent stack and orphan the real infrastructure.
-  - [ ] 13.2 Needs either a grandfathering lookup (try the new name, fall back to the legacy one) or a one-off migration recorded per deployment. Unlike task 11 this cannot be done for free.
-  - [ ] 13.3 Same question for ECR repositories and any IAM roles/instance profiles created by the adapters.
+- [x] 13. Migrate the rest of the AWS resource namespace to `dockier-*`
+  - [x] 13.1 `stackNameFor()` in `lib/naming.ts` now produces `dockier-app-<name>`, and `createOrUpdateStack` tags stacks `ManagedBy=dockier`. Six test files asserting the old prefix were updated with it.
+  - [x] 13.2 No grandfathering lookup and no per-deployment migration were needed after all: this was done while no stack existed, same as task 11. Had a live stack existed, renaming would have made teardown target a non-existent stack and orphan the real infrastructure.
+  - [x] 13.3 ECR repository names carry no prefix — `sanitizeEcrRepoName()` derives them from the repo name alone. No IAM role or instance profile is named from the legacy prefix in the live static path (`s3.yml`).
+  - The four `image-builder` strings left in backend source are all confined to the unreachable native **server** path and go with it: `IMAGE_BUILDER_CODEBUILD_PROJECT` (config + `infra/codebuild-builder.ts`), the hardcoded CodeBuild project in `adapters/aws-ec2.ts` and `aws-ecs.ts`, the `image-builder-templates-*` bucket in `lifecycle/post-deploy.ts` (unreachable — `stagePostDeploy` returns early for static), and `cfn-templates/ec2.yml`.
 
 - [ ] 14. Skip Dockerfile generation for static deploys
   - [ ] 14.1 `stageAnalyze` calls `analyzeAndGenerate` unconditionally (`pipeline/stages.ts:99`), so a static deploy generates a Dockerfile it never uses — and pays for an OpenAI call in the AI review. Observed in the first live static deploy: `✓ AI improved Dockerfile [3.8s]`. Skip when `ctx.isStaticDeploy`.

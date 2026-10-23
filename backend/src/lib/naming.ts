@@ -97,10 +97,10 @@ export function deriveContainerName(repo: string, provider?: string): string | n
 /**
  * Canonical CloudFormation/Pulumi stack name for an app deployed by this platform.
  *
- * e.g. "my-app" → "image-builder-app-my-app"
+ * e.g. "my-app" → "dockier-app-my-app"
  */
 export function stackNameFor(appName: string): string {
-  return "image-builder-app-" + sanitizeEcrRepoName(appName);
+  return "dockier-app-" + sanitizeEcrRepoName(appName);
 }
 
 // ─── ECR Repo Name ─────────────────────────────────────────────────
