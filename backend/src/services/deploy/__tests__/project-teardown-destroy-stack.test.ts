@@ -54,7 +54,7 @@ function stack(overrides: Partial<ResolvedStack> = {}): ResolvedStack {
   return {
     provider: "aws",
     deployStrategy: "managed",
-    stackName: "dockier-app-my-app",
+    stackName: "image-builder-app-my-app",
     region: "us-east-1",
     providerId: "prov-1",
     repo: "acme/my-app",

@@ -339,7 +339,7 @@ export async function createOrUpdateStack(opts: {
         Capabilities: ["CAPABILITY_NAMED_IAM"],
         Tags: [
           { Key: "BuildId", Value: deploymentId },
-          { Key: "ManagedBy", Value: "dockier" },
+          { Key: "ManagedBy", Value: "image-builder" },
         ],
         OnFailure: "ROLLBACK",
       }),

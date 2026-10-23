@@ -67,7 +67,7 @@ describe("buildInfraMetadata", () => {
     expect(infra.service).toBe("ec2");
     expect(infra.region).toBe("us-east-1");
     expect(infra.containerName).toBe("my-app");
-    expect(infra.stackName).toBe("dockier-app-my-app");
+    expect(infra.stackName).toBe("image-builder-app-my-app");
     expect(infra.serverIp).toBe("1.2.3.4");
     expect(infra.instanceId).toBeUndefined();
     expect(infra.ecsCluster).toBeUndefined();
@@ -160,6 +160,6 @@ describe("buildInfraMetadata", () => {
     });
 
     expect(infra.containerName).toBe("my-app-io");
-    expect(infra.stackName).toBe("dockier-app-my-app-io");
+    expect(infra.stackName).toBe("image-builder-app-my-app-io");
   });
 });

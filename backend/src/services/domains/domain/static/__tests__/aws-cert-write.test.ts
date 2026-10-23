@@ -101,7 +101,7 @@ const { reconcileAwsStaticDomains } = await import("../aws.js");
 const target = {
   kind: "aws-static" as const,
   region: "eu-west-1",
-  stackName: "dockier-app-web-inky",
+  stackName: "image-builder-app-web-inky",
   distributionId: "E123",
   distributionDomain: "d3d8fr298zex5t.cloudfront.net",
   websiteBucket: "dockier-1-web-inky-static",

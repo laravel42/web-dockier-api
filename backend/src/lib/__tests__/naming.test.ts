@@ -183,20 +183,20 @@ describe("deriveContainerName", () => {
 
 describe("stackNameFor", () => {
   it("prefixes the sanitized app name", () => {
-    expect(stackNameFor("my-app")).toBe("dockier-app-my-app");
+    expect(stackNameFor("my-app")).toBe("image-builder-app-my-app");
   });
 
   it("sanitizes the app name before prefixing", () => {
-    expect(stackNameFor("My_App.io")).toBe("dockier-app-my-app-io");
-    expect(stackNameFor("ACME/Repo")).toBe("dockier-app-acme-repo");
+    expect(stackNameFor("My_App.io")).toBe("image-builder-app-my-app-io");
+    expect(stackNameFor("ACME/Repo")).toBe("image-builder-app-acme-repo");
   });
 
   it("inherits sanitizeEcrRepoName's lack of hyphen collapsing", () => {
-    expect(stackNameFor("my__app")).toBe("dockier-app-my--app");
+    expect(stackNameFor("my__app")).toBe("image-builder-app-my--app");
   });
 
   it("yields the bare prefix for an empty app name", () => {
-    expect(stackNameFor("")).toBe("dockier-app-");
+    expect(stackNameFor("")).toBe("image-builder-app-");
   });
 });
 

@@ -73,7 +73,7 @@ describe("POST /projects/:projectId/infrastructure/teardown", () => {
     mockTeardown.mockResolvedValue({
       status: "torn_down",
       message: "Tore down 1 stack(s).",
-      perStack: [{ stackName: "dockier-app-my-app", success: true, message: "ok", errors: [] }],
+      perStack: [{ stackName: "image-builder-app-my-app", success: true, message: "ok", errors: [] }],
     });
 
     const res = await app.inject({
@@ -105,8 +105,8 @@ describe("POST /projects/:projectId/infrastructure/teardown", () => {
     setupPerms(mockFrom, { permissions: Object.values(PERMISSIONS) });
     mockTeardown.mockResolvedValue({
       status: "partial",
-      message: "Some resources could not be removed: dockier-app-my-app.",
-      perStack: [{ stackName: "dockier-app-my-app", success: false, message: "err", errors: ["x"] }],
+      message: "Some resources could not be removed: image-builder-app-my-app.",
+      perStack: [{ stackName: "image-builder-app-my-app", success: false, message: "err", errors: ["x"] }],
     });
 
     const res = await app.inject({

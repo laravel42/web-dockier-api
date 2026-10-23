@@ -35,11 +35,10 @@ CloudFront origin points at it, so folding anything per-deploy into the name
 would create a new bucket each deploy, orphan the previous one, and leave
 teardown deleting the wrong thing.
 
-CloudFormation **stack** names follow the same namespace: `dockier-app-<name>`
-via `stackNameFor()` in `lib/naming.ts`, and stacks are tagged
-`ManagedBy=dockier`. The policy below is unaffected by the stack name — its
-`StackManagement` statement is scoped `"Resource": "*"`, because a project's
-stack name is not known when the policy is written.
+> **Note:** CloudFormation **stack** names are still `image-builder-app-<name>`
+> via `lib/naming.ts`. That prefix is legacy, shared with the EC2 and ECS
+> adapters, and cannot be renamed without orphaning live stacks — see the
+> namespace-migration task in `.kiro/specs/static-deploy-targets/tasks.md`.
 
 ## What the adapter does, and what each step needs
 
