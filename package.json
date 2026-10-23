@@ -25,7 +25,7 @@
     "secrets:store:create": "tsx scripts/cloudflare-secrets.ts store:create",
     "secrets:push:supabase": "supabase secrets set --env-file .env",
     "secrets:bridge:deploy": "pnpm exec wrangler deploy --config cloudflare/secrets-bridge/wrangler.toml",
-    "postinstall": "python3 -m pipx install semgrep || pipx install semgrep || true",
+    "postinstall": "python3 -m pipx install semgrep==1.160.0 || pipx install semgrep==1.160.0 || true",
     "backend:dev": "pnpm --filter @dockier/backend-fastify dev",
     "backend:typecheck": "pnpm --filter @dockier/backend-fastify typecheck",
     "backend:lint": "pnpm --filter @dockier/backend-fastify lint",

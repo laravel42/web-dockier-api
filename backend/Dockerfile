@@ -2,17 +2,24 @@
 # rebuild: 2026-06-10 — env sync restart
 FROM node:22-bookworm-slim AS base
 
+# semgrep is pinned: it is the scan engine the product ships, so an unpinned
+# install makes every rebuild a silent upgrade and an upstream regression
+# arrives on its own. Keep in step with the root package.json postinstall.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     python3 python3-pip git ca-certificates curl \
-  && pip3 install semgrep --break-system-packages \
+  && pip3 install semgrep==1.160.0 --break-system-packages \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="${PNPM_HOME}:${PATH}"
-RUN corepack enable && corepack prepare pnpm@11.5.3 --activate
+# Must match `packageManager` in the root package.json. A mismatch only breaks
+# in here, not locally: the lockfile is installed with --frozen-lockfile, so a
+# pnpm version that writes a different lockfile format fails the image build
+# while every local install keeps working.
+RUN corepack enable && corepack prepare pnpm@11.21.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY backend/package.json ./backend/
