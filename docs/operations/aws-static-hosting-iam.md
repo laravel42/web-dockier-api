@@ -36,8 +36,12 @@ would create a new bucket each deploy, orphan the previous one, and leave
 teardown deleting the wrong thing.
 
 > **Note:** CloudFormation **stack** names are still `image-builder-app-<name>`
-> via `lib/naming.ts`. That prefix is legacy, shared with the EC2 and ECS
-> adapters, and cannot be renamed without orphaning live stacks — see the
+> via `stackNameFor()` in `lib/naming.ts`, and stacks are tagged
+> `ManagedBy=image-builder`. The prefix is legacy, but **this adapter is what
+> keeps it alive** — not the EC2/ECS adapters it is nominally shared with, which
+> have never created a stack here. Renaming it today orphans the live static
+> stacks, because `provisionInfrastructure()` and `destroy()` both recompute the
+> name instead of reading the `stackName` persisted on the deployment. See the
 > namespace-migration task in `.kiro/specs/static-deploy-targets/tasks.md`.
 
 ## What the adapter does, and what each step needs
