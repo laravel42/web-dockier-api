@@ -4,6 +4,39 @@ import { joinPath } from "../repo-files.js";
 import { NATIVE_DEPS_MAP } from "../constants.js";
 import { cleanVersion, nextStaticSignals, nuxtStaticSignals } from "../utils.js";
 
+/**
+ * Astro config filenames, in the order Astro itself resolves them.
+ *
+ * Used BOTH to enter the astro branch and to read the config inside it, because
+ * the `astro` dependency key alone is not a reliable signal: in a workspace the
+ * dep often lives in a package rather than the app's own manifest.
+ * `nuxt.config.*` above is treated the same way for the same reason.
+ */
+const ASTRO_CONFIG_FILES = [
+  "astro.config.mjs",
+  "astro.config.ts",
+  "astro.config.js",
+  "astro.config.mts",
+  "astro.config.cjs",
+] as const;
+
+/**
+ * A script that invokes the Astro CLI.
+ *
+ * The third and weakest-looking signal, but the one that identifies the case
+ * the other two miss entirely: `laravel42/web-inky` is a pnpm workspace whose
+ * root manifest declares `"build": "astro build"` and neither an `astro`
+ * dependency nor an `astro.config.*` — Astro runs there on its defaults. It was
+ * classified `spa` with Vite's version reported as the framework version
+ * (logged live as `Framework: spa 7.2.2`), which skipped every Astro decision
+ * below, including the SSR/adapter detection that decides whether the project
+ * may deploy as a static site at all.
+ *
+ * Anchored on a subcommand so it cannot match a `.astro` file extension in an
+ * unrelated script (`eslint --ext .astro .`) or a package named `astroturf`.
+ */
+const ASTRO_CLI_SCRIPT = /\bastro\s+(build|dev|preview|check)\b/;
+
 interface NodePackageJson {
   engines?: { node?: string };
   packageManager?: string;
@@ -126,8 +159,12 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
     config.framework = "sveltekit";
     config.frameworkVersion = cleanVersion(allDeps["@sveltejs/kit"] || allDeps["svelte"]);
     config.port = 3000;
-  } else if (allDeps["astro"]) {
+  } else if (allDeps["astro"] || ASTRO_CONFIG_FILES.some(existsApp) || ASTRO_CLI_SCRIPT.test(scriptsText)) {
     config.framework = "astro";
+    // shortcut: empty when astro is absent from the manifest and only the config
+    // file identified the project, which also leaves the Astro 5 + Node 22 bump
+    // below unable to fire. Resolve the version from the workspace package that
+    // declares astro if a repo ever needs that bump applied.
     config.frameworkVersion = cleanVersion(allDeps["astro"]);
     config.port = 3000;
 
@@ -137,7 +174,7 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
     // a workspace package rather than the app's own manifest — checking deps
     // alone misses it and we'd wrongly treat an SSR app as static.
     let astroConfig = "";
-    for (const cfgName of ["astro.config.mjs", "astro.config.ts", "astro.config.js", "astro.config.mts", "astro.config.cjs"]) {
+    for (const cfgName of ASTRO_CONFIG_FILES) {
       const content = readApp(cfgName);
       if (content !== null) {
         astroConfig = content;

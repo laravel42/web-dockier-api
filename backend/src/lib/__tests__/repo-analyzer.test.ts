@@ -323,3 +323,104 @@ describe("detectSubDir", () => {
     expect(detectSubDir(files)).toBe("apps/web");
   });
 });
+
+// ─── Astro without the astro dependency ────────────────────────────
+//
+// Reproduces `laravel42/web-inky`: a pnpm workspace whose root manifest
+// declares `"build": "astro build"` and carries neither an `astro` dependency
+// nor an `astro.config.*` — Astro runs there on its defaults. It was classified
+// as `spa` with Vite's version reported as the framework version (logged live
+// as `Framework: spa 7.2.2`), which skipped every Astro decision below,
+// including the SSR/adapter detection that decides whether the repo may deploy
+// as a static site at all.
+
+describe("analyzeRepoFiles — Astro without the astro dependency", () => {
+  /** The live web-inky shape: no astro dep, no astro.config, astro in the script. */
+  const webInky = () => new MapRepoFiles({
+    "package.json": pkg({ devDeps: { vite: "^7.2.2" }, scripts: { build: "astro build" } }),
+    "pnpm-workspace.yaml": "packages:\n  - packages/*\n",
+  });
+
+  it("detects astro from the build script alone", () => {
+    const config = analyzeRepoFiles(webInky());
+
+    expect(config.framework).toBe("astro");
+    // The bug: the SPA fallback matched on vite and reported vite's version.
+    expect(config.framework).not.toBe("spa");
+    expect(config.frameworkVersion).not.toBe("7.2.2");
+  });
+
+  it("keeps that repo eligible for static deploy", () => {
+    // Load-bearing: getStaticDeployBlockReason blocks an astro project whose
+    // isStatic is false, and isStatic is features.has("static-export"). With no
+    // config, no adapter and no start script, the branch must fall through to
+    // static-export — otherwise this fix takes a working deploy offline.
+    const config = analyzeRepoFiles(webInky());
+
+    expect(config.features.has("static-export")).toBe(true);
+    expect(config.features.has("ssr")).toBe(false);
+  });
+
+  it("detects astro from astro.config.mjs when the manifest declares only vite", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({ devDeps: { vite: "^7.2.2" }, scripts: { build: "pnpm -r build" } }),
+      "astro.config.mjs": "export default defineConfig({ output: 'static' });",
+    });
+
+    const config = analyzeRepoFiles(files);
+
+    expect(config.framework).toBe("astro");
+    expect(config.features.has("static-export")).toBe(true);
+  });
+
+  it("does not match a .astro file extension in an unrelated script", () => {
+    const files = new MapRepoFiles({
+      "package.json": pkg({
+        deps: { react: "^18.2.0" },
+        devDeps: { vite: "^7.2.2" },
+        scripts: { build: "vite build", lint: "eslint --ext .astro,.ts ." },
+      }),
+    });
+
+    expect(analyzeRepoFiles(files).framework).toBe("spa");
+  });
+
+  it("detects SSR from the config even with no astro and no adapter dep", () => {
+    // The case the misdetection made invisible: classified `spa` + static-export,
+    // this repo would have been offered a static deploy it cannot serve.
+    const files = new MapRepoFiles({
+      "package.json": pkg({ devDeps: { vite: "^7.2.2" }, scripts: { build: "astro build" } }),
+      "astro.config.ts": "import node from '@astrojs/node';\nexport default defineConfig({ output: 'server', adapter: node({ mode: 'standalone' }) });",
+    });
+
+    const config = analyzeRepoFiles(files);
+
+    expect(config.framework).toBe("astro");
+    expect(config.features.has("ssr")).toBe(true);
+    expect(config.features.has("static-export")).toBe(false);
+  });
+
+  it("recognises every astro.config extension", () => {
+    for (const cfg of ["astro.config.mjs", "astro.config.ts", "astro.config.js", "astro.config.mts", "astro.config.cjs"]) {
+      const files = new MapRepoFiles({
+        "package.json": pkg({ devDeps: { vite: "^7.2.2" }, scripts: { build: "astro build" } }),
+        [cfg]: "export default defineConfig({ output: 'static' });",
+      });
+
+      expect(analyzeRepoFiles(files).framework, cfg).toBe("astro");
+    }
+  });
+
+  it("leaves a real Vite SPA alone", () => {
+    // No astro.config anywhere — must still be spa, or the fix would swallow
+    // every Vite project.
+    const files = new MapRepoFiles({
+      "package.json": pkg({ deps: { react: "^18.2.0" }, devDeps: { vite: "^7.2.2" }, scripts: { build: "vite build" } }),
+    });
+
+    const config = analyzeRepoFiles(files);
+
+    expect(config.framework).toBe("spa");
+    expect(config.frameworkVersion).toBe("18.2.0");
+  });
+});
