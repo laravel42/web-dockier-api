@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -335,7 +335,7 @@ export async function runSonarScanner(
   const execScanner =
     deps.execScanner ??
     ((bin: string, dir: string) => {
-      execSync(`${JSON.stringify(bin)} -Dsonar.projectBaseDir=${JSON.stringify(dir)}`, {
+      execFileSync(bin, [`-Dsonar.projectBaseDir=${dir}`], {
         cwd: dir,
         timeout: 300_000,
         stdio: "pipe",

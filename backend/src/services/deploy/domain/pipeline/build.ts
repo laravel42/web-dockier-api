@@ -5,7 +5,7 @@
  * auto-retry/patch, or remote build via AWS CodeBuild.
  */
 
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -19,7 +19,7 @@ import { toAwsCredentials, type ProviderCredential } from "../../../../lib/provi
 import { appendLog } from "./helpers.js";
 import { findCachedImage, patchDeployment } from "../deployments.js";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ export async function buildImage(params: BuildImageParams): Promise<BuildImageRe
 
   if (cachedDockerImage) {
     try {
-      await execAsync(`docker image inspect ${JSON.stringify(cachedDockerImage)}`, { timeout: 10_000 });
+      await execFileAsync("docker", ["image", "inspect", cachedDockerImage], { timeout: 10_000 });
       actualImage = cachedDockerImage;
       skippedBuild = true;
       await logger.info(`Reusing cached image: ${actualImage}`);

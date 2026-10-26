@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, writeFile, copyFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { buildCloneUrl } from "./git-url.js";
 import { analyzeRepoConfig, generateDockerfile, configSummary, toDetectedStack, resolvePhpVersion } from "./repo-analyzer/index.js";
 import type { RepoConfig, DetectedStack } from "./repo-analyzer/types.js";
@@ -146,8 +146,12 @@ export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
   const repoDir = join(workDir, "repo");
 
   try {
-    execSync(
-      `git clone --depth 1 --branch ${JSON.stringify(branch)} ${JSON.stringify(cloneUrl)} repo`,
+    // execFileSync, not execSync: no shell, so a branch or repo name containing
+    // $(...) or backticks is an argument and never a command. JSON.stringify did
+    // not stop that — it escapes quotes but leaves $ and ` live inside them.
+    execFileSync(
+      "git",
+      ["clone", "--depth", "1", "--branch", branch, cloneUrl, "repo"],
       { cwd: workDir, timeout: 120_000, stdio: "pipe" },
     );
   } catch (err) {
@@ -156,7 +160,7 @@ export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
     throw new BuildError(`Failed to clone ${git.repo}@${branch}`, "clone", err);
   }
 
-  const commitHash = execSync("git rev-parse HEAD", { cwd: repoDir, timeout: 5_000 })
+  const commitHash = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoDir, timeout: 5_000 })
     .toString()
     .trim();
 
