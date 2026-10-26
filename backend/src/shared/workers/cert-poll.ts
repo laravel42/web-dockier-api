@@ -39,6 +39,11 @@ const certPollWorker = createWorker<Record<string, never>>(
     retryLimit: 1,
     expireInSeconds: 120,
     pollingIntervalSeconds: 5,
+    // No dead letter queue: the cron re-runs every minute and re-derives what
+    // is due from the table, so a failed sweep carries no state worth keeping.
+    // Retaining them would add a dead job a minute during an outage and train
+    // everyone to ignore the dead letter queues that do matter.
+    deadLetter: false,
   },
 );
 

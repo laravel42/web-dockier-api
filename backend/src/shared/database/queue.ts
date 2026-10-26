@@ -9,7 +9,7 @@
  */
 
 import { PgBoss } from "pg-boss";
-import type { Job } from "pg-boss";
+import type { JobWithMetadata } from "pg-boss";
 import { getPostgresConnectionConfig } from "./postgres.js";
 import { logger } from "../logger.js";
 import { getErrMsg } from "../utils/error-message.js";
@@ -155,6 +155,24 @@ export interface WorkerOptions {
   batchSize?: number;
   /** Polling interval in seconds (default: 5) */
   pollingIntervalSeconds?: number;
+  /**
+   * Keep the payload of a job that exhausted every retry, in a companion
+   * `<queueName>-dead` queue (default: true).
+   *
+   * Without it an exhausted job is logged and dropped: a deploy that failed its
+   * last attempt leaves no recoverable trace and cannot be replayed. pg-boss
+   * copies the payload into the dead letter queue, so the job stays inspectable
+   * (`select * from pgboss.job where name = '<queueName>-dead'`) and can be
+   * re-sent to the original queue.
+   *
+   * Nothing consumes the dead letter queue on purpose. The copy inherits the
+   * original's retry configuration, so a worker there would re-run work that
+   * already failed every attempt.
+   *
+   * Opt out only for a queue whose work is re-derived on the next run, like a
+   * cron sweep — there a dead job is noise, not information.
+   */
+  deadLetter?: boolean;
 }
 
 export interface EnqueueResult {
@@ -188,7 +206,10 @@ export function createWorker<T>(
     expireInSeconds = 1200,
     batchSize = 1,
     pollingIntervalSeconds = 5,
+    deadLetter = true,
   } = options;
+
+  const deadLetterQueue = `${queueName}-dead`;
 
   let registered = false;
 
@@ -201,9 +222,27 @@ export function createWorker<T>(
     registered = true;
 
     try {
+      // Created first: pgboss.job.dead_letter is a FK to pgboss.queue(name), so
+      // the target has to exist before any job can reference it.
+      if (deadLetter) await queue.createQueue(deadLetterQueue);
+
       await queue.createQueue(queueName);
 
-      await queue.work(queueName, { batchSize, pollingIntervalSeconds }, async (jobs: Job<T>[]) => {
+      // updateQueue, not a `deadLetter` option on createQueue above: pg-boss's
+      // create_queue ends in ON CONFLICT DO NOTHING, so for a queue that is
+      // already in the database — which is every queue in any deployed
+      // environment — the option is silently ignored and no error is raised.
+      // updateQueue is the only call that reaches an existing row.
+      //
+      // Only new jobs are covered: the insert resolves the target with
+      // COALESCE(job.deadLetter, queue.dead_letter), so jobs enqueued before
+      // this ran keep dead_letter NULL and are still dropped on exhaustion.
+      if (deadLetter) await queue.updateQueue(queueName, { deadLetter: deadLetterQueue });
+
+      // includeMetadata for retryCount/retryLimit: without it pg-boss delivers
+      // the minimal Job, and the terminal-attempt log below cannot tell a
+      // failure that will be retried from the one that ends the job.
+      await queue.work(queueName, { batchSize, pollingIntervalSeconds, includeMetadata: true }, async (jobs: JobWithMetadata<T>[]) => {
         if (!jobs || jobs.length === 0) return;
 
         for (const job of jobs) {
@@ -217,7 +256,26 @@ export function createWorker<T>(
             await handler(input);
             jobLogger.info("Completed job");
           } catch (err) {
-            jobLogger.error({ err }, "Failed job");
+            // A retry and a death used to log the identical "Failed job" line,
+            // so nothing in the logs marked the attempt that actually lost the
+            // work — the one worth alerting on.
+            //
+            // pg-boss increments retry_count when it fetches a job that has run
+            // before (plans.js:852) and fails rather than retries once
+            // retry_count is no longer below retry_limit (plans.js:1071), so
+            // this comparison is exactly "failing now ends the job". Read off
+            // the job, not the worker's own options, so a job enqueued with
+            // different limits (or by `schedule`) is still judged correctly.
+            if (job.retryCount >= job.retryLimit) {
+              jobLogger.error(
+                { err, retryCount: job.retryCount, ...(deadLetter ? { deadLetterQueue } : {}) },
+                deadLetter
+                  ? "Job exhausted every retry — payload kept in the dead letter queue for replay"
+                  : "Job exhausted every retry — payload dropped, this queue has no dead letter queue",
+              );
+            } else {
+              jobLogger.error({ err, retryCount: job.retryCount, retryLimit: job.retryLimit }, "Failed job, will retry");
+            }
             throw err; // re-throw so pg-boss marks it failed and retries
           }
         }
