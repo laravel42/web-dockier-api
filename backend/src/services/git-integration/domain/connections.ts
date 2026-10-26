@@ -13,7 +13,14 @@ export interface ConnectionRow {
   id: string;
   organization_id: string;
   provider: string;
-  /** Always the plaintext token in memory, decrypted from personal_token_encrypted on read. */
+  /**
+   * The decrypted plaintext token on rows returned by `getConnection` /
+   * `getConnectionForTenant` — those are the rows to authenticate with.
+   *
+   * NOT on rows from `getConnectionRowForTenant` (the update and delete
+   * paths), which deliberately skip decryption: there this field is the legacy
+   * plaintext column, normally `""`, and must never be used as the token.
+   */
   personal_token: string;
   personal_token_encrypted?: string | null;
   label: string;
