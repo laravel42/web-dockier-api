@@ -234,37 +234,34 @@ export async function sendNotification(params: SendNotificationParams): Promise<
     if (filterChannels && !filterChannels.includes(channel.type)) return false;
     const config = typeof channel.config === "string" ? JSON.parse(channel.config) : channel.config;
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      // AbortSignal.timeout rather than a shared AbortController: the manual
+      // controller's clearTimeout only ran on the success paths, so a rejected
+      // fetch left the timer pending, and the email branch was wrapped in a
+      // timeout it never passed to anything.
       if (channel.type === "slack" && config?.webhookUrl) {
         await fetch(config.webhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: `*${title}*\n${message}` }),
-          signal: controller.signal,
+          signal: AbortSignal.timeout(5000),
         });
-        clearTimeout(timeoutId);
         return true;
       } else if (channel.type === "email" && config?.email) {
-        const sent = await sendEmailNotification({
+        return await sendEmailNotification({
           to: config.email,
           title,
           message,
           idempotencyKey: `notification/${tenantId}/${channel.id}/${title}`,
         });
-        clearTimeout(timeoutId);
-        return sent;
       } else if (channel.type === "webhook" && config?.url) {
         await fetch(config.url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title, message, tenantId }),
-          signal: controller.signal,
+          signal: AbortSignal.timeout(5000),
         });
-        clearTimeout(timeoutId);
         return true;
       }
-      clearTimeout(timeoutId);
     } catch {
       // Ignore failures to allow other channels to succeed
     }

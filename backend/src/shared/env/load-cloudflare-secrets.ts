@@ -1,4 +1,5 @@
 import { applyEnvRecord, parseSecretString } from "./apply-env-record.js";
+import { fetchWithTimeout } from "../http/fetch.js";
 
 function shouldLoadCloudflareSecrets(): boolean {
   if (process.env.LOAD_SECRETS_FROM === "file") return false;
@@ -23,7 +24,7 @@ async function loadFromSecretsBridge(): Promise<void> {
     );
   }
 
-  const response = await fetch(bridgeUrl, {
+  const response = await fetchWithTimeout(bridgeUrl, {
     headers: {
       Authorization: `Bearer ${bridgeToken}`,
     },

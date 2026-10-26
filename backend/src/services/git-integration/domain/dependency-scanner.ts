@@ -202,6 +202,9 @@ async function checkVulnerabilities(deps: ParsedDep[]): Promise<Dependency[]> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ queries }),
+      // Longer than the 5s single-package lookups above: this posts every
+      // dependency of the repo in one batch.
+      signal: AbortSignal.timeout(15_000),
     });
     const body = (await response.json()) as { results?: Array<{ vulns?: OsvVulnerability[] }> };
     results = body.results ?? [];

@@ -16,6 +16,7 @@ import { getEcs, getSsm } from "../../../lib/aws-sdk.js";
 import { toAwsCredentials, toGcpServiceAccountKey, type ProviderCredential } from "../../../lib/provider-credentials.js";
 import { sleep } from "../../../shared/utils/time.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
+import { fetchWithTimeout } from "../../../shared/http/fetch.js";
 
 const COMMAND_TIMEOUT_MS = 120_000; // 2 minutes
 
@@ -236,7 +237,7 @@ async function executeViaCloudRunJob(
     };
 
     // Try to create the job (or update if exists)
-    let createResponse = await fetch(`${jobsBaseUrl}/${jobName}?updateMask=template`, {
+    let createResponse = await fetchWithTimeout(`${jobsBaseUrl}/${jobName}?updateMask=template`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify(jobBody),
@@ -244,7 +245,7 @@ async function executeViaCloudRunJob(
 
     if (createResponse.status === 404) {
       // Job doesn't exist yet — create it
-      createResponse = await fetch(`${jobsBaseUrl}?jobId=${jobName}`, {
+      createResponse = await fetchWithTimeout(`${jobsBaseUrl}?jobId=${jobName}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify(jobBody),
@@ -257,7 +258,7 @@ async function executeViaCloudRunJob(
     }
 
     // Execute the job
-    const execResponse = await fetch(`${jobsBaseUrl}/${jobName}:run`, {
+    const execResponse = await fetchWithTimeout(`${jobsBaseUrl}/${jobName}:run`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     });
@@ -278,7 +279,7 @@ async function executeViaCloudRunJob(
     const pollUrl = `https://run.googleapis.com/v2/${executionName}`;
     for (let i = 0; i < 24; i++) {
       await sleep(5000);
-      const pollResponse = await fetch(pollUrl, {
+      const pollResponse = await fetchWithTimeout(pollUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!pollResponse.ok) continue;

@@ -24,6 +24,25 @@ export default defineConfig([
     },
   },
   {
+    // Type-aware block, scoped to src: these two rules need type information,
+    // and they are the ones that matter in a Fastify + pg-boss worker codebase
+    // where a dropped promise becomes a silent unhandled rejection rather than
+    // a failed request. Deliberately NOT the whole recommendedTypeChecked
+    // preset — that adds a large stylistic surface for no reliability gain.
+    // At "warn" so CI stays green while the existing findings are worked off.
+    files: ["src/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": "warn",
+      "@typescript-eslint/no-misused-promises": "warn",
+    },
+  },
+  {
     files: ["**/__tests__/**/*.test.ts"],
     plugins: { vitest },
     rules: {

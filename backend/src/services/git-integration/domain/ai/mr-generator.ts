@@ -4,6 +4,7 @@ import { generateCodeFix } from "./ai-fix.js";
 import { commitFixToBranch } from "./fix-branch.js";
 import { DomainError } from "../../../../shared/supabase/errors.js";
 import { env } from "../../../../shared/config.js";
+import { fetchWithTimeout } from "../../../../shared/http/fetch.js";
 
 type CreateMergeRequestInput = {
   owner: string;
@@ -119,7 +120,7 @@ async function createProviderMergeRequest(
       "Content-Type": "application/json",
     };
     const origin = baseUrl(connection);
-    const createRes = await fetch(`${origin}/repos/${input.owner}/${input.repo}/pulls`, {
+    const createRes = await fetchWithTimeout(`${origin}/repos/${input.owner}/${input.repo}/pulls`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -148,7 +149,7 @@ async function createProviderMergeRequest(
     const project = encodeURIComponent(`${input.owner}/${input.repo}`);
     const headers = { "PRIVATE-TOKEN": connection.personal_token, "Content-Type": "application/json" };
     const origin = baseUrl(connection);
-    const response = await fetch(`${origin}/api/v4/projects/${project}/merge_requests`, {
+    const response = await fetchWithTimeout(`${origin}/api/v4/projects/${project}/merge_requests`, {
       method: "POST",
       headers,
       body: JSON.stringify({

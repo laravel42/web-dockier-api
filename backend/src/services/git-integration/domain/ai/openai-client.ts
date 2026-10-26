@@ -8,9 +8,17 @@
  */
 
 import { logger } from "../../../../shared/logger.js";
+import { fetchWithTimeout } from "../../../../shared/http/fetch.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
+
+/**
+ * Chat-completion timeout. Deliberately far above the 15s shared default:
+ * a `maxTokens`-sized completion routinely runs past a minute, so the default
+ * would abort healthy calls. This bounds a hung socket, not a slow model.
+ */
+const OPENAI_TIMEOUT_MS = 180_000;
 
 export type OpenAIMessage = { role: string; content: string };
 
@@ -53,8 +61,9 @@ export async function callOpenAIChat(options: CallOpenAIChatOptions): Promise<st
     truncation = "warn",
   } = options;
 
-  const res = await fetch(OPENAI_CHAT_URL, {
+  const res = await fetchWithTimeout(OPENAI_CHAT_URL, {
     method: "POST",
+    timeoutMs: OPENAI_TIMEOUT_MS,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,

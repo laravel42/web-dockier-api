@@ -122,7 +122,6 @@ export class GcpClient {
         Authorization: `Bearer ${this.accessToken}`,
         ...headers,
       },
-      signal: AbortSignal.timeout(timeout),
     };
 
     if (body) {
@@ -148,7 +147,10 @@ export class GcpClient {
     try {
       return await withRetry<Response>(
         async () => {
-          const res = await fetch(url, init);
+          // Signal built per attempt: a single one hoisted out of this closure
+          // is already aborted once the first attempt times out, so every
+          // retry then failed instantly with AbortError instead of retrying.
+          const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeout) });
 
           // Don't retry client errors (except 429) — let the caller handle 4xx.
           if (!res.ok && res.status !== 429 && res.status < 500) {
