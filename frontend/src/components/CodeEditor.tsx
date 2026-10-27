@@ -3,6 +3,7 @@ import { EditorView, basicSetup } from "codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorState, Compartment, type Extension } from "@codemirror/state";
 import { StreamLanguage } from "@codemirror/language";
+import { useIsDarkMode } from "../hooks/useIsDarkMode";
 // ─── Language modes ────────────────────────────────────────────────
 /** Minimal .env / properties language definition */
 const envLang = StreamLanguage.define({
@@ -101,6 +102,10 @@ export default function CodeEditor({ value, onChange, height = "140px", placehol
   onChangeRef.current = onChange;
   const heightCompartment = useRef(new Compartment());
   const readOnlyCompartment = useRef(new Compartment());
+  const themeCompartment = useRef(new Compartment());
+  // `oneDark` used to be unconditional, so the editor stayed dark on the light
+  // theme. Dropping it falls back to basicSetup's own light highlighting.
+  const dark = useIsDarkMode();
   useEffect(() => {
     if (!containerRef.current) return;
     const state = EditorState.create({
@@ -108,7 +113,7 @@ export default function CodeEditor({ value, onChange, height = "140px", placehol
       extensions: [
         basicSetup,
         LANGUAGES[language].parser,
-        oneDark,
+        themeCompartment.current.of(dark ? oneDark : []),
         heightCompartment.current.of(editorTheme(language, height)),
         readOnlyCompartment.current.of(EditorState.readOnly.of(readOnly)),
         ...(placeholder ? [EditorView.contentAttributes.of({ "aria-placeholder": placeholder })] : []),
@@ -144,5 +149,12 @@ export default function CodeEditor({ value, onChange, height = "140px", placehol
       effects: readOnlyCompartment.current.reconfigure(EditorState.readOnly.of(readOnly)),
     });
   }, [readOnly]);
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: themeCompartment.current.reconfigure(dark ? oneDark : []),
+    });
+  }, [dark]);
   return <div ref={containerRef} className="rounded-lg overflow-hidden border border-border" />;
 }
