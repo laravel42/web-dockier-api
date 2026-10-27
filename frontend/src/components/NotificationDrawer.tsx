@@ -144,7 +144,13 @@ export default function NotificationDrawer({ open, onOpenChange }: NotificationD
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
+      {/*
+        The title names this drawer and the list speaks for itself, so there is
+        no description to give. Radix points `aria-describedby` at an id it
+        expects a <DrawerDescription> to own; left at its default it is a
+        dangling IDREF, hence the explicit undefined.
+      */}
+      <DrawerContent aria-describedby={undefined}>
         <DrawerHeader>
           <DrawerTitle>Notifications</DrawerTitle>
         </DrawerHeader>
