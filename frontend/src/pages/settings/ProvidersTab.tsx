@@ -6,7 +6,7 @@ import SettingsModalFooter from "@/components/SettingsModalFooter";
 import ConfirmModal from "@/components/ConfirmModal";
 import ProviderBadge from "@/components/ProviderBadge";
 import { getProviderStyle } from "@/data/providers";
-import { SearchableCombobox } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/Combobox";
 import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -141,7 +141,7 @@ export default function ProvidersTab() {
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="provider-type" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
-            <SearchableCombobox
+            <Combobox
               id="provider-type"
               value={addProviderKind}
               onValueChange={(provider) => setAddProviderKind(provider as ProviderKind)}

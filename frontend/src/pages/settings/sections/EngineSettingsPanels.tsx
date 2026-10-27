@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import { sastApi } from "@/services/api";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
@@ -649,6 +649,7 @@ export function SemgrepSettingsPanel() {
   const [form, setForm] = useState<SemgrepSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
+  const fid = useId();
 
   useEffect(() => { if (settings) setForm(settings.semgrep); }, [settings]);
   const dirty = !!form && !!settings && JSON.stringify(form) !== JSON.stringify(settings.semgrep);
@@ -683,8 +684,9 @@ export function SemgrepSettingsPanel() {
         <ToggleSwitch checked={form.enabled} onChange={(v) => set("enabled", v)} ariaLabel="Enable Semgrep" />
       </div>
 
-      <SettingsField label="Per-rule timeout">
+      <SettingsField id={`${fid}-rule-timeout`} label="Per-rule timeout">
         <Input
+          id={`${fid}-rule-timeout`}
           type="number" min={5} max={600} className="max-w-40"
           value={form.ruleTimeoutSeconds}
           onChange={(e) => set("ruleTimeoutSeconds", Number(e.target.value))}
@@ -695,8 +697,9 @@ export function SemgrepSettingsPanel() {
         </p>
       </SettingsField>
 
-      <SettingsField label="Whole-scan timeout">
+      <SettingsField id={`${fid}-scan-timeout`} label="Whole-scan timeout">
         <Input
+          id={`${fid}-scan-timeout`}
           type="number" min={60} max={21600} className="max-w-40"
           value={form.scanTimeoutSeconds}
           onChange={(e) => set("scanTimeoutSeconds", Number(e.target.value))}
@@ -706,8 +709,9 @@ export function SemgrepSettingsPanel() {
         </p>
       </SettingsField>
 
-      <SettingsField label="Maximum file size">
+      <SettingsField id={`${fid}-max-target-bytes`} label="Maximum file size">
         <Input
+          id={`${fid}-max-target-bytes`}
           type="number" min={10000} max={50000000} className="max-w-52"
           value={form.maxTargetBytes}
           onChange={(e) => set("maxTargetBytes", Number(e.target.value))}
@@ -737,6 +741,7 @@ export function CustomRulesSettingsPanel() {
   const [form, setForm] = useState<RegexSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
+  const fid = useId();
 
   useEffect(() => { if (settings) setForm(settings.regex); }, [settings]);
   const dirty = !!form && !!settings && JSON.stringify(form) !== JSON.stringify(settings.regex);
@@ -793,8 +798,9 @@ export function CustomRulesSettingsPanel() {
         </div>
       </div>
 
-      <SettingsField label="Maximum file size">
+      <SettingsField id={`${fid}-max-file-bytes`} label="Maximum file size">
         <Input
+          id={`${fid}-max-file-bytes`}
           type="number" min={10000} max={50000000} className="max-w-52"
           value={form.maxFileBytes}
           onChange={(e) => set("maxFileBytes", Number(e.target.value))}

@@ -1,5 +1,6 @@
-import SearchSelect from "./ui/SearchSelect";
+import { Combobox } from "./ui/Combobox";
 import SourceControlBadge, { getSourceControl } from "./SourceControlBadge";
+import Spinner from "./Spinner";
 import type { Connection } from "../types";
 
 interface Props {
@@ -12,28 +13,50 @@ interface Props {
 }
 
 export default function SourceControlSelect({ value, onChange, connections, loading, labelledBy }: Props) {
-  return (
-    <SearchSelect
-      value={value}
-      onChange={onChange}
-      items={connections}
-      getValue={(c) => c.id}
-      renderItem={(c) => (
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-2 text-sm text-text-muted">
+        <Spinner className="size-4" />
+        Loading…
+      </div>
+    );
+  }
+
+  if (connections.length === 0) {
+    return (
+      <p className="py-2 text-sm text-text-muted">
+        No git connections found. Add one in Settings → Git Integration.
+      </p>
+    );
+  }
+
+  const options = connections.map((connection) => {
+    const provider = getSourceControl(connection.provider);
+    const label = `${connection.label} (${provider.name})`;
+    return {
+      value: connection.id,
+      label,
+      // Matches on the provider name as well as the connection label.
+      keywords: [connection.id, provider.name],
+      content: (
         <>
-          <SourceControlBadge provider={c.provider} showName={false} />
-          <span className="truncate">{c.label} ({getSourceControl(c.provider).name})</span>
+          <SourceControlBadge provider={connection.provider} showName={false} />
+          <span className="truncate">{label}</span>
         </>
-      )}
-      matches={(c, q) =>
-        c.label.toLowerCase().includes(q) || (getSourceControl(c.provider)?.name.toLowerCase().includes(q) ?? false)
-      }
+      ),
+    };
+  });
+
+  return (
+    <Combobox
+      value={value}
+      onValueChange={onChange}
+      options={options}
       placeholder="Select a source control…"
-      listLabel="Source control connections"
       searchPlaceholder="Search connections…"
-      labelledBy={labelledBy}
-      loading={loading}
-      emptyMessage="No git connections found. Add one in Settings → Git Integration."
-      noMatchLabel={() => "No connections found"}
+      emptyMessage="No connections found"
+      aria-labelledby={labelledBy}
+      aria-label="Source control connection"
     />
   );
 }

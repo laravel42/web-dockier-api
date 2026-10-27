@@ -4,6 +4,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import Modal from "../components/Modal";
+import { SettingsField } from "../components/SettingsField";
+import { Input } from "../components/ui/input";
+import { Combobox } from "../components/ui/Combobox";
 import { clickableProps } from "../utils/a11y";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { panelId, tabId, useTabListKeyboard } from "../hooks/useTabListKeyboard";
@@ -207,5 +210,47 @@ describe("Modal", () => {
       await user.tab();
       expect(dialog).toContainElement(document.activeElement as HTMLElement);
     }
+  });
+});
+
+describe("SettingsField", () => {
+  // The bug: most call sites rendered <SettingsField label="Role"> with no
+  // `id`, so the <label> carried htmlFor={undefined} and named nothing. The
+  // settings forms looked labelled and announced as bare, unnamed controls.
+  it("names a text input that shares its id", () => {
+    render(
+      <SettingsField id="tz" label="Timezone">
+        <Input id="tz" type="text" />
+      </SettingsField>,
+    );
+    expect(screen.getByRole("textbox", { name: "Timezone" })).toBeInTheDocument();
+  });
+
+  it("names a combobox trigger that shares its id", () => {
+    render(
+      <SettingsField id="role" label="Role">
+        <Combobox
+          id="role"
+          value=""
+          onValueChange={vi.fn()}
+          options={[{ value: "admin", label: "Admin" }]}
+          placeholder="Select role…"
+        />
+      </SettingsField>,
+    );
+    expect(screen.getByRole("combobox", { name: "Role" })).toBeInTheDocument();
+  });
+
+  // `requiredMark` is documented as "purely visual", but the asterisk is inside
+  // the <label> and lands in the computed name as "Name*". Left as is: it is a
+  // garbled required hint, and removing it without adding `aria-required` to
+  // every wrapped control would leave a screen-reader user with no hint at all.
+  it("folds the required asterisk into the accessible name", () => {
+    render(
+      <SettingsField id="name" label="Name" requiredMark>
+        <Input id="name" type="text" />
+      </SettingsField>,
+    );
+    expect(screen.getByRole("textbox", { name: "Name*" })).toBeInTheDocument();
   });
 });

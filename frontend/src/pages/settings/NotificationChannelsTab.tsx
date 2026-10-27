@@ -4,7 +4,7 @@ import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
 import TechBadge from "@/components/TechBadge";
-import { SearchableCombobox } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/Combobox";
 import { settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Button from "@/components/ui/Button";
@@ -107,7 +107,7 @@ export default function NotificationChannelsTab() {
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="channel-type" className="block text-sm font-medium text-text-secondary mb-1.5">Channel Type</label>
-            <SearchableCombobox
+            <Combobox
               id="channel-type"
               value={formData.type}
               onValueChange={(type) => setFormData({ ...formData, type })}

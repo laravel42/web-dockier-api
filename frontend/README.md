@@ -87,7 +87,7 @@ pnpm ui:add @shadcnblocks/hero125         # pro block (valid API key required)
 | Path | Purpose |
 | ---- | ------- |
 | `src/components/ui/input.tsx` | Base shadcn `Input` primitive |
-| `src/components/ui/combobox.tsx` | Searchable combobox (popover + command filter) |
+| `src/components/ui/Combobox.tsx` | Searchable combobox (popover + command filter) |
 | `src/components/ui/field.tsx` | shadcn `Field` layout (label, description, error) |
 | `src/components/ui/label.tsx` | Base shadcn `Label` primitive |
 | `src/components/ui/fields/` | Field compositions — `InputField`, `ComboboxField`, `PasswordInput`, `SearchInput` |

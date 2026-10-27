@@ -4,7 +4,7 @@ import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
 import SourceControlBadge, { getSourceControl } from "@/components/SourceControlBadge";
-import { SearchableCombobox } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/Combobox";
 import { settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Button from "@/components/ui/Button";
@@ -98,7 +98,7 @@ export default function SourceControlTab() {
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label htmlFor="git-provider" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
-            <SearchableCombobox
+            <Combobox
               id="git-provider"
               value={form.provider}
               onValueChange={(provider) => setForm({ ...form, provider })}

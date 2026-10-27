@@ -4,7 +4,7 @@ import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
 import { SettingsField, SettingsTextField } from "@/components/SettingsField";
-import ComboBox from "@/components/ComboBox";
+import { Combobox } from "@/components/ui/Combobox";
 import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Button from "@/components/ui/Button";
@@ -19,6 +19,12 @@ import { usePermissions } from "@/context/PermissionsContext";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { CheckIcon, ClipboardIcon, EyeIcon, EyeOffIcon, UserRoundPlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
+
+const LANGUAGE_OPTIONS = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Spanish" },
+  { value: "it", label: "Italian" },
+];
 
 interface UserItem {
   id: string;
@@ -139,6 +145,13 @@ export default function UsersTab() {
     "Pacific/Auckland": "NZ", "Africa/Johannesburg": "ZA", "Africa/Lagos": "NG",
     "Africa/Cairo": "EG",
   };
+
+  // Built once instead of inline in each of the four pickers that need it.
+  const timezoneOptions = Object.keys(tzToCountry)
+    .filter((tz) => tz !== "UTC")
+    .concat(["UTC"])
+    .sort((a, b) => a.localeCompare(b))
+    .map((tz) => ({ value: tz, label: tz.replace(/_/g, " ") }));
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -344,28 +357,34 @@ export default function UsersTab() {
               </div>
             )}
           </div>
-          <SettingsField label="Role" requiredMark>
-            <ComboBox
+          <SettingsField id={`${fid}-invite-role`} label="Role" requiredMark>
+            <Combobox
+              id={`${fid}-invite-role`}
               value={inviteForm.roleId}
-              onChange={v => setInviteForm(f => ({ ...f, roleId: v }))}
+              onValueChange={v => setInviteForm(f => ({ ...f, roleId: v }))}
               options={roles.map(r => ({ value: r.id, label: r.name }))}
               placeholder="Select role…"
+              searchPlaceholder="Search roles…"
             />
           </SettingsField>
-          <SettingsField label="Language" requiredMark>
-            <ComboBox
+          <SettingsField id={`${fid}-invite-language`} label="Language" requiredMark>
+            <Combobox
+              id={`${fid}-invite-language`}
               value={inviteForm.language}
-              onChange={v => setInviteForm(f => ({ ...f, language: v }))}
-              options={[["en","English"],["es","Spanish"],["it","Italian"]].map(([code, name]) => ({ value: code, label: name }))}
+              onValueChange={v => setInviteForm(f => ({ ...f, language: v }))}
+              options={LANGUAGE_OPTIONS}
               placeholder="Select language…"
+              searchPlaceholder="Search languages…"
             />
           </SettingsField>
-          <SettingsField label="Timezone" requiredMark>
-            <ComboBox
+          <SettingsField id={`${fid}-invite-timezone`} label="Timezone" requiredMark>
+            <Combobox
+              id={`${fid}-invite-timezone`}
               value={inviteForm.timezone}
-              onChange={v => setInviteForm(f => ({ ...f, timezone: v }))}
-              options={Object.keys(tzToCountry).filter(tz => tz !== "UTC").concat(["UTC"]).sort((a, b) => a.localeCompare(b)).map(tz => ({ value: tz, label: tz.replace(/_/g, " ") }))}
+              onValueChange={v => setInviteForm(f => ({ ...f, timezone: v }))}
+              options={timezoneOptions}
               placeholder="Select timezone…"
+              searchPlaceholder="Search timezones…"
             />
           </SettingsField>
           {inviteError && <Alert variant="error">{inviteError}</Alert>}
@@ -380,12 +399,14 @@ export default function UsersTab() {
         <div className="space-y-4">
           <SettingsTextField id="edit-email" label="Email" type="text" value={editUser?.email || ""} readOnly className="bg-secondary-50 text-text-muted cursor-default" />
           <SettingsTextField id="edit-name" label="Name" requiredMark type="text" value={editName} onChange={e => setEditName(e.target.value)} />
-          <SettingsField label="Role" requiredMark>
-            <ComboBox
+          <SettingsField id={`${fid}-edit-role`} label="Role" requiredMark>
+            <Combobox
+              id={`${fid}-edit-role`}
               value={editRoleId}
-              onChange={v => setEditRoleId(v)}
+              onValueChange={v => setEditRoleId(v)}
               options={roles.map(r => ({ value: r.id, label: r.name }))}
               placeholder="Select role…"
+              searchPlaceholder="Search roles…"
             />
             {editRoleId && (() => {
               const role = roles.find(r => r.id === editRoleId);
@@ -399,20 +420,24 @@ export default function UsersTab() {
               );
             })()}
           </SettingsField>
-          <SettingsField label="Language" requiredMark>
-            <ComboBox
+          <SettingsField id={`${fid}-edit-language`} label="Language" requiredMark>
+            <Combobox
+              id={`${fid}-edit-language`}
               value={editLanguage}
-              onChange={v => setEditLanguage(v)}
-              options={[["en","English"],["es","Spanish"],["it","Italian"]].map(([code, name]) => ({ value: code, label: name }))}
+              onValueChange={v => setEditLanguage(v)}
+              options={LANGUAGE_OPTIONS}
               placeholder="Select language…"
+              searchPlaceholder="Search languages…"
             />
           </SettingsField>
-          <SettingsField label="Timezone" requiredMark>
-            <ComboBox
+          <SettingsField id={`${fid}-edit-timezone`} label="Timezone" requiredMark>
+            <Combobox
+              id={`${fid}-edit-timezone`}
               value={editTimezone}
-              onChange={v => setEditTimezone(v)}
-              options={Object.keys(tzToCountry).filter(tz => tz !== "UTC").concat(["UTC"]).sort((a, b) => a.localeCompare(b)).map(tz => ({ value: tz, label: tz.replace(/_/g, " ") }))}
+              onValueChange={v => setEditTimezone(v)}
+              options={timezoneOptions}
               placeholder="Select timezone…"
+              searchPlaceholder="Search timezones…"
             />
           </SettingsField>
           <SettingsModalFooter

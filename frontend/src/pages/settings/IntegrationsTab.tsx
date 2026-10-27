@@ -6,7 +6,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
 import { SettingsField } from "@/components/SettingsField";
 import TechBadge from "@/components/TechBadge";
-import { SearchableCombobox } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/Combobox";
 import { settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Button from "@/components/ui/Button";
@@ -268,7 +268,7 @@ export default function IntegrationsTab() {
                     placeholder={f.placeholder}
                   />
                 ) : Array.isArray(f.options) ? (
-                  <SearchableCombobox
+                  <Combobox
                     id={`int-${f.key}`}
                     value={formConfig[f.key] || f.options[0]?.value || ""}
                     onValueChange={(v) => setFormConfig({ ...formConfig, [f.key]: v })}
@@ -359,7 +359,7 @@ export default function IntegrationsTab() {
                         placeholder={f.placeholder}
                       />
                     ) : Array.isArray(f.options) ? (
-                      <SearchableCombobox
+                      <Combobox
                         id={`edit-int-${f.key}`}
                         value={editConfig[f.key] || f.options[0]?.value || ""}
                         onValueChange={(v) => setEditConfig({ ...editConfig, [f.key]: v })}

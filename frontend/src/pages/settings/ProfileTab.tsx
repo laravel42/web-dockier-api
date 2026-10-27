@@ -3,7 +3,7 @@ import { usersApi, authApi, billingApi } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
 import { countries } from "@/data/countries";
-import { SearchableCombobox } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/Combobox";
 import { SettingsField, SettingsTextField } from "@/components/SettingsField";
 import Button from "@/components/ui/Button";
 import PageLoading from "@/components/ui/PageLoading";
@@ -176,7 +176,7 @@ export default function ProfileTab() {
               <SettingsTextField id="profile-name" label="Name" type="text" value={name} onChange={(e) => setName(e.target.value)} required />
               <SettingsTextField id="profile-email" label="Email" type="email" value={email} className="bg-secondary-50 text-text-muted cursor-not-allowed" readOnly />
               <SettingsField id="profile-country" label="Country">
-                <SearchableCombobox
+                <Combobox
                   id="profile-country"
                   value={country}
                   onValueChange={setCountry}
@@ -186,7 +186,7 @@ export default function ProfileTab() {
                 />
               </SettingsField>
               <SettingsField id="profile-language" label="Language">
-                <SearchableCombobox
+                <Combobox
                   id="profile-language"
                   value={language}
                   onValueChange={setLanguage}
@@ -196,7 +196,7 @@ export default function ProfileTab() {
                 />
               </SettingsField>
               <SettingsField id="profile-timezone" label="Timezone" className="sm:col-span-2">
-                <SearchableCombobox
+                <Combobox
                   id="profile-timezone"
                   value={timezone}
                   onValueChange={setTimezone}
@@ -304,7 +304,7 @@ export default function ProfileTab() {
                       disabled={!canManageBilling}
                     />
                     <SettingsField id="billing-country" label="Country">
-                      <SearchableCombobox
+                      <Combobox
                         id="billing-country"
                         value={billing.country}
                         onValueChange={(value) => setBilling((b) => ({ ...b, country: value }))}

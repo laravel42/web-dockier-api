@@ -1,6 +1,6 @@
 import { useId } from "react";
 import Modal from "@/components/Modal";
-import { SearchableCombobox } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/Combobox";
 import Button from "@/components/ui/Button";
 import type { Finding, RepoMember, FixResult } from "@/types";
 import { CircleCheckIcon, ExternalLinkIcon } from "lucide-react";
@@ -78,7 +78,7 @@ export default function FixWithAIModal({
           </div>
           <div>
             <span id={`${fid}-assignee`} className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</span>
-            <SearchableCombobox aria-labelledby={`${fid}-assignee`}
+            <Combobox aria-labelledby={`${fid}-assignee`}
               value={mrAssignee}
               onValueChange={onAssigneeChange}
               options={repoMembers.map((m) => ({
@@ -92,7 +92,7 @@ export default function FixWithAIModal({
           </div>
           <div>
             <span id={`${fid}-reviewer`} className="block text-sm font-medium text-text-secondary mb-1.5">Reviewer</span>
-            <SearchableCombobox aria-labelledby={`${fid}-reviewer`}
+            <Combobox aria-labelledby={`${fid}-reviewer`}
               value={mrReviewer}
               onValueChange={onReviewerChange}
               options={repoMembers.map((m) => ({

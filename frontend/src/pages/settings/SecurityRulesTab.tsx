@@ -5,7 +5,7 @@ import { getErrorMessage } from "@/utils/errors";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import TechBadge from "@/components/TechBadge";
-import { SearchableCombobox } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/Combobox";
 import { SettingsField, SettingsTextField } from "@/components/SettingsField";
 import { segmentActiveCls, segmentIdleCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
@@ -360,8 +360,9 @@ function CustomRulesPanel({
           <Modal open={showForm} onClose={onCloseForm} title={editingRule ? "Edit Rule" : "Add Custom Rule"}>
             <form onSubmit={onSave} className="space-y-4">
               <SettingsTextField id="rule-id" label="Rule ID" type="text" value={form.ruleId} onChange={e => onFormChange({ ...form, ruleId: e.target.value })} placeholder="custom.category.name" required />
-              <SettingsField label="Severity">
-                <SearchableCombobox
+              <SettingsField id="rule-severity" label="Severity">
+                <Combobox
+                  id="rule-severity"
                   value={form.severity}
                   onValueChange={(severity) => onFormChange({ ...form, severity })}
                   options={[
@@ -373,8 +374,8 @@ function CustomRulesPanel({
                 />
               </SettingsField>
               <SettingsTextField id="rule-message" label="Message" type="text" value={form.message} onChange={e => onFormChange({ ...form, message: e.target.value })} placeholder="Description of the vulnerability" required />
-              <SettingsField label="Regex Pattern">
-                <Input type="text" value={form.pattern} onChange={e => onFormChange({ ...form, pattern: e.target.value })} className="font-mono text-xs" placeholder="\beval\s*\(" required />
+              <SettingsField id="rule-pattern" label="Regex Pattern">
+                <Input id="rule-pattern" type="text" value={form.pattern} onChange={e => onFormChange({ ...form, pattern: e.target.value })} className="font-mono text-xs" placeholder="\beval\s*\(" required />
                 <p className="text-xs text-text-muted mt-1">JavaScript regex syntax (flags gi applied automatically)</p>
               </SettingsField>
               <SettingsField label="File Extensions">

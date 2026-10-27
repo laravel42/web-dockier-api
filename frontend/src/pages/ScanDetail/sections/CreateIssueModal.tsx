@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { PMIntegration, PMTeam, PMMember } from "@/types";
 import Spinner from "@/components/Spinner";
-import { SearchableCombobox } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/Combobox";
 import { CircleCheckIcon, ExternalLinkIcon } from "lucide-react";
 
 interface Props {
@@ -83,7 +83,7 @@ export default function CreateIssueModal({
           {pmIntegrations.length > 1 && (
             <div>
               <label htmlFor="issue-integration" className="block text-sm font-medium text-text-secondary mb-1.5">Integration</label>
-              <SearchableCombobox
+              <Combobox
                 id="issue-integration"
                 value={issueIntegration}
                 onValueChange={onIntegrationChange}
@@ -115,7 +115,7 @@ export default function CreateIssueModal({
                 <span className="text-sm text-text-muted">Fetching {pmTeamLabel.toLowerCase()}s…</span>
               </div>
             ) : pmProjects.length > 0 ? (
-              <SearchableCombobox
+              <Combobox
                 id="issue-pm-team"
                 value={selectedPmProject}
                 onValueChange={onTeamChange}
@@ -145,7 +145,7 @@ export default function CreateIssueModal({
                   <span className="text-sm text-text-muted">Fetching {pmProjectLabel.toLowerCase()}s…</span>
                 </div>
               ) : pmSubProjects.length > 0 ? (
-                <SearchableCombobox
+                <Combobox
                   id="issue-pm-project"
                   value={selectedPmSubProject}
                   onValueChange={onSubProjectChange}
@@ -182,7 +182,7 @@ export default function CreateIssueModal({
           {pmMembers.length > 0 && (
             <div>
               <span id={`${fid}-assignee`} className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</span>
-              <SearchableCombobox aria-labelledby={`${fid}-assignee`}
+              <Combobox aria-labelledby={`${fid}-assignee`}
                 value={selectedPmAssignee}
                 onValueChange={onAssigneeChange}
                 options={pmMembers.map((m) => ({
@@ -199,7 +199,7 @@ export default function CreateIssueModal({
           {pmIntegrations.length === 0 && gitMembers && gitMembers.length > 0 && onGitAssigneeChange && (
             <div>
               <span id={`${fid}-git-assignee`} className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</span>
-              <SearchableCombobox
+              <Combobox
                 aria-labelledby={`${fid}-git-assignee`}
                 value={selectedGitAssignee || ""}
                 onValueChange={onGitAssigneeChange}

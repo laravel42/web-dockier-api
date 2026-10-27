@@ -1,4 +1,5 @@
-import SearchSelect from "./ui/SearchSelect";
+import { Combobox } from "./ui/Combobox";
+import Spinner from "./Spinner";
 import type { Repo } from "../types";
 import { ArchiveIcon, LockIcon, RefreshCwIcon } from "lucide-react";
 
@@ -23,38 +24,59 @@ interface Props {
   hasMore?: boolean;
 }
 
+function repoOption(repo: Repo) {
+  return {
+    value: repo.fullName,
+    label: repo.fullName,
+    content: (
+      <>
+        <ArchiveIcon className="size-4 shrink-0 text-text-muted" />
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate">{repo.fullName}</span>
+          {repo.private && <LockIcon className="size-3.5 shrink-0" aria-label="Private" />}
+        </div>
+      </>
+    ),
+  };
+}
+
 export default function RepoSelect({ value, onChange, repos, loading, onRefresh, refreshing, labelledBy, onSearch, searching, hasMore }: Props) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-2 text-sm text-text-muted">
+        <Spinner className="size-4" />
+        Loading…
+      </div>
+    );
+  }
+
+  // Only collapse to a bare message when there is no way to search. With server
+  // search the control must stay mounted, otherwise a zero-result search would
+  // unmount the search input and strand the user.
+  if (repos.length === 0 && !onSearch && !searching) {
+    return <p className="py-2 text-sm text-text-muted">No repositories found for this connection.</p>;
+  }
+
   return (
-    <SearchSelect
-      value={value}
-      onChange={onChange}
-      items={repos}
-      getValue={(r) => r.fullName}
-      renderItem={(r) => (
-        <>
-          <ArchiveIcon className="size-4 shrink-0 text-text-muted" />
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate">{r.fullName}</span>
-            {r.private && <LockIcon className="size-3.5 shrink-0" aria-label="Private" />}
+    <div className={onRefresh ? "flex gap-1.5" : undefined}>
+      <Combobox
+        value={value}
+        onValueChange={onChange}
+        options={repos.map(repoOption)}
+        placeholder="Select a repository…"
+        searchPlaceholder="Search repositories…"
+        emptyMessage="No repositories match that term. Try a different one."
+        aria-labelledby={labelledBy}
+        aria-label="Repository"
+        onSearch={onSearch}
+        searching={searching}
+        footer={(query) => (onSearch && hasMore && !query ? (
+          <div className="border-t border-border px-3 py-2 text-xs text-text-muted">
+            Showing your most recent repositories — type to search the rest.
           </div>
-        </>
-      )}
-      matches={(r, q) => r.fullName.toLowerCase().includes(q)}
-      placeholder="Select a repository…"
-      listLabel="Repositories"
-      searchPlaceholder="Search repositories…"
-      labelledBy={labelledBy}
-      loading={loading}
-      loadingLabel="Loading…"
-      emptyMessage="No repositories found for this connection."
-      noMatchLabel={(query) =>
-        query
-          ? `No repositories match "${query}". Try a different term.`
-          : "No repositories found for this connection."
-      }
-      onSearch={onSearch}
-      searching={searching}
-      adornment={onRefresh ? (
+        ) : null)}
+      />
+      {onRefresh && (
         <button
           type="button"
           onClick={onRefresh}
@@ -64,12 +86,7 @@ export default function RepoSelect({ value, onChange, repos, loading, onRefresh,
         >
           <RefreshCwIcon className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
         </button>
-      ) : undefined}
-      footer={(query) => (onSearch && hasMore && !query ? (
-        <div className="border-t border-border px-3 py-2 text-xs text-text-muted">
-          Showing your most recent repositories — type to search the rest.
-        </div>
-      ) : null)}
-    />
+      )}
+    </div>
   );
 }
