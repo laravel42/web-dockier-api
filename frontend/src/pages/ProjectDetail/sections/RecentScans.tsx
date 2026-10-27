@@ -1,6 +1,7 @@
 import type { Scan } from "@/types";
 import { cardCls, typeCardDateCls } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
+import { dayLabel } from "@/utils/timeAgo";
 import SeverityBadge from "@/components/SeverityBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
@@ -17,16 +18,6 @@ interface Props {
   /** Non-empty when the fetch failed — never conflated with "no scans". */
   error?: string;
   onRetry?: () => void;
-}
-
-function dayLabel(dateStr: string): string {
-  const date = new Date(dateStr);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return "Today";
-  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 type TimelineRow =

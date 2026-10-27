@@ -116,6 +116,9 @@ export default function SecurityRulesTab() {
     try { const res = await codeAnalysisApi.listCustomRules(); setRules(res.rules); }
     catch (err) { toast.error(getErrorMessage(err, "Failed to load custom rules")); } finally { setLoading(false); }
   };
+  // Mount-only: fetchRules is redeclared every render, so listing it would
+  // refetch the rules on each one.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchRules(); }, []);
 
   const openAdd = () => {

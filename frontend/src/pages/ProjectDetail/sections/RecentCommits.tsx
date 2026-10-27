@@ -1,6 +1,6 @@
 import type { CommitInfo } from "@/types";
 import { cardCls } from "@/utils/styles";
-import { timeAgo } from "@/utils/timeAgo";
+import { dayLabel, timeAgo } from "@/utils/timeAgo";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/ui/EmptyState";
 import { TabPanelSectionTitle } from "@/components/TabPanelHeader";
@@ -9,16 +9,6 @@ interface Props {
   commits: CommitInfo[];
   commitsLoading: boolean;
   commitsError: string;
-}
-
-function dayLabel(dateStr: string): string {
-  const date = new Date(dateStr);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return "Today";
-  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 type TimelineRow =

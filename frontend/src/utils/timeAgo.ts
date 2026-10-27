@@ -58,3 +58,22 @@ export function timeAgo(dateStr: string): string {
   const months = Math.floor(days / 30);
   return `${months}mo ago`;
 }
+
+/**
+ * Day heading for a grouped timeline: "Today", "Yesterday", or an absolute date.
+ *
+ * Moved here verbatim from the three ProjectDetail timelines (RecentDeploys,
+ * RecentScans, RecentCommits) that each carried an identical copy. Still uses a
+ * raw `new Date()` rather than `parseApiTimestamp` above, matching what those
+ * copies did — switching it changes which bucket a timestamp lands in, so it is
+ * a behaviour change and not part of this extraction.
+ */
+export function dayLabel(dateStr: string): string {
+  const date = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return "Today";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}

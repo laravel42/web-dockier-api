@@ -123,6 +123,10 @@ export function useDeployDetail() {
         pollRef.current = null;
       }
     };
+    // Only `deploy.status` may restart the poll loop: each poll calls setDeploy
+    // with a fresh object, so depending on `deploy` would tear down and restart
+    // the loop on every response.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deploy?.status, deployId, refreshAllDeploys]);
 
   const openDeployWizard = useCallback(() => {

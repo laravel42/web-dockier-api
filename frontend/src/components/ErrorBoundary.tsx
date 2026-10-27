@@ -20,6 +20,12 @@ export default class ErrorBoundary extends React.Component<
     return { hasError: true, message: error.message || "An unexpected error occurred." };
   }
 
+  // Without this the boundary swallows the error: React only logs an uncaught
+  // render error when nothing catches it.
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("Render error caught by ErrorBoundary:", error, info.componentStack);
+  }
+
   render() {
     if (this.state.hasError) {
       return (

@@ -1,6 +1,7 @@
 import type { Deployment as DeployInfo, Provider as ProviderInfo } from "@/types";
 import { cardCls, typeCardDateCls } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
+import { dayLabel } from "@/utils/timeAgo";
 import { getDeployServiceLabel } from "@/utils/deployService";
 import { getProviderStyle } from "@/data/providers";
 import ProviderBadge from "@/components/ProviderBadge";
@@ -18,16 +19,6 @@ interface Props {
   onRetry?: () => void;
   /** Opens the deploy wizard from the empty state. */
   onDeploy?: () => void;
-}
-
-function dayLabel(dateStr: string): string {
-  const date = new Date(dateStr);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return "Today";
-  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 type TimelineRow =

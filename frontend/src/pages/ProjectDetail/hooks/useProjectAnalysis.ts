@@ -57,6 +57,10 @@ export function useProjectAnalysis(project: Project | null) {
         .catch((err: unknown) => setAnalysisError(getErrorMessage(err, "Failed to analyze repo")))
         .finally(() => setAnalysisLoading(false));
     }
+    // Fields, not the whole `project`: the parent hands down a new object on
+    // every refresh, and depending on it would re-fire the paid OpenAI analysis
+    // for changes that cannot affect its result.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id, project?.connectionId, project?.repository, project?.branch, project?.sourceType, project?.template]);
 
   const refreshAnalysis = async () => {

@@ -6,6 +6,7 @@ import { PermissionsProvider } from "./context/PermissionsContext";
 import { ToastProvider } from "./context/ToastContext";
 import { ScanProgressProvider } from "./context/ScanProgressContext";
 import SessionHandler from "./components/SessionHandler";
+import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
 import PermissionRoute from "./components/PermissionRoute";
 import PageLoading from "./components/ui/PageLoading";
@@ -31,6 +32,12 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
 export default function App() {
   return (
+    // Outermost on purpose: the boundary inside Layout only covers the
+    // protected routes, so a render error on /login, /register or the OAuth
+    // callback used to leave a blank page with no way out. Placing it above the
+    // providers also catches a crash in one of them. Its fallback depends on no
+    // context — the theme comes from data-theme on <html>.
+    <ErrorBoundary>
     <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
@@ -105,5 +112,6 @@ export default function App() {
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
+    </ErrorBoundary>
   );
 }
