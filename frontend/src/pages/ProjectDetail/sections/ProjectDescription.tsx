@@ -13,6 +13,7 @@ import type { Deployment } from "@/types";
 import { cardCls, segmentActiveCls, segmentIdleCls } from "@/utils/styles";
 import SensitivityBadge, { getSensitivityStyle } from "@/components/badges/SensitivityBadge";
 import { gitApi } from "@/services/api";
+import { parseSqlSchema } from "@/utils/sqlSensitivity";
 import type { Project } from "@/types";
 import ProjectCommandsTab from "./ProjectCommandsTab";
 import ProjectProcessesTab from "./ProjectProcessesTab";
@@ -151,140 +152,6 @@ function isMainTabVisible(
       return false;
   }
 }
-
-// ─── SQL Schema Parser ───
-
-const FRAMEWORK_TABLES = new Set([
-  "migrations", "jobs", "failed_jobs", "sessions", "cache", "cache_locks",
-  "password_resets", "password_reset_tokens", "personal_access_tokens",
-  "oauth_access_tokens", "oauth_auth_codes", "oauth_clients",
-  "oauth_personal_access_clients", "oauth_refresh_tokens",
-  "telescope_entries", "telescope_entries_tags", "telescope_monitoring",
-  "pulse_aggregates", "pulse_entries", "pulse_values",
-  "notifications", "job_batches",
-]);
-
-const SKIP_FIELDS = new Set([
-  "id", "uuid", "ulid", "created_at", "updated_at", "deleted_at",
-  "remember_token", "email_verified_at",
-]);
-
-/** One-way password hashes — storing these does not expose recoverable credentials. */
-const HASHED_CREDENTIAL_FIELDS =
-  /^(password|passwd|passphrase|encrypted_password|password_hash|hashed_password|password_digest|passwd_hash|pass_hash|bcrypt)$/i;
-
-const PLAINTEXT_CREDENTIAL_FIELDS =
-  /plain(_)?password|password_(plain|raw|cleartext)|raw_password|cleartext_password/i;
-
-type SensitivityLevel = "personal" | "sensitive" | "secret";
-
-const FIELD_PATTERNS: Array<{ pattern: RegExp; sensitivity: SensitivityLevel; reason: string }> = [
-  // Secret (plaintext / recoverable credentials only — hashed passwords are excluded above)
-  { pattern: /plain(_)?password|password_(plain|raw|cleartext)|raw_password|cleartext_password/i, sensitivity: "secret", reason: "Plaintext credential storage" },
-  { pattern: /secret/i,          sensitivity: "secret",    reason: "Secret value" },
-  { pattern: /token/i,           sensitivity: "secret",    reason: "Authentication token" },
-  { pattern: /api_key/i,         sensitivity: "secret",    reason: "API key" },
-  { pattern: /private_key/i,     sensitivity: "secret",    reason: "Private key" },
-  { pattern: /access_key/i,      sensitivity: "secret",    reason: "Access key" },
-  { pattern: /secret_key/i,      sensitivity: "secret",    reason: "Secret key" },
-  { pattern: /encryption_key/i,  sensitivity: "secret",    reason: "Encryption key" },
-  // Sensitive
-  { pattern: /credit_card/i,     sensitivity: "sensitive", reason: "Credit card data" },
-  { pattern: /card_number/i,     sensitivity: "sensitive", reason: "Card number" },
-  { pattern: /cvv/i,             sensitivity: "sensitive", reason: "CVV code" },
-  { pattern: /ssn/i,             sensitivity: "sensitive", reason: "Social Security Number" },
-  { pattern: /social_security/i, sensitivity: "sensitive", reason: "Social Security Number" },
-  { pattern: /bank_account/i,    sensitivity: "sensitive", reason: "Bank account info" },
-  { pattern: /routing_number/i,  sensitivity: "sensitive", reason: "Routing number" },
-  { pattern: /salary/i,          sensitivity: "sensitive", reason: "Financial data" },
-  { pattern: /income/i,          sensitivity: "sensitive", reason: "Financial data" },
-  { pattern: /tax_id/i,          sensitivity: "sensitive", reason: "Tax identifier" },
-  { pattern: /passport/i,        sensitivity: "sensitive", reason: "Passport data" },
-  { pattern: /driver_license/i,  sensitivity: "sensitive", reason: "Driver license" },
-  { pattern: /health/i,          sensitivity: "sensitive", reason: "Health data" },
-  { pattern: /medical/i,         sensitivity: "sensitive", reason: "Medical data" },
-  { pattern: /diagnosis/i,       sensitivity: "sensitive", reason: "Medical diagnosis" },
-  { pattern: /biometric/i,       sensitivity: "sensitive", reason: "Biometric data" },
-  // Personal
-  { pattern: /email/i,           sensitivity: "personal",  reason: "Email address" },
-  { pattern: /phone/i,           sensitivity: "personal",  reason: "Phone number" },
-  { pattern: /address/i,         sensitivity: "personal",  reason: "Physical address" },
-  { pattern: /street/i,          sensitivity: "personal",  reason: "Street address" },
-  { pattern: /city/i,            sensitivity: "personal",  reason: "City" },
-  { pattern: /zip_?code/i,       sensitivity: "personal",  reason: "Zip code" },
-  { pattern: /postal/i,          sensitivity: "personal",  reason: "Postal code" },
-  { pattern: /first_?name/i,     sensitivity: "personal",  reason: "First name" },
-  { pattern: /last_?name/i,      sensitivity: "personal",  reason: "Last name" },
-  { pattern: /full_?name/i,      sensitivity: "personal",  reason: "Full name" },
-  { pattern: /birth_?date/i,     sensitivity: "personal",  reason: "Date of birth" },
-  { pattern: /date_of_birth/i,   sensitivity: "personal",  reason: "Date of birth" },
-  { pattern: /dob\b/i,           sensitivity: "personal",  reason: "Date of birth" },
-  { pattern: /gender/i,          sensitivity: "personal",  reason: "Gender" },
-  { pattern: /nationality/i,     sensitivity: "personal",  reason: "Nationality" },
-  { pattern: /ethnicity/i,       sensitivity: "personal",  reason: "Ethnicity" },
-  { pattern: /religion/i,        sensitivity: "personal",  reason: "Religion" },
-  { pattern: /ip_address/i,      sensitivity: "personal",  reason: "IP address" },
-  { pattern: /latitude/i,        sensitivity: "personal",  reason: "Location data" },
-  { pattern: /longitude/i,       sensitivity: "personal",  reason: "Location data" },
-  { pattern: /geo_?location/i,   sensitivity: "personal",  reason: "Geolocation" },
-];
-
-function classifyField(field: string): { sensitivity: SensitivityLevel; reason: string } | null {
-  if (SKIP_FIELDS.has(field)) return null;
-  if (HASHED_CREDENTIAL_FIELDS.test(field)) return null;
-  if (PLAINTEXT_CREDENTIAL_FIELDS.test(field)) {
-    return { sensitivity: "secret", reason: "Plaintext credential storage" };
-  }
-  for (const { pattern, sensitivity, reason } of FIELD_PATTERNS) {
-    if (pattern.test(field)) return { sensitivity, reason };
-  }
-  return null;
-}
-
-function parseSqlSchema(sql: string): SensitiveField[] {
-  const results: SensitiveField[] = [];
-
-  // Parse SQL CREATE TABLE statements
-  const createTableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?(\w+)[`"']?\s*\(([\s\S]*?)\)\s*(?:ENGINE|;|\))/gi;
-  let match: RegExpExecArray | null;
-  while ((match = createTableRegex.exec(sql)) !== null) {
-    const tableName = match[1];
-    if (FRAMEWORK_TABLES.has(tableName)) continue;
-    const body = match[2];
-    const columnRegex = /[`"']?(\w+)[`"']?\s+(?:VARCHAR|CHAR|TEXT|INT|INTEGER|BIGINT|SMALLINT|TINYINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|BOOLEAN|BOOL|DATE|DATETIME|TIMESTAMP|TIME|YEAR|BLOB|BINARY|VARBINARY|JSON|JSONB|UUID|SERIAL|ENUM|SET)/gi;
-    let colMatch: RegExpExecArray | null;
-    while ((colMatch = columnRegex.exec(body)) !== null) {
-      const field = colMatch[1];
-      if (SKIP_FIELDS.has(field)) continue;
-      const classification = classifyField(field);
-      if (classification) {
-        results.push({ entity: tableName, field, ...classification });
-      }
-    }
-  }
-
-  // Parse Laravel Schema::create PHP migrations
-  const laravelRegex = /Schema::create\s*\(\s*['"](\w+)['"]\s*,\s*function\s*\([^)]*\)\s*\{([\s\S]*?)\}\s*\)/gi;
-  while ((match = laravelRegex.exec(sql)) !== null) {
-    const tableName = match[1];
-    if (FRAMEWORK_TABLES.has(tableName)) continue;
-    const body = match[2];
-    const colRegex = /\$table->(?:string|text|integer|bigInteger|smallInteger|tinyInteger|decimal|float|double|boolean|date|dateTime|timestamp|time|year|binary|json|jsonb|uuid|enum|char|longText|mediumText)\s*\(\s*['"](\w+)['"]/gi;
-    let colMatch: RegExpExecArray | null;
-    while ((colMatch = colRegex.exec(body)) !== null) {
-      const field = colMatch[1];
-      if (SKIP_FIELDS.has(field)) continue;
-      const classification = classifyField(field);
-      if (classification) {
-        results.push({ entity: tableName, field, ...classification });
-      }
-    }
-  }
-
-  return results;
-}
-
-
 
 // ─── AI Sensitive Data Result Type ───
 
