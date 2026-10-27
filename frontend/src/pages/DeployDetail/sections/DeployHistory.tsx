@@ -10,7 +10,7 @@ import {
 import { usePermissions } from "@/context/PermissionsContext";
 import Button from "@/components/ui/Button";
 import ProviderBadge from "@/components/ProviderBadge";
-import BranchBadge from "@/components/BranchBadge";
+import BranchCommitLabel from "@/components/BranchCommitLabel";
 import RocketIcon from "@/components/icons/outlined/RocketIcon";
 import Spinner from "@/components/Spinner";
 
@@ -95,7 +95,7 @@ export default function DeployHistory({
                     </div>
                     <div className="flex items-center gap-1.5 mt-1 ml-3.5">
                       <ProviderBadge provider={dk} />
-                      <BranchBadge
+                      <BranchCommitLabel
                         branch={d.branch}
                         commit={d.commitHash || fallbackCommitHash || undefined}
                         onClick={() => onSelect(d.id)}

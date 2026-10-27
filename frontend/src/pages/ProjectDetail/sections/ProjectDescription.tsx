@@ -280,7 +280,7 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
       </button>
       {aiLoading && (
         <div className="flex items-center gap-2 mt-3 justify-center">
-          <div className="size-4  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <Spinner className="size-4" />
           <span className="text-xs text-text-muted">Pattern-based scanner is analyzing your schema…</span>
         </div>
       )}

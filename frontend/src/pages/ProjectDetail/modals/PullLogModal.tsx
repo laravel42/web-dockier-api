@@ -1,5 +1,6 @@
 import Modal from "@/components/Modal";
 import Button from "@/components/ui/Button";
+import Spinner from "@/components/Spinner";
 
 interface Props {
   pullLog: string[] | null;
@@ -16,7 +17,7 @@ export default function PullLogModal({ pullLog, pullLoading, onClose }: Props) {
         ))}
         {pullLoading && (
           <div className="flex items-center gap-2 mt-1 text-text-muted">
-            <div className="size-3  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            <Spinner className="size-3" />
             Fetching…
           </div>
         )}

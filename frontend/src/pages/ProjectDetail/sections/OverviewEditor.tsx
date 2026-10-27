@@ -11,6 +11,7 @@ import {
 } from "../utils/overviewContentCache";
 import { handleOverviewLinkClick } from "../utils/overviewLinkNavigation";
 import MarkdownViewer from "@/components/MarkdownViewer";
+import Spinner from "@/components/Spinner";
 
 const README_PATHS = ["README.md", "readme.md", "README", "Readme.md"];
 
@@ -27,7 +28,7 @@ interface Props {
 function OverviewSpinner({ label = "Loading overview…" }: { label?: string }) {
   return (
     <div className="flex items-center gap-3 pb-8 justify-center">
-      <div className="size-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <Spinner className="size-5" />
       <span className="text-sm text-text-muted">{label}</span>
     </div>
   );

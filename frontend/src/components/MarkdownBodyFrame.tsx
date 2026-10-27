@@ -8,8 +8,8 @@ interface SwitchProps {
   className?: string;
 }
 
-/** Preview / Raw segmented control — shared by PR body and project overview. */
-export function MarkdownBodySwitch({ value, onChange, className = "" }: SwitchProps) {
+/** Preview / Raw segmented control for the frame below. */
+function MarkdownBodySwitch({ value, onChange, className = "" }: SwitchProps) {
   return (
     <div
       className={`inline-flex rounded-md border border-border/60 bg-card/95 p-0.5 shadow-(--shadow-xs) backdrop-blur ${className}`.trim()}
