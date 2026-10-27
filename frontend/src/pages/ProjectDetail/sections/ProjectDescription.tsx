@@ -1,6 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, lazy, Suspense, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { createPortal } from "react-dom";
 import type { RepoAnalysis, SensitiveField, Dependency } from "@/components/DeployWizard";
 import type { Scan } from "@/types/scan";
 import {
@@ -32,8 +31,11 @@ import { usePermissions } from "@/context/PermissionsContext";
 import type { PermissionKey } from "@/config/permissions";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { useIsMdUp } from "@/hooks/useMediaQuery";
-import { FileTextIcon, XIcon, KeyRoundIcon, UserIcon, CreditCardIcon, LockKeyholeIcon, HeartPulseIcon, MapPinIcon, SettingsIcon, CircleHelpIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { FileTextIcon, KeyRoundIcon, UserIcon, CreditCardIcon, LockKeyholeIcon, HeartPulseIcon, MapPinIcon, SettingsIcon, CircleHelpIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import Button from "@/components/ui/Button";
+import Modal from "@/components/Modal";
+import Spinner from "@/components/Spinner";
+import { osvApi } from "@/services/osv";
 import { TabPanelHeader, tabPanelContentCls } from "@/components/TabPanelHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -641,88 +643,67 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
 
   useEffect(() => {
     if (vuln.details) return;
-    fetch(`https://api.osv.dev/v1/vulns/${vuln.id}`)
-      .then(r => r.ok ? r.json() : null)
+    // Abort on unmount so closing the modal mid-flight neither leaves the
+    // request running nor writes state back into a gone component.
+    const controller = new AbortController();
+    let active = true;
+    osvApi.getVuln(vuln.id, controller.signal)
       .then((data) => {
-        if (data) {
-          setDetails(data.details || data.summary || "");
-          setAliases(data.aliases || []);
-        }
+        if (!active) return;
+        setDetails(data.details || data.summary || "");
+        setAliases(data.aliases || []);
       })
+      // Best-effort enrichment: on failure the modal still links out to osv.dev.
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; controller.abort(); };
   }, [vuln.id, vuln.details]);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
-  }, []);
-
-  return createPortal(
-    <div className="fixed inset-0 z-99999" role="dialog" aria-modal="true">
-      {/* Mouse-only dismissal; Escape closes this surface as well. */}
-      <div aria-hidden="true" className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
-        <div className="pointer-events-auto bg-card rounded-xl border border-border shadow-(--shadow-overlay) max-w-xl w-full max-h-[80vh] flex flex-col">
-          <div className="px-5 pt-4 pb-3 border-b border-border flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-sm border ${vs.bg} ${vs.text} ${vs.border}`}>{vuln.severity}</span>
-                <span className="text-xs font-mono text-text-muted">{vuln.id}</span>
-              </div>
-              <h3 className="text-sm/snug font-semibold text-text ">{vuln.title}</h3>
-              <p className="text-xs text-text-muted mt-0.5">Package: {vuln.pkg}</p>
-            </div>
-            <button onClick={onClose} className="p-1 rounded-md text-text-muted hover:text-text hover:bg-secondary-50 transition-colors shrink-0">
-              <XIcon className="size-4" />
-            </button>
+  // Modal owns Escape, body scroll lock, the focus trap and focus restore.
+  return (
+    <Modal open onClose={onClose} title={vuln.title} size="lg" bodyScroll={false}>
+      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hide">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-sm border ${vs.bg} ${vs.text} ${vs.border}`}>{vuln.severity}</span>
+          <span className="text-xs font-mono text-text-muted">{vuln.id}</span>
+          <span className="text-xs text-text-muted">Package: {vuln.pkg}</span>
+        </div>
+        {loading ? (
+          <div className="flex items-center gap-2 py-4">
+            <Spinner className="size-4" />
+            <span className="text-xs text-text-muted">Loading details…</span>
           </div>
-          <div className="px-5 py-4 overflow-y-auto flex-1 scrollbar-hide">
-            {loading ? (
-              <div className="flex items-center gap-2 py-4">
-                <div className="size-4  border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-                <span className="text-xs text-text-muted">Loading details…</span>
+        ) : (
+          <>
+            {aliases.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Aliases</p>
+                <div className="flex flex-wrap gap-1">
+                  {aliases.map(a => <span key={a} className="text-xs font-mono text-text-muted bg-secondary-50 border border-border px-1.5 py-0.5 rounded">{a}</span>)}
+                </div>
+              </div>
+            )}
+            {details ? (
+              <div>
+                <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Details</p>
+                <ErrorBoundary title="Couldn't load the details renderer">
+                  <Suspense fallback={<TabSpinner label="Loading details…" />}>
+                    <MarkdownPreview source={details} style={{ background: "transparent", color: "inherit", fontSize: "0.875rem" }} />
+                  </Suspense>
+                </ErrorBoundary>
               </div>
             ) : (
-              <>
-                {aliases.length > 0 && (
-                  <div className="mb-3">
-                    <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Aliases</p>
-                    <div className="flex flex-wrap gap-1">
-                      {aliases.map(a => <span key={a} className="text-xs font-mono text-text-muted bg-secondary-50 border border-border px-1.5 py-0.5 rounded">{a}</span>)}
-                    </div>
-                  </div>
-                )}
-                {details ? (
-                  <div>
-                    <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Details</p>
-                    <ErrorBoundary title="Couldn't load the details renderer">
-                      <Suspense fallback={<TabSpinner label="Loading details…" />}>
-                        <MarkdownPreview source={details} style={{ background: "transparent", color: "inherit", fontSize: "0.875rem" }} />
-                      </Suspense>
-                    </ErrorBoundary>
-                  </div>
-                ) : (
-                  <p className="text-xs text-text-muted py-2">No additional details available.</p>
-                )}
-              </>
+              <p className="text-xs text-text-muted py-2">No additional details available.</p>
             )}
-          </div>
-          <div className="px-5 py-3 border-t border-border">
-            <a href={`https://osv.dev/vulnerability/${vuln.id}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-500 hover:text-primary-400 font-medium transition-colors">
-              View on OSV.dev →
-            </a>
-          </div>
-        </div>
+          </>
+        )}
       </div>
-    </div>,
-    document.body,
+      <div className="mt-3 shrink-0 border-t border-border pt-3">
+        <a href={`https://osv.dev/vulnerability/${vuln.id}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-500 hover:text-primary-400 font-medium transition-colors">
+          View on OSV.dev →
+        </a>
+      </div>
+    </Modal>
   );
 }
 

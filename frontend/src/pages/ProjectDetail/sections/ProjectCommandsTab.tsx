@@ -4,6 +4,7 @@ import { deployApi } from "@/services/api";
 import type { Command } from "@/types";
 import type { Project } from "@/types";
 import { usePermissions } from "@/context/PermissionsContext";
+import { usePaginatedData } from "@/hooks/usePaginatedData";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import { statusBadgeColors } from "@/utils/styles";
 import Spinner from "@/components/Spinner";
@@ -61,16 +62,43 @@ function StatusBadge({ status }: { status: Command["status"] }) {
   );
 }
 
+/**
+ * Permission gate. The panel below fetches on mount, so it must not mount until
+ * permissions have resolved and allow it — that keeps `usePaginatedData` on its
+ * default always-enabled path instead of needing a deferred-fetch flag.
+ */
 export default function ProjectCommandsTab({ project }: Props) {
   const { has, loading: permissionsLoading } = usePermissions();
-  const canManage = has("project:manage");
-  const canView = has("project:view");
 
-  const [commands, setCommands] = useState<Command[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  if (permissionsLoading) {
+    return <TabSpinner label="Loading commands…" />;
+  }
+
+  if (!has("project:view")) {
+    return (
+      <p className="text-sm text-text-muted pb-4 text-center">
+        You don&apos;t have permission to view commands.
+      </p>
+    );
+  }
+
+  // Keyed on the project: react-router reuses this component across projects,
+  // and the paginated fetcher's deps are its page/search, not the project id.
+  return <CommandsPanel key={project.id} project={project} canManage={has("project:manage")} />;
+}
+
+function CommandsPanel({ project, canManage }: { project: Project; canManage: boolean }) {
+  // Pagination, loading, error and stale-response discarding all live in the
+  // shared hook — two fast page changes can no longer paint the first response.
+  const { items: commands, loading, error, pagination, goToPage, reload } = usePaginatedData<Command>(
+    ({ limit, offset }) =>
+      commandsApi.list(project.id, { limit, offset })
+        .then((res) => ({ items: res.commands, pagination: res.pagination })),
+    { pageSize: PAGE_SIZE },
+  );
+
+  // Failures of a user-triggered run, which the list-load error cannot carry.
+  const [actionError, setActionError] = useState("");
 
   const [commandInput, setCommandInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -132,40 +160,8 @@ export default function ProjectCommandsTab({ project }: Props) {
 
   const canRunCommands = hasDeployment && canManage;
 
-  const fetchCommands = useCallback(async (pageNum: number, silent = false) => {
-    if (!project.id || !canView) return;
-    if (!silent) setLoading(true);
-    setError("");
-    try {
-      const res = await commandsApi.list(project.id, {
-        limit: PAGE_SIZE,
-        offset: pageNum * PAGE_SIZE,
-      });
-      setCommands(res.commands);
-      setTotal(res.pagination.total);
-    } catch {
-      if (!silent) {
-        setError("Failed to load commands");
-        setCommands([]);
-        setTotal(0);
-      }
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, [project.id, canView]);
-
-  useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canView) {
-      setLoading(false);
-      return;
-    }
-    void fetchCommands(page);
-  }, [permissionsLoading, canView, fetchCommands, page]);
-
   // Check if the project has an active (successful) deployment
   useEffect(() => {
-    if (!project.id || !canView) return;
     deployApi.listDeployments({ projectId: project.id, limit: 5 })
       .then((res) => {
         const hasActive = res.deployments.some((d) => d.status === "success");
@@ -173,7 +169,7 @@ export default function ProjectCommandsTab({ project }: Props) {
       })
       .catch(() => setHasDeployment(false))
       .finally(() => setDeployCheckDone(true));
-  }, [project.id, canView]);
+  }, [project.id]);
 
   // Close dropdown when clicking outside. The menu lives in a body portal, so
   // we must ignore clicks on BOTH the trigger button and the portaled menu.
@@ -190,23 +186,23 @@ export default function ProjectCommandsTab({ project }: Props) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openMenuId, closeMenu, menuListRef]);
 
-  // Poll for running commands to update their status in real-time.
-  // The pageRef ensures the interval always fetches the current page
-  // without needing to re-create the interval on page changes.
-  const pageRef = useRef(page);
-  pageRef.current = page;
-
+  // Poll for running commands to update their status in real-time. `reload` is
+  // rebuilt when the page changes, so the interval always hits the shown page.
   const hasRunning = commands.some((cmd) => cmd.status === "running");
 
   useEffect(() => {
     if (!hasRunning) return;
 
-    const interval = setInterval(() => {
-      void fetchCommands(pageRef.current, true);
-    }, POLL_INTERVAL_MS);
+    const interval = setInterval(() => { void reload(); }, POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [hasRunning, fetchCommands]);
+  }, [hasRunning, reload]);
+
+  /** Back to the newest page after a run, refetching even if already there. */
+  const showNewestCommands = async () => {
+    goToPage(1);
+    await reload();
+  };
 
   /**
    * Enter no longer executes. Arbitrary shell against production gets one
@@ -222,16 +218,15 @@ export default function ProjectCommandsTab({ project }: Props) {
     const command = pendingCommand;
     if (!command) return;
     setSubmitting(true);
+    setActionError("");
     try {
       await commandsApi.run(project.id, command);
       setCommandInput("");
       setPendingCommand(null);
-      setPage(0);
-      // Fetch page 0 explicitly to avoid stale closure on `page`
-      await fetchCommands(0);
+      await showNewestCommands();
       // Polling will start automatically via the hasRunning effect
     } catch {
-      setError("Failed to run command");
+      setActionError("Failed to run command");
       throw new Error("Failed to run command");
     } finally {
       setSubmitting(false);
@@ -241,12 +236,12 @@ export default function ProjectCommandsTab({ project }: Props) {
   const handleRunAgain = async (cmd: Command) => {
     closeMenu();
     setSubmitting(true);
+    setActionError("");
     try {
       await commandsApi.run(project.id, cmd.command);
-      setPage(0);
-      await fetchCommands(0);
+      await showNewestCommands();
     } catch {
-      setError("Failed to run command");
+      setActionError("Failed to run command");
     } finally {
       setSubmitting(false);
     }
@@ -258,7 +253,7 @@ export default function ProjectCommandsTab({ project }: Props) {
   // would have hidden.
   const handleDelete = async (cmd: Command) => {
     await commandsApi.delete(project.id, cmd.id);
-    await fetchCommands(page);
+    await reload();
   };
 
   const handleCopy = (cmd: Command) => {
@@ -266,21 +261,15 @@ export default function ProjectCommandsTab({ project }: Props) {
     void navigator.clipboard.writeText(cmd.command);
   };
 
-  if (permissionsLoading) {
-    return <TabSpinner label="Loading commands…" />;
-  }
+  // A reload also runs on the 3s poll, so the spinner and the load-error view
+  // are only allowed to replace the list while there is no list to show.
+  const showSpinner = loading && commands.length === 0;
+  const showLoadError = !loading && error !== null && commands.length === 0;
 
-  if (!canView) {
-    return (
-      <p className="text-sm text-text-muted pb-4 text-center">
-        You don&apos;t have permission to view commands.
-      </p>
-    );
-  }
-
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-  const rangeStart = page * PAGE_SIZE + 1;
-  const rangeEnd = Math.min((page + 1) * PAGE_SIZE, total);
+  const currentPage = Math.floor(pagination.offset / PAGE_SIZE) + 1;
+  const totalPages = Math.ceil(pagination.total / PAGE_SIZE);
+  const rangeStart = pagination.offset + 1;
+  const rangeEnd = Math.min(pagination.offset + PAGE_SIZE, pagination.total);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto scrollbar-hide">
@@ -324,15 +313,19 @@ export default function ProjectCommandsTab({ project }: Props) {
         </form>
       </div>
 
+      {actionError && (
+        <p role="alert" className="text-sm text-danger-500 text-center">{actionError}</p>
+      )}
+
       {/* Recent commands section */}
-      {loading ? (
+      {showSpinner ? (
         <TabSpinner label="Loading commands…" />
-      ) : error ? (
+      ) : showLoadError ? (
         <div className="flex flex-col items-center gap-3 pb-6 text-center">
           <p className="text-sm text-danger-500">{error}</p>
           <button
             type="button"
-            onClick={() => { setError(""); void fetchCommands(page); }}
+            onClick={() => void reload()}
             className="text-xs font-medium text-primary hover:text-primary/80"
           >
             Retry
@@ -442,21 +435,21 @@ export default function ProjectCommandsTab({ project }: Props) {
           {totalPages > 1 && (
             <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/40 pt-3">
               <span className="text-xs text-text-muted">
-                {rangeStart}–{rangeEnd} of {total}
+                {rangeStart}–{rangeEnd} of {pagination.total}
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={page === 0}
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={currentPage === 1}
+                  onClick={() => goToPage(currentPage - 1)}
                   className="h-7 rounded-md border border-border px-2.5 text-xs font-medium text-text-muted transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Previous
                 </button>
                 <button
                   type="button"
-                  disabled={page >= totalPages - 1}
-                  onClick={() => setPage((p) => p + 1)}
+                  disabled={currentPage >= totalPages}
+                  onClick={() => goToPage(currentPage + 1)}
                   className="h-7 rounded-md border border-border px-2.5 text-xs font-medium text-text-muted transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Next
