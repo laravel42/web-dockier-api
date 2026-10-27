@@ -1,9 +1,10 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { CommitInfo, Project, RepoStats } from "@/types";
 import { cardCls } from "@/utils/styles";
 import { getRepoKey, parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import { useProjectSiteUrl } from "@/hooks/useProjectSiteUrl";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { gitApi } from "@/services/api";
 import { timeAgo } from "@/utils/timeAgo";
 import SourceControlBadge from "@/components/SourceControlBadge";
@@ -92,26 +93,16 @@ function SpecRow({
 }
 
 function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard unavailable */
-    }
-  };
+  const { copied, copy } = useCopyToClipboard();
 
   return (
     <button
       type="button"
-      onClick={handleCopy}
+      onClick={() => void copy(value)}
       aria-label={`Copy ${label}`}
       className="inline-flex size-5 items-center justify-center text-text-muted transition-colors hover:text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500/40"
     >
-      {copied ? <CheckIcon className="size-3.5 text-primary-500" /> : <ClipboardIcon className="size-3.5" />}
+      {copied !== null ? <CheckIcon className="size-3.5 text-primary-500" /> : <ClipboardIcon className="size-3.5" />}
     </button>
   );
 }

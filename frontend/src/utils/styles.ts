@@ -200,6 +200,15 @@ export const settingsBadgeCls = {
   muted: `${settingsBadgeBase} border-border/60 bg-secondary-50/30 text-text-muted`,
 } as const;
 
+export type StatusTone = keyof typeof settingsBadgeCls;
+/** Status dot colour per `settingsBadgeCls` tone. Used by `ui/StatusPill`. */
+export const toneDotCls: Record<StatusTone, string> = {
+  primary: "bg-primary-500",
+  success: "bg-success-500",
+  warning: "bg-warning-ink",
+  danger: "bg-danger-500",
+  muted: "bg-text-muted",
+};
 export const strategyLabels: Record<string, string> = {
   vps: "VPS",
   managed: "ECS Fargate",

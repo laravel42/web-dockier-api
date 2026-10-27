@@ -19,10 +19,12 @@ import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, InfoIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
-import { settingsBadgeCls } from "@/utils/styles";
+import type { StatusTone } from "@/utils/styles";
+import StatusPill from "@/components/ui/StatusPill";
 import { useUrlSection } from "@/hooks/useUrlSection";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import TabSpinner from "@/components/ui/TabSpinner";
 
 interface Props {
@@ -113,37 +115,23 @@ function ProcessLogsModal({
   );
 }
 
+const PROCESS_PILLS: Record<BackgroundProcess["status"], { tone: StatusTone; label: string }> = {
+  running: { tone: "success", label: "Running" },
+  stopped: { tone: "muted", label: "Stopped" },
+  errored: { tone: "danger", label: "Errored" },
+};
+
 function ProcessStatusBadge({ status }: { status: BackgroundProcess["status"] }) {
-  const config: Record<BackgroundProcess["status"], { label: string; color: string; dot: string }> = {
-    running: { label: "Running", color: settingsBadgeCls.success, dot: "bg-success-500" },
-    stopped: { label: "Stopped", color: settingsBadgeCls.muted, dot: "bg-text-muted" },
-    errored: {
-      label: "Errored",
-      color: "inline-flex items-center rounded border border-danger-500/45 bg-danger-500/30 px-2 py-0.5 text-xs font-medium text-danger-300",
-      dot: "bg-danger-500",
-    },
-  };
-  const c = config[status];
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium ${c.color}`}>
-      <span className={`size-2 rounded-full ${c.dot}`} />
-      {c.label}
-    </span>
-  );
+  return <StatusPill {...PROCESS_PILLS[status]} />;
 }
 
+const JOB_PILLS: Record<ScheduledJob["status"], { tone: StatusTone; label: string }> = {
+  installed: { tone: "success", label: "Installed" },
+  paused: { tone: "warning", label: "Paused" },
+};
+
 function JobStatusBadge({ status }: { status: ScheduledJob["status"] }) {
-  const config: Record<ScheduledJob["status"], { label: string; color: string; dot: string }> = {
-    installed: { label: "Installed", color: settingsBadgeCls.success, dot: "bg-success-500" },
-    paused: { label: "Paused", color: settingsBadgeCls.warning, dot: "bg-warning-ink" },
-  };
-  const c = config[status];
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium ${c.color}`}>
-      <span className={`size-2 rounded-full ${c.dot}`} />
-      {c.label}
-    </span>
-  );
+  return <StatusPill {...JOB_PILLS[status]} />;
 }
 
 const FREQUENCY_LABELS: Record<JobFrequency, string> = {
@@ -178,6 +166,7 @@ function ProcessActionsMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const closeMenu = useCallback(() => setOpen(false), []);
   const { menuRef: menuListRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(open, closeMenu);
+  const { copy } = useCopyToClipboard();
 
   useEffect(() => {
     if (!open) return;
@@ -202,7 +191,7 @@ function ProcessActionsMenu({
     } else if (action === "edit") {
       setShowEdit(true);
     } else if (action === "copy") {
-      await navigator.clipboard.writeText(process.id);
+      await copy(process.id);
     } else if (action === "logs") {
       setShowLogs(true);
     } else if (action === "delete") {
@@ -319,6 +308,7 @@ function JobActionsMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const closeMenu = useCallback(() => setOpen(false), []);
   const { menuRef: menuListRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(open, closeMenu);
+  const { copy } = useCopyToClipboard();
 
   useEffect(() => {
     if (!open) return;
@@ -340,7 +330,7 @@ function JobActionsMenu({
     } else if (action === "edit") {
       setShowEdit(true);
     } else if (action === "copy") {
-      await navigator.clipboard.writeText(job.id);
+      await copy(job.id);
     } else if (action === "delete") {
       setShowDelete(true);
     }

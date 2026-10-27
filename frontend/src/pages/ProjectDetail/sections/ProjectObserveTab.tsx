@@ -22,6 +22,8 @@ import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { getErrorMessage } from "@/utils/errors";
 import { timeAgo } from "@/utils/timeAgo";
 import TabSpinner from "@/components/ui/TabSpinner";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { toneDotCls } from "@/utils/styles";
 
 interface Props {
   project: Project;
@@ -64,7 +66,7 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
   const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const { copied: copiedId, copy } = useCopyToClipboard();
   const [error, setError] = useState("");
 
   const fetchHeartbeats = useCallback(async () => {
@@ -90,11 +92,7 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
     fetchHeartbeats();
   };
 
-  const handleCopyUrl = (heartbeat: Heartbeat) => {
-    navigator.clipboard.writeText(heartbeat.pingUrl);
-    setCopiedId(heartbeat.id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
+  const handleCopyUrl = (heartbeat: Heartbeat) => void copy(heartbeat.pingUrl, heartbeat.id);
 
   if (loading) return <TabSpinner label="Loading heartbeats…" />;
 
@@ -196,12 +194,8 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
 }
 
 function HeartbeatStatusDot({ status }: { status: Heartbeat["status"] }) {
-  const colors: Record<Heartbeat["status"], string> = {
-    healthy: "bg-success-500",
-    missed: "bg-danger-500",
-    waiting: "bg-secondary-400",
-  };
-  return <span className={`size-2.5 rounded-full shrink-0 ${colors[status]}`} />;
+  const tones = { healthy: "success", missed: "danger", waiting: "muted" } as const;
+  return <span className={`size-2.5 rounded-full shrink-0 ${toneDotCls[tones[status]]}`} />;
 }
 
 function CreateHeartbeatModal({

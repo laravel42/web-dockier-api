@@ -1,8 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { useDropdownPosition } from "../hooks/useDropdownPosition";
-import DropdownPortal from "./DropdownPortal";
-import Spinner from "./Spinner";
-import { CodeXmlIcon, ChevronDownIcon } from "lucide-react";
+import SearchSelect from "./ui/SearchSelect";
+import { CodeXmlIcon } from "lucide-react";
 
 interface Props {
   value: string;
@@ -15,112 +12,41 @@ interface Props {
 }
 
 export default function BranchSelect({ value, onChange, branches, loading, onReload, labelledBy }: Props) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const { triggerRef, pos, updatePos, clearPos } = useDropdownPosition();
-
-  const filtered = branches.filter((b) => b.toLowerCase().includes(search.toLowerCase()));
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (triggerRef.current?.contains(target)) return;
-      if (dropdownRef.current?.contains(target)) return;
-      setOpen(false);
-      clearPos();
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [clearPos, triggerRef]);
-
-  useEffect(() => {
-    if (open) {
-      updatePos();
-      setTimeout(() => inputRef.current?.focus(), 0);
-    } else {
-      clearPos();
-    }
-  }, [open, updatePos, clearPos]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-2 text-sm text-text-muted">
-        <Spinner className="size-4 " />
-        Loading…
-      </div>
-    );
-  }
-
-  if (branches.length === 0) {
-    return <p className="text-sm text-text-muted py-2">No branches found.</p>;
-  }
+  // The project's branch may be gone from the remote. Keep it in the list so
+  // the trigger still names what is actually configured.
+  const items = value && !branches.includes(value) ? [value, ...branches] : branches;
 
   return (
-    <div>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-labelledby={labelledBy}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => { if (!open) { setSearch(""); updatePos(); } setOpen(!open); }}
-        className="w-full h-9 px-3 rounded-(--radius-input) border border-border bg-card text-ui outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors flex items-center gap-2 cursor-pointer text-left"
-      >
-        {value ? (
-          <>
-            <CodeXmlIcon className="size-4 shrink-0 text-text-muted" />
-            <span className="truncate">{value}</span>
-          </>
-        ) : (
-          <span className="text-text-muted">Select a branch…</span>
-        )}
-        <ChevronDownIcon className="size-4 ml-auto shrink-0 text-text-muted" />
-      </button>
-
-      <DropdownPortal open={open} pos={pos} dropdownRef={dropdownRef}>
-        <div className="p-2 border-b border-border">
-          <input
-            ref={inputRef}
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search branches…"
-            className="w-full h-8 px-2 rounded bg-secondary-50 text-text text-sm outline-none focus:ring-1 focus:ring-primary-500/20"
-          />
+    <SearchSelect
+      value={value}
+      onChange={onChange}
+      items={items}
+      getValue={(b) => b}
+      renderItem={(b) => (
+        <>
+          <CodeXmlIcon className="size-4 shrink-0 text-text-muted" />
+          <span className="truncate">{b}</span>
+        </>
+      )}
+      matches={(b, q) => b.toLowerCase().includes(q)}
+      placeholder="Select a branch…"
+      listLabel="Branches"
+      searchPlaceholder="Search branches…"
+      labelledBy={labelledBy}
+      loading={loading}
+      emptyMessage="No branches found."
+      noMatchLabel={() => "No branches found"}
+      footer={onReload ? () => (
+        <div className="border-t border-border px-3 py-2">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onReload(); }}
+            className="text-sm font-medium text-primary-500 transition-colors hover:text-primary-400"
+          >
+            Reload branches
+          </button>
         </div>
-        <div className="overflow-y-auto flex-1">
-          {filtered.length === 0 ? (
-            <div className="px-3 py-4 text-sm text-text-muted text-center">No branches found</div>
-          ) : (
-            filtered.map((b) => (
-              <button
-                key={b}
-                type="button"
-                onClick={() => { onChange(b); setOpen(false); }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted transition-colors ${
-                  value === b ? "bg-muted text-primary-600" : "text-text"
-                }`}
-              >
-                <CodeXmlIcon className="size-4 shrink-0 text-text-muted" />
-                <span>{b}</span>
-              </button>
-            ))
-          )}
-        </div>
-        {onReload && (
-          <div className="border-t border-border px-3 py-2">
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onReload(); }}
-              className="text-sm font-medium text-primary-500 hover:text-primary-400 transition-colors"
-            >
-              Reload branches
-            </button>
-          </div>
-        )}
-      </DropdownPortal>
-    </div>
+      ) : undefined}
+    />
   );
 }

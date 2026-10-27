@@ -18,6 +18,7 @@ import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, Hash
 import { settingsBadgeCls } from "@/utils/styles";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import DropdownPortal from "@/components/DropdownPortal";
 import { dnsBannerCopy } from "@/utils/dnsBannerCopy";
 import TabSpinner from "@/components/ui/TabSpinner";
@@ -54,6 +55,7 @@ function DomainRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const { menuRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(menuOpen, closeMenu);
+  const { copy } = useCopyToClipboard();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [dnsStatus, setDnsStatus] = useState<{ verified: boolean; message: string } | null>(null);
@@ -103,12 +105,12 @@ function DomainRow({
   };
 
   const handleCopy = () => {
-    void navigator.clipboard.writeText(domain.name);
+    void copy(domain.name);
     setMenuOpen(false);
   };
 
   const handleCopyId = () => {
-    void navigator.clipboard.writeText(domain.id);
+    void copy(domain.id);
     setMenuOpen(false);
   };
 
@@ -259,7 +261,7 @@ function DomainRow({
                     </div>
                     <button
                       type="button"
-                      onClick={() => void navigator.clipboard.writeText(record.value)}
+                      onClick={() => void copy(record.value)}
                       className="shrink-0 rounded border border-border px-2 py-1 text-xs text-text-muted transition-colors hover:bg-card/60 hover:text-text"
                     >
                       Copy
@@ -506,6 +508,7 @@ function CertificateRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const { copy } = useCopyToClipboard();
 
   // The actions menu renders in a body portal (fixed position) so a parent's
   // `overflow` cannot clip it. Track the trigger and compute a right-aligned,
@@ -621,7 +624,7 @@ function CertificateRow({
                     <button
                       type="button"
                       role="menuitem"
-                      onClick={() => { void navigator.clipboard.writeText(cert.id); closeMenu(); }}
+                      onClick={() => { void copy(cert.id); closeMenu(); }}
                       className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
                     >
                       <HashIcon className="size-3.5" />

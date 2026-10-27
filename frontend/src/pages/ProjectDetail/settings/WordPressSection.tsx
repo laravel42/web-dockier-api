@@ -3,7 +3,7 @@ import type { Project } from "@/types";
 import { useRevealableEditor } from "@/hooks/useRevealableEditor";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
-import WpConfigEditor from "@/components/WpConfigEditor";
+import CodeEditor from "@/components/CodeEditor";
 import { EyeIcon } from "lucide-react";
 import { SectionTitle } from "./shared";
 import SettingsCard from "./SettingsCard";
@@ -52,9 +52,10 @@ export default function WordPressSection({ project, canManage }: Props) {
         ) : (
           <div className="relative">
             <div className={!revealed ? "blur-sm select-none pointer-events-none" : ""}>
-              <WpConfigEditor
+              <CodeEditor
                 value={content}
                 onChange={revealed ? setContent : () => {}}
+                language="php"
                 height="400px"
               />
             </div>

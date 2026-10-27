@@ -6,7 +6,8 @@ import type { Project } from "@/types";
 import { usePermissions } from "@/context/PermissionsContext";
 import { usePaginatedData } from "@/hooks/usePaginatedData";
 import { formatCardDateTime } from "@/utils/formatCardDate";
-import { statusBadgeColors } from "@/utils/styles";
+import type { StatusTone } from "@/utils/styles";
+import StatusPill from "@/components/ui/StatusPill";
 import Spinner from "@/components/Spinner";
 import ConfirmModal from "@/components/ConfirmModal";
 import Modal from "@/components/Modal";
@@ -14,6 +15,7 @@ import { ArrowRightIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, RefreshCw
 import { destructiveReason } from "../destructiveCommand";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import DropdownPortal from "@/components/DropdownPortal";
 import TabSpinner from "@/components/ui/TabSpinner";
 
@@ -32,34 +34,15 @@ interface Props {
 }
 
 
+const STATUS_PILLS: Record<Command["status"], { tone: StatusTone; label: string; pulse?: boolean }> = {
+  running: { tone: "primary", label: "Running", pulse: true },
+  finished: { tone: "success", label: "Finished" },
+  failed: { tone: "danger", label: "Failed" },
+  timed_out: { tone: "warning", label: "Timed Out" },
+};
+
 function StatusBadge({ status }: { status: Command["status"] }) {
-  const labels: Record<Command["status"], string> = {
-    running: "Running",
-    finished: "Finished",
-    failed: "Failed",
-    timed_out: "Timed Out",
-  };
-
-  const colorMap: Record<Command["status"], string> = {
-    running: statusBadgeColors.running || "bg-primary-500/10 text-primary-500",
-    finished: statusBadgeColors.success || "bg-success-500/10 text-success-500",
-    failed: statusBadgeColors.failed || "bg-danger-500/10 text-danger-500",
-    timed_out: "bg-warning-surface text-warning-ink",
-  };
-
-  const dotColorMap: Record<Command["status"], string> = {
-    running: "animate-pulse bg-primary-500",
-    finished: "bg-success-500",
-    failed: "bg-danger-500",
-    timed_out: "bg-warning-ink",
-  };
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium ${colorMap[status]}`}>
-      <span className={`size-2 rounded-full ${dotColorMap[status]}`} />
-      {labels[status]}
-    </span>
-  );
+  return <StatusPill {...STATUS_PILLS[status]} />;
 }
 
 /**
@@ -99,6 +82,7 @@ function CommandsPanel({ project, canManage }: { project: Project; canManage: bo
 
   // Failures of a user-triggered run, which the list-load error cannot carry.
   const [actionError, setActionError] = useState("");
+  const { copy } = useCopyToClipboard();
 
   const [commandInput, setCommandInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -258,7 +242,7 @@ function CommandsPanel({ project, canManage }: { project: Project; canManage: bo
 
   const handleCopy = (cmd: Command) => {
     closeMenu();
-    void navigator.clipboard.writeText(cmd.command);
+    void copy(cmd.command);
   };
 
   // A reload also runs on the 3s poll, so the spinner and the load-error view

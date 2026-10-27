@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { CopyIcon, CircleCheckIcon } from "lucide-react";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 
 import type { DomainAttachmentRecord } from "@/types";
 
@@ -10,17 +10,7 @@ import type { DomainAttachmentRecord } from "@/types";
  * the two surfaces cannot show different records for the same domain.
  */
 export default function DnsRecordCard({ record }: { record: DomainAttachmentRecord }) {
-  const [copied, setCopied] = useState<"name" | "value" | null>(null);
-
-  const copy = async (field: "name" | "value", text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(field);
-      window.setTimeout(() => setCopied(null), 1500);
-    } catch {
-      // Clipboard access can be denied; the value is selectable either way.
-    }
-  };
+  const { copied, copy } = useCopyToClipboard();
 
   return (
     <div className="rounded-card border border-border bg-surface p-3">
@@ -44,7 +34,7 @@ export default function DnsRecordCard({ record }: { record: DomainAttachmentReco
               <code className="min-w-0 flex-1 break-all font-mono text-xs text-text">{text}</code>
               <button
                 type="button"
-                onClick={() => copy(field, text)}
+                onClick={() => void copy(text, field)}
                 className="shrink-0 rounded-sm p-1 text-text-muted hover:text-text"
                 aria-label={`Copy ${label.toLowerCase()}`}
               >

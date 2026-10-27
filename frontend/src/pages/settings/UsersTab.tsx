@@ -16,6 +16,7 @@ import { getErrorMessage } from "@/utils/errors";
 import { useToast } from "@/context/useToast";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { CheckIcon, ClipboardIcon, EyeIcon, EyeOffIcon, UserRoundPlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
 
@@ -54,7 +55,8 @@ export default function UsersTab() {
   const [inviteForm, setInviteForm] = useState({ email: "", name: "", password: "", language: "en", timezone: "", roleId: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [passwordGenerated, setPasswordGenerated] = useState(false);
-  const [passwordCopied, setPasswordCopied] = useState(false);
+  // Keyed on the password itself, so regenerating drops a stale acknowledgement.
+  const { copied: copiedPassword, copy: copyPassword } = useCopyToClipboard();
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState("");
   const [editUser, setEditUser] = useState<UserItem | null>(null);
@@ -101,18 +103,11 @@ export default function UsersTab() {
     setInviteForm(f => ({ ...f, password: arr.join("") }));
     setShowPassword(true);
     setPasswordGenerated(true);
-    setPasswordCopied(false);
   };
 
-  const copyGeneratedPassword = async () => {
+  const copyGeneratedPassword = () => {
     if (!inviteForm.password) return;
-    try {
-      await navigator.clipboard.writeText(inviteForm.password);
-      setPasswordCopied(true);
-      window.setTimeout(() => setPasswordCopied(false), 2000);
-    } catch {
-      /* clipboard unavailable */
-    }
+    return copyPassword(inviteForm.password);
   };
 
   const passwordChecks = {
@@ -166,7 +161,6 @@ export default function UsersTab() {
       setInviteForm({ email: "", name: "", password: "", language: "en", timezone: "", roleId: "" });
       setShowPassword(false);
       setPasswordGenerated(false);
-      setPasswordCopied(false);
       fetchData();
     } catch (err: unknown) {
       setInviteError(getErrorMessage(err, "Failed to create user"));
@@ -297,7 +291,6 @@ export default function UsersTab() {
                   value={inviteForm.password}
                   onChange={(e) => {
                     setPasswordGenerated(false);
-                    setPasswordCopied(false);
                     setInviteForm(f => ({ ...f, password: e.target.value }));
                   }}
                   className={inviteForm.password ? (passwordGenerated ? "pr-16" : "pr-9") : ""}
@@ -310,7 +303,7 @@ export default function UsersTab() {
                     className="absolute right-9 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors"
                     aria-label="Copy password"
                   >
-                    {passwordCopied ? (
+                    {copiedPassword === inviteForm.password ? (
                       <CheckIcon className="size-4 text-primary-500" />
                     ) : (
                       <ClipboardIcon className="size-4" />

@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 
 export { TabPanelHeader as SectionTitle } from "@/components/TabPanelHeader";
 export { default as TabSpinner } from "@/components/ui/TabSpinner";
@@ -29,22 +29,17 @@ export function SettingsRow({
 }
 
 export function CopyableField({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const { copied, copy } = useCopyToClipboard();
   return (
     <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
       <code className="flex-1 truncate text-xs font-mono text-text-muted">{value}</code>
       <button
         type="button"
-        onClick={handleCopy}
+        onClick={() => void copy(value)}
         className="shrink-0 text-text-muted hover:text-text transition-colors"
         title="Copy"
       >
-        {copied ? (
+        {copied !== null ? (
           <CheckIcon className="size-4" />
         ) : (
           <CopyIcon className="size-4" />
