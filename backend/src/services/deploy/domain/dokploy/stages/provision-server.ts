@@ -389,9 +389,12 @@ async function mappedInstanceIsAlive(
  * Two transient conditions are tolerated on a freshly launched VPS:
  *
  *  1. Not SSH-ready as root yet — Ubuntu enables root SSH via cloud-init on
- *     first boot, finishing slightly AFTER port 22 opens. In that window
- *     Dokploy hits the "Please login as the user ubuntu" banner and validate
- *     returns "Failed to parse output: ... Please log ...".
+ *     first boot, finishing slightly AFTER port 22 opens (waitForSsh only
+ *     proves the port accepts TCP). This surfaces two ways, depending on how
+ *     far cloud-init got: validate returns "Failed to parse output: ... Please
+ *     log ..." (sshd up, root banner-blocked), or it fails with "All
+ *     configured authentication methods failed" (root's authorized_keys not
+ *     written yet). Both are retried.
  *
  *  2. Setup still running — `server.setup` installs Docker/Swarm/Traefik over
  *     SSH, which takes a couple of minutes. validate returns a well-formed
@@ -447,8 +450,15 @@ export async function setupAndValidateWithRetry(
       lastErr = err;
       const msg = getErrMsg(err);
       // Retry the transient "not SSH-ready" / connection signals; fail fast on
-      // anything structural (bad serverId, auth, etc.).
-      const transient = /please log|failed to parse output|docker not installed yet|dokploy network not created yet|ECONNREFUSED|timed out|connection/i.test(msg);
+      // anything structural (bad serverId, Dokploy API auth, etc.).
+      //
+      // The SSH auth patterns are the SECOND symptom of transient condition 1
+      // above: port 22 opens before cloud-init has written root's
+      // authorized_keys, so Dokploy's key is rejected outright rather than
+      // hitting the "Please login as the user ubuntu" banner. Both mean "the
+      // box is still booting". Matching only the banner made a deploy die ~2s
+      // after launch on an instance that just needed another minute.
+      const transient = /please log|failed to parse output|docker not installed yet|dokploy network not created yet|ECONNREFUSED|timed out|connection|all configured authentication methods failed|invalid ssh private key/i.test(msg);
       if (!transient || attempt === attempts) throw err;
       await log(`[stage:provision-server] Server not ready yet (attempt ${attempt}/${attempts}); retrying...`);
       await sleep(delayMs);

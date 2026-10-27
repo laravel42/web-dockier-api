@@ -89,6 +89,31 @@ describe("setupAndValidateWithRetry", () => {
     expect(result.docker?.enabled).toBe(true);
   });
 
+  // The other symptom of the same cloud-init race: port 22 is open but root's
+  // authorized_keys has not been written yet, so Dokploy's key is rejected
+  // outright instead of hitting the "please login as ubuntu" banner. Matching
+  // only the banner killed deploys ~2s after launch.
+  it("retries when root's authorized_keys is not written yet", async () => {
+    let call = 0;
+    const client = {
+      setupServer: vi.fn(async () => undefined),
+      validateServer: vi.fn(async () => {
+        call += 1;
+        if (call === 1) {
+          throw new Error(
+            'Dokploy API error: 400 Bad Request — {"message":"Authentication failed: Invalid SSH private key. ' +
+              '❌ Error: All configured authentication methods failed client-authentication","code":"BAD_REQUEST"}',
+          );
+        }
+        return validation(true, true);
+      }),
+    };
+
+    const result = await setupAndValidateWithRetry(client as unknown as DokployClient, "srv-1", log, { delayMs: 0 });
+    expect(result.docker?.enabled).toBe(true);
+    expect(client.validateServer).toHaveBeenCalledTimes(2);
+  });
+
   it("fails fast on a structural error", async () => {
     const client = {
       setupServer: vi.fn(async () => undefined),
