@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { destructiveReason, isDestructiveCommand } from "../pages/ProjectDetail/destructiveCommand";
-import { useMenuKeyboard } from "../hooks/useMenuKeyboard";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/DropdownMenu";
 
 /**
  * A4: arbitrary shell against production used to run on Enter with no second step.
@@ -55,29 +60,44 @@ describe("destructive command detection", () => {
   });
 });
 
-describe("menu keyboard", () => {
-  const Menu = ({ onClose }: { onClose: () => void }) => {
-    const { menuRef, onKeyDown } = useMenuKeyboard(true, onClose);
-    return (
-      <div ref={menuRef} onKeyDown={onKeyDown} role="menu" tabIndex={-1} aria-label="Row actions">
-        <button type="button" role="menuitem">View logs</button>
-        <button type="button" role="menuitem">Restart</button>
-        <button type="button" role="menuitem">Delete</button>
-      </div>
+/**
+ * The row action menus used to be hand-rolled, each with its own outside-click
+ * listener and its own partial keyboard handling. They now go through the house
+ * `ui/DropdownMenu` primitive, so the A5 guarantees are asserted against that
+ * primitive rather than against a hook no menu uses any more.
+ */
+describe("row action menu keyboard", () => {
+  const Menu = () => (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label="Actions">⋮</button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent aria-label="Row actions">
+        <DropdownMenuItem>View logs</DropdownMenuItem>
+        <DropdownMenuItem>Restart</DropdownMenuItem>
+        <DropdownMenuItem>Delete</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  /** Opening with the keyboard is what puts focus on the first item. */
+  const open = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.tab();
+    await user.keyboard("{Enter}");
+    await vi.waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: "View logs" })).toHaveFocus(),
     );
   };
 
   it("focuses the first item when the menu opens", async () => {
-    render(<Menu onClose={vi.fn()} />);
-    // Focus moves on the next frame, so wait for it.
-    await vi.waitFor(() => expect(screen.getByRole("menuitem", { name: "View logs" })).toHaveFocus());
+    render(<Menu />);
+    await open(userEvent.setup());
   });
 
   it("moves down and wraps at the end", async () => {
-    render(<Menu onClose={vi.fn()} />);
+    render(<Menu />);
     const user = userEvent.setup();
-    await vi.waitFor(() => expect(screen.getByRole("menuitem", { name: "View logs" })).toHaveFocus());
-
+    await open(user);
     await user.keyboard("{ArrowDown}");
     expect(screen.getByRole("menuitem", { name: "Restart" })).toHaveFocus();
     await user.keyboard("{ArrowDown}{ArrowDown}");
@@ -85,50 +105,30 @@ describe("menu keyboard", () => {
   });
 
   it("moves up and wraps at the start", async () => {
-    render(<Menu onClose={vi.fn()} />);
+    render(<Menu />);
     const user = userEvent.setup();
-    await vi.waitFor(() => expect(screen.getByRole("menuitem", { name: "View logs" })).toHaveFocus());
-
+    await open(user);
     await user.keyboard("{ArrowUp}");
     expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveFocus();
   });
 
   it("jumps with Home and End", async () => {
-    render(<Menu onClose={vi.fn()} />);
+    render(<Menu />);
     const user = userEvent.setup();
-    await vi.waitFor(() => expect(screen.getByRole("menuitem", { name: "View logs" })).toHaveFocus());
-
+    await open(user);
     await user.keyboard("{End}");
     expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveFocus();
     await user.keyboard("{Home}");
     expect(screen.getByRole("menuitem", { name: "View logs" })).toHaveFocus();
   });
 
-  it("closes on Escape", async () => {
-    const onClose = vi.fn();
-    render(<Menu onClose={onClose} />);
-    await userEvent.setup().keyboard("{Escape}");
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("closes when the user tabs out", async () => {
-    const onClose = vi.fn();
-    render(<Menu onClose={onClose} />);
+  it("closes on Escape and returns focus to the trigger", async () => {
+    render(<Menu />);
     const user = userEvent.setup();
-    await vi.waitFor(() => expect(screen.getByRole("menuitem", { name: "View logs" })).toHaveFocus());
-    await user.tab();
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("does not listen once closed", async () => {
-    const onClose = vi.fn();
-    const Closed = () => {
-      const { menuRef, onKeyDown } = useMenuKeyboard(false, onClose);
-      return <div ref={menuRef} onKeyDown={onKeyDown} role="menu" tabIndex={-1} aria-label="x" />;
-    };
-    render(<Closed />);
-    await userEvent.setup().keyboard("{Escape}");
-    expect(onClose).not.toHaveBeenCalled();
+    await open(user);
+    await user.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Actions" })).toHaveFocus();
   });
 });
 

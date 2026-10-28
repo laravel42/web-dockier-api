@@ -9,6 +9,7 @@ import { Combobox } from "@/components/ui/Combobox";
 import { SettingsField, SettingsTextField } from "@/components/SettingsField";
 import { segmentActiveCls, segmentIdleCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
+import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import PageLoading from "@/components/ui/PageLoading";
 import { PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
@@ -404,7 +405,7 @@ function CustomRulesPanel({
                   })}
                 </div>
               </SettingsField>
-              {error && <p className="text-sm text-danger-500">{error}</p>}
+              {error && <Alert variant="error">{error}</Alert>}
               <div className="flex justify-end">
                 <Button type="submit" disabled={saving} loading={saving}>{saving ? "Saving…" : editingRule ? "Update" : "Create"}</Button>
               </div>

@@ -5,6 +5,7 @@ import type { Project } from "@/types";
 import { usePermissions } from "@/context/PermissionsContext";
 import Modal from "@/components/Modal";
 import Spinner from "@/components/Spinner";
+import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import { Input } from "@/components/ui/input";
@@ -381,7 +382,7 @@ function CreateSecurityRuleModal({
           )}
         </div>
 
-        {error && <p className="text-xs text-danger-500">{error}</p>}
+        {error && <Alert variant="error">{error}</Alert>}
 
         <Button
           type="submit"
@@ -528,7 +529,7 @@ function AddCredentialModal({
             </Button>
           </div>
         </div>
-        {error && <p className="text-xs text-danger-500">{error}</p>}
+        {error && <Alert variant="error">{error}</Alert>}
         <Button
           type="submit"
           className="w-full"
@@ -750,7 +751,7 @@ function CreateRedirectRuleModal({
           </div>
         </div>
 
-        {error && <p className="text-xs text-danger-500">{error}</p>}
+        {error && <Alert variant="error">{error}</Alert>}
 
         <Button
           type="submit"

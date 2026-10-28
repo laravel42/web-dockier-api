@@ -13,6 +13,7 @@ import { usePermissions } from "@/context/PermissionsContext";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import Spinner from "@/components/Spinner";
+import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import { ArchiveXIcon, ClockIcon, DownloadIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
@@ -268,7 +269,7 @@ function CreateHeartbeatModal({
           </select>
         </div>
 
-        {error && <p className="text-xs text-danger-500">{error}</p>}
+        {error && <Alert variant="error">{error}</Alert>}
 
         <Button type="submit" disabled={submitting || !name.trim()} loading={submitting}>
           {submitting ? "Creating…" : "Create heartbeat"}

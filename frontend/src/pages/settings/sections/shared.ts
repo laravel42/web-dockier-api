@@ -3,7 +3,7 @@ const SEVERITY_DOT_CLS: Record<string, string> = {
   error: "bg-danger-500",
   high: "bg-danger-500",
   blocker: "bg-danger-500",
-  critical: "bg-orange-500",
+  critical: "bg-caution-ink",
   warning: "bg-warning-500",
   medium: "bg-warning-500",
   major: "bg-warning-500",

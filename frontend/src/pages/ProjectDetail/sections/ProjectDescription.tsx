@@ -292,16 +292,26 @@ function SqlDropzone({ onParsed, onAiResult, projectId }: { onParsed: (data: Sen
 }
 
 
-// ─── AI Sensitive Data Tab ───
+// ─── Tone badges (shared by the sensitive-data and dependency tabs) ───
 
-const RISK_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+type BadgeTone = { bg: string; text: string; border: string };
+
+const SEVERITY_TONES: Record<string, BadgeTone> = {
   critical: { bg: "bg-danger-surface", text: "text-danger-ink", border: "border-danger-line" },
   high: { bg: "bg-caution-surface", text: "text-caution-ink", border: "border-caution-line" },
   medium: { bg: "bg-warning-surface", text: "text-warning-ink", border: "border-warning-line" },
   low: { bg: "bg-info-surface", text: "text-info-ink", border: "border-info-line" },
 };
 
-function riskLevelFromScore(score: number): keyof typeof RISK_COLORS {
+const DEFAULT_TONE_BADGE: BadgeTone = { bg: "bg-secondary-500/30", text: "text-text-secondary", border: "border-border" };
+
+function toneBadgeCls(tone: BadgeTone): string {
+  return `rounded-sm border px-1.5 py-0.5 text-xs font-semibold shrink-0 ${tone.bg} ${tone.text} ${tone.border}`;
+}
+
+// ─── AI Sensitive Data Tab ───
+
+function riskLevelFromScore(score: number): keyof typeof SEVERITY_TONES {
   if (score > 80) return "critical";
   if (score > 60) return "high";
   if (score > 30) return "medium";
@@ -309,8 +319,7 @@ function riskLevelFromScore(score: number): keyof typeof RISK_COLORS {
 }
 
 function riskBadgeCls(level: string): string {
-  const rc = RISK_COLORS[level] ?? RISK_COLORS.low;
-  return `rounded-sm border px-1.5 py-0.5 text-xs font-semibold shrink-0 ${rc.bg} ${rc.text} ${rc.border}`;
+  return toneBadgeCls(SEVERITY_TONES[level] ?? SEVERITY_TONES.low);
 }
 
 const CATEGORY_LABELS: Record<string, { icon: typeof KeyRoundIcon; label: string }> = {
@@ -379,7 +388,7 @@ function AiSensitiveDataTab({ data }: { data: AiSensitiveResult }) {
               </div>
               <div className="divide-y divide-border">
                 {table.columns.map((c, i) => {
-                  const severity = c.sensitivity in RISK_COLORS ? c.sensitivity : "low";
+                  const severity = c.sensitivity in SEVERITY_TONES ? c.sensitivity : "low";
                   return (
                     <div key={i} className="flex items-center px-3 py-1.5 gap-2">
                       <span className="text-xs font-mono text-text w-1/4 truncate">{c.name}</span>
@@ -467,13 +476,6 @@ function SensitiveDataTab({ data }: { data: SensitiveField[] }) {
 
 // ─── Vulnerability Modal & Dependencies Tab ───
 
-const VULN_STYLES: Record<string, { bg: string; text: string; border: string }> = {
-  critical: { bg: "bg-danger-surface", text: "text-danger-ink", border: "border-danger-line" },
-  high: { bg: "bg-caution-surface", text: "text-caution-ink", border: "border-caution-line" },
-  medium: { bg: "bg-warning-surface", text: "text-warning-ink", border: "border-warning-line" },
-  low: { bg: "bg-info-surface", text: "text-info-ink", border: "border-info-line" },
-};
-
 // Unknown severities rank 0, below "low", so a bad value can never outrank a
 // real critical and push it down the table.
 const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
@@ -484,26 +486,16 @@ const severityRank = (severity: string): number => SEVERITY_RANK[severity] ?? 0;
 const worstSeverity = (dependency: Dependency): number =>
   dependency.vulnerabilities.reduce((worst, v) => Math.max(worst, severityRank(v.severity)), 0);
 
-const DEP_STATUS_STYLES: Record<string, { bg: string; text: string; border: string }> = {
+const DEP_STATUS_TONES: Record<string, BadgeTone> = {
   active: { bg: "bg-success-surface", text: "text-success-ink", border: "border-success-line" },
   outdated: { bg: "bg-warning-surface", text: "text-warning-ink", border: "border-warning-line" },
   deprecated: { bg: "bg-danger-surface", text: "text-danger-ink", border: "border-danger-line" },
 };
 
-const DEFAULT_TONE_BADGE = { bg: "bg-secondary-500/30", text: "text-text-secondary", border: "border-border" };
-
-function toneBadgeCls(
-  styles: { bg: string; text: string; border: string },
-  size: "sm" | "xs" = "sm",
-): string {
-  const textSize = size === "xs" ? "text-xs" : "text-xs";
-  return `rounded-sm border px-1.5 py-0.5 font-semibold shrink-0 ${textSize} ${styles.bg} ${styles.text} ${styles.border}`;
-}
-
 type VulnDetail = { id: string; severity: string; title: string; details: string; aliases: string[]; url: string; pkg: string };
 
 function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void }) {
-  const vs = VULN_STYLES[vuln.severity] || VULN_STYLES.medium;
+  const vs = SEVERITY_TONES[vuln.severity] || SEVERITY_TONES.medium;
   const [details, setDetails] = useState(vuln.details);
   const [aliases, setAliases] = useState(vuln.aliases);
   const [loading, setLoading] = useState(!vuln.details);
@@ -606,7 +598,7 @@ function DependencyRow({
         ) : <span className="text-text-muted">—</span>}
       </span>
       <span className="w-[12%]">
-        <span className={toneBadgeCls(DEP_STATUS_STYLES[dependency.status] ?? DEFAULT_TONE_BADGE)}>
+        <span className={toneBadgeCls(DEP_STATUS_TONES[dependency.status] ?? DEFAULT_TONE_BADGE)}>
           {dependency.status}
         </span>
       </span>
@@ -614,13 +606,13 @@ function DependencyRow({
         {hasVulns ? (
           <div className="flex flex-wrap items-center gap-1">
             {visibleVulns.map((v, vi) => {
-              const vs = VULN_STYLES[v.severity] || VULN_STYLES.medium;
+              const vs = SEVERITY_TONES[v.severity] || SEVERITY_TONES.medium;
               return (
                 <button
                   key={`${v.id}-${vi}`}
                   type="button"
                   onClick={() => onSelectVuln({ ...v, pkg: dependency.name })}
-                  className={`${toneBadgeCls(vs, "xs")} hover:brightness-110 transition-[filter] truncate max-w-35 text-left cursor-pointer`}
+                  className={`${toneBadgeCls(vs)} hover:brightness-110 transition-[filter] truncate max-w-35 text-left cursor-pointer`}
                 >
                   {v.title || v.id}
                 </button>

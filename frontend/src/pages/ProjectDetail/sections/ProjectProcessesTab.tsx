@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useId } from "react";
+import { useState, useEffect, useCallback, useId } from "react";
 import { processesApi } from "@/services/processes";
 import { deployApi } from "@/services/api";
 import type {
@@ -16,6 +16,7 @@ import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import Spinner from "@/components/Spinner";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
+import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, InfoIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
@@ -23,9 +24,15 @@ import type { StatusTone } from "@/utils/styles";
 import StatusPill from "@/components/ui/StatusPill";
 import { useUrlSection } from "@/hooks/useUrlSection";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
-import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import TabSpinner from "@/components/ui/TabSpinner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu";
 
 interface Props {
   project: Project;
@@ -159,44 +166,14 @@ function ProcessActionsMenu({
   hasDeployment: boolean;
   onRefresh: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const closeMenu = useCallback(() => setOpen(false), []);
-  const { menuRef: menuListRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(open, closeMenu);
   const { copy } = useCopyToClipboard();
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const handleAction = async (action: string) => {
-    setOpen(false);
-    if (action === "start") {
-      await processesApi.changeProcessStatus(projectId, process.id, "running");
-      onRefresh();
-    } else if (action === "stop") {
-      await processesApi.changeProcessStatus(projectId, process.id, "stopped");
-      onRefresh();
-    } else if (action === "restart") {
-      await processesApi.changeProcessStatus(projectId, process.id, "restart");
-      onRefresh();
-    } else if (action === "edit") {
-      setShowEdit(true);
-    } else if (action === "copy") {
-      await copy(process.id);
-    } else if (action === "logs") {
-      setShowLogs(true);
-    } else if (action === "delete") {
-      setShowDelete(true);
-    }
+  const changeStatus = (status: "running" | "stopped" | "restart") => async () => {
+    await processesApi.changeProcessStatus(projectId, process.id, status);
+    onRefresh();
   };
 
   const handleDelete = async () => {
@@ -206,58 +183,54 @@ function ProcessActionsMenu({
 
   return (
     <>
-      <div className="relative" ref={menuRef}>
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="size-8 flex items-center justify-center rounded-md border border-border hover:bg-card/60 transition-colors"
-          aria-label="Actions"
-        >
-          <EllipsisVerticalIcon className="size-4 text-text-muted" />
-        </button>
-
-        {open && (
-          <div
-            ref={menuListRef}
-            onKeyDown={onMenuKeyDown}
-            role="menu"
-            tabIndex={-1}
-            aria-label="Row actions"
-            className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-(--shadow-overlay) py-1"
+      {/* Non-modal: these items open a dialog, and a modal menu leaves the body
+          pointer-events locked when it unmounts in the same tick as the dialog. */}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="size-8 flex items-center justify-center rounded-md border border-border hover:bg-card/60 transition-colors"
+            aria-label="Actions"
           >
-            <button role="menuitem" onClick={() => handleAction("logs")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-              <FileTextIcon className="size-4 text-text-muted" />
-              View logs
-            </button>
-            <button role="menuitem" onClick={() => handleAction("restart")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-              <RefreshCwIcon className="size-4 text-text-muted" />
-              Restart
-            </button>
-            <button role="menuitem" onClick={() => handleAction("start")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-              <PlayIcon className="size-4 text-text-muted" />
-              Start
-            </button>
-            <button role="menuitem" onClick={() => handleAction("stop")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-              <SquareIcon className="size-4 text-text-muted" />
-              Stop
-            </button>
-            <div className="my-1 border-t border-border" />
-            <button role="menuitem" onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
-              <SquarePenIcon className="size-4 text-text-muted" />
-              Edit
-            </button>
-            <button role="menuitem" onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
-              <CopyIcon className="size-4 text-text-muted"  />
-              Copy ID
-            </button>
-            <div className="my-1 border-t border-border" />
-            <button role="menuitem" onClick={() => handleAction("delete")} className="w-full px-3 py-2 text-left text-sm text-danger-500 hover:bg-danger-500/5 flex items-center gap-2">
-              <Trash2Icon className="size-4" />
-              Delete
-            </button>
-          </div>
-        )}
-      </div>
+            <EllipsisVerticalIcon className="size-4 text-text-muted" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-44" aria-label="Row actions">
+          <DropdownMenuItem disabled={!hasDeployment} onSelect={() => setShowLogs(true)}>
+            <FileTextIcon className="text-text-muted" />
+            View logs
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!hasDeployment} onSelect={() => void changeStatus("restart")()}>
+            <RefreshCwIcon className="text-text-muted" />
+            Restart
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!hasDeployment} onSelect={() => void changeStatus("running")()}>
+            <PlayIcon className="text-text-muted" />
+            Start
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!hasDeployment} onSelect={() => void changeStatus("stopped")()}>
+            <SquareIcon className="text-text-muted" />
+            Stop
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setShowEdit(true)}>
+            <SquarePenIcon className="text-text-muted" />
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void copy(process.id)}>
+            <CopyIcon className="text-text-muted" />
+            Copy ID
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => setShowDelete(true)}
+            className="text-danger-500 focus:text-danger-500"
+          >
+            <Trash2Icon />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {showEdit && (
         <CreateProcessModal
@@ -302,38 +275,13 @@ function JobActionsMenu({
   hasDeployment: boolean;
   onRefresh: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const closeMenu = useCallback(() => setOpen(false), []);
-  const { menuRef: menuListRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(open, closeMenu);
   const { copy } = useCopyToClipboard();
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const handleAction = async (action: string) => {
-    setOpen(false);
-    if (action === "pause") {
-      await processesApi.changeJobStatus(projectId, job.id, "paused");
-      onRefresh();
-    } else if (action === "run") {
-      await processesApi.changeJobStatus(projectId, job.id, "installed");
-      onRefresh();
-    } else if (action === "edit") {
-      setShowEdit(true);
-    } else if (action === "copy") {
-      await copy(job.id);
-    } else if (action === "delete") {
-      setShowDelete(true);
-    }
+  const changeStatus = (status: "paused" | "installed") => async () => {
+    await processesApi.changeJobStatus(projectId, job.id, status);
+    onRefresh();
   };
 
   const handleDelete = async () => {
@@ -343,50 +291,44 @@ function JobActionsMenu({
 
   return (
     <>
-      <div className="relative" ref={menuRef}>
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="size-8 flex items-center justify-center rounded-md border border-border hover:bg-card/60 transition-colors"
-          aria-label="Actions"
-        >
-          <EllipsisVerticalIcon className="size-4 text-text-muted" />
-        </button>
-
-        {open && (
-          <div
-            ref={menuListRef}
-            onKeyDown={onMenuKeyDown}
-            role="menu"
-            tabIndex={-1}
-            aria-label="Row actions"
-            className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-border bg-card shadow-(--shadow-overlay) py-1"
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="size-8 flex items-center justify-center rounded-md border border-border hover:bg-card/60 transition-colors"
+            aria-label="Actions"
           >
-            <button role="menuitem" onClick={() => handleAction("pause")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-              <PauseIcon className="size-4 text-text-muted" />
-              Pause
-            </button>
-            <button role="menuitem" onClick={() => handleAction("run")} disabled={!hasDeployment} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-              <PlayIcon className="size-4 text-text-muted" />
-              Run
-            </button>
-            <div className="my-1 border-t border-border" />
-            <button role="menuitem" onClick={() => handleAction("edit")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
-              <SquarePenIcon className="size-4 text-text-muted" />
-              Edit
-            </button>
-            <button role="menuitem" onClick={() => handleAction("copy")} className="w-full px-3 py-2 text-left text-sm text-text hover:bg-card/60 flex items-center gap-2">
-              <CopyIcon className="size-4 text-text-muted" />
-              Copy ID
-            </button>
-            <div className="my-1 border-t border-border" />
-            <button role="menuitem" onClick={() => handleAction("delete")} className="w-full px-3 py-2 text-left text-sm text-danger-500 hover:bg-danger-500/5 flex items-center gap-2">
-              <Trash2Icon className="size-4" />
-              Delete
-            </button>
-          </div>
-        )}
-      </div>
+            <EllipsisVerticalIcon className="size-4 text-text-muted" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-44" aria-label="Row actions">
+          <DropdownMenuItem disabled={!hasDeployment} onSelect={() => void changeStatus("paused")()}>
+            <PauseIcon className="text-text-muted" />
+            Pause
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!hasDeployment} onSelect={() => void changeStatus("installed")()}>
+            <PlayIcon className="text-text-muted" />
+            Run
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setShowEdit(true)}>
+            <SquarePenIcon className="text-text-muted" />
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void copy(job.id)}>
+            <CopyIcon className="text-text-muted" />
+            Copy ID
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => setShowDelete(true)}
+            className="text-danger-500 focus:text-danger-500"
+          >
+            <Trash2Icon />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {showEdit && (
         <CreateJobModal
@@ -716,7 +658,7 @@ function CreateProcessModal({
           </div>
         )}
 
-        {error && <p className="text-xs text-danger-500">{error}</p>}
+        {error && <Alert variant="error">{error}</Alert>}
 
         <Button type="submit" className="w-full" disabled={saving} loading={saving}>
           {saving ? "Saving…" : editProcess ? "Update background process" : "Create background process"}
@@ -829,7 +771,7 @@ function CreateJobModal({
           <ToggleSwitch checked={monitorHeartbeat} onChange={setMonitorHeartbeat} ariaLabel="Monitor with heartbeats" />
         </div>
 
-        {error && <p className="text-xs text-danger-500">{error}</p>}
+        {error && <Alert variant="error">{error}</Alert>}
 
         <Button type="submit" className="w-full" disabled={saving || !name.trim() || !command.trim()} loading={saving}>
           {saving ? "Saving…" : editJob ? "Update scheduled job" : "Create scheduled job"}

@@ -17,9 +17,14 @@ import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { settingsBadgeCls } from "@/utils/styles";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
-import { useMenuKeyboard } from "@/hooks/useMenuKeyboard";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import DropdownPortal from "@/components/DropdownPortal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu";
 import { dnsBannerCopy } from "@/utils/dnsBannerCopy";
 import TabSpinner from "@/components/ui/TabSpinner";
 
@@ -28,14 +33,6 @@ interface Props {
   /** Bumps after an in-session deploy; shown-after-deploy trigger for the DNS banner. */
   domainRefreshKey?: number;
 }
-
-// Fixed width of the portaled actions menu (matches the legacy `w-40` = 10rem).
-const MENU_WIDTH = 160;
-// Rough height used only to decide whether to flip the menu above the trigger.
-const MENU_EST_HEIGHT = 180;
-// Keep the menu this far from the viewport edges when clamping/flipping.
-const VIEWPORT_MARGIN = 8;
-
 
 // ─── Domain Row ───
 
@@ -52,9 +49,6 @@ function DomainRow({
   infraLive: boolean;
   onRefresh: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
-  const { menuRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(menuOpen, closeMenu);
   const { copy } = useCopyToClipboard();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -66,7 +60,6 @@ function DomainRow({
   // Fetched on demand rather than with the list: the records come from the live
   // CDN and certificate, so one request per domain only when a user asks.
   const handleToggleInstructions = async () => {
-    setMenuOpen(false);
     if (instructionsOpen) {
       setInstructionsOpen(false);
       return;
@@ -87,7 +80,6 @@ function DomainRow({
   const handleDelete = async () => {
     await domainsApi.deleteDomain(projectId, domain.id);
     onRefresh();
-    setMenuOpen(false);
   };
 
   const handleVerifyDns = async () => {
@@ -100,23 +92,7 @@ function DomainRow({
       setDnsStatus({ verified: false, message: (err as Error).message || "Verification failed" });
     } finally {
       setVerifying(false);
-      setMenuOpen(false);
     }
-  };
-
-  const handleCopy = () => {
-    void copy(domain.name);
-    setMenuOpen(false);
-  };
-
-  const handleCopyId = () => {
-    void copy(domain.id);
-    setMenuOpen(false);
-  };
-
-  const handleVisit = () => {
-    window.open(`https://${domain.name}`, "_blank", "noopener");
-    setMenuOpen(false);
   };
 
   return (
@@ -136,88 +112,60 @@ function DomainRow({
             <span className="text-xs text-text-muted">Redirect from www.</span>
           )}
           {canManage && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-card/60 transition-colors"
-                aria-label="Domain actions"
-              >
-                <EllipsisVerticalIcon className="size-4" />
-              </button>
-            {menuOpen && (
-              <>
-                {/* Mouse-only dismissal; Escape closes this surface as well. */}
-                <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div
-                  ref={menuRef}
-                  onKeyDown={onMenuKeyDown}
-                  role="menu"
-                  tabIndex={-1}
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-card/60 transition-colors"
                   aria-label="Domain actions"
-                  className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1"
                 >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleVisit}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
-                  >
-                    <ExternalLinkIcon className="size-3.5" />
-                    Visit
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleCopy}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
-                  >
-                    <CopyIcon className="size-3.5" />
-                    Copy
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleCopyId}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
-                  >
-                    <HashIcon className="size-3.5" />
-                    Copy ID
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleVerifyDns}
+                  <EllipsisVerticalIcon className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-44" aria-label="Domain actions">
+                <DropdownMenuItem onSelect={() => window.open(`https://${domain.name}`, "_blank", "noopener")}>
+                  <ExternalLinkIcon />
+                  Visit
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void copy(domain.name)}>
+                  <CopyIcon />
+                  Copy
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void copy(domain.id)}>
+                  <HashIcon />
+                  Copy ID
+                </DropdownMenuItem>
+                {/* The hint sits on a wrapper: a disabled item has no pointer
+                    events, so a `title` on it would never surface. */}
+                <span title={!infraLive ? "Deploy the project first" : undefined}>
+                  <DropdownMenuItem
                     disabled={verifying || !infraLive}
-                    title={!infraLive ? "Deploy the project first" : undefined}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors disabled:opacity-50"
+                    onSelect={() => void handleVerifyDns()}
                   >
-                    <CircleCheckIcon className="size-3.5" />
+                    <CircleCheckIcon />
                     {verifying ? "Verifying…" : "Verify DNS"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleToggleInstructions}
+                  </DropdownMenuItem>
+                </span>
+                <span title={!infraLive ? "Deploy the project first" : undefined}>
+                  <DropdownMenuItem
                     disabled={!infraLive}
-                    title={!infraLive ? "Deploy the project first" : undefined}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-text-muted transition-colors hover:bg-card/60 hover:text-text disabled:opacity-50"
+                    onSelect={() => void handleToggleInstructions()}
+                    className="text-text-muted"
                   >
                     {instructionsOpen ? "Hide DNS records" : "Show DNS records"}
-                  </button>
-                  <div className="my-1 border-t border-border" />
-                  <button
-                    type="button"
-                    onClick={() => { setMenuOpen(false); setConfirmOpen(true); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors"
-                  >
-                    <Trash2Icon className="size-3.5" />
-                    Delete
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+                  </DropdownMenuItem>
+                </span>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => setConfirmOpen(true)}
+                  className="text-danger-500 focus:text-danger-500"
+                >
+                  <Trash2Icon />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
       </div>
     </div>
     {dnsStatus && (
@@ -506,48 +454,8 @@ function CertificateRow({
   canManage: boolean;
   onRefresh: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const { copy } = useCopyToClipboard();
-
-  // The actions menu renders in a body portal (fixed position) so a parent's
-  // `overflow` cannot clip it. Track the trigger and compute a right-aligned,
-  // flip-up position for it.
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
-
-  const updateMenuPos = useCallback(() => {
-    const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const left = Math.max(VIEWPORT_MARGIN, rect.right - MENU_WIDTH);
-    const flipUp = rect.bottom + MENU_EST_HEIGHT > window.innerHeight - VIEWPORT_MARGIN;
-    const top = flipUp ? rect.top - MENU_EST_HEIGHT - 4 : rect.bottom + 4;
-    setMenuPos({ top, left, width: MENU_WIDTH });
-  }, []);
-
-  const closeMenu = useCallback(() => { setMenuOpen(false); setMenuPos(null); }, []);
-  const { menuRef, onKeyDown: onMenuKeyDown } = useMenuKeyboard(menuOpen, closeMenu);
-
-  const toggleMenu = useCallback(() => {
-    setMenuOpen((open) => {
-      if (open) { setMenuPos(null); return false; }
-      updateMenuPos();
-      return true;
-    });
-  }, [updateMenuPos]);
-
-  // Recalculate on scroll/resize so the portaled menu tracks its trigger.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = () => updateMenuPos();
-    window.addEventListener("scroll", handler, true);
-    window.addEventListener("resize", handler);
-    return () => {
-      window.removeEventListener("scroll", handler, true);
-      window.removeEventListener("resize", handler);
-    };
-  }, [menuOpen, updateMenuPos]);
 
   const typeLabels: Record<SslCertificate["type"], string> = {
     lets_encrypt: "Let's Encrypt",
@@ -575,7 +483,6 @@ function CertificateRow({
   const handleDelete = async () => {
     await domainsApi.deleteCertificate(projectId, cert.id);
     onRefresh();
-    closeMenu();
   };
 
   const expiresLabel = cert.expiresAt
@@ -598,52 +505,31 @@ function CertificateRow({
           {cert.status}
         </span>
         {canManage && (
-          <div className="relative">
-            <button
-              ref={triggerRef}
-              type="button"
-              onClick={toggleMenu}
-              className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-card/60 transition-colors"
-              aria-label="Certificate actions"
-              aria-expanded={menuOpen}
-              aria-haspopup="menu"
-            >
-              <EllipsisVerticalIcon className="size-4" />
-            </button>
-            {menuOpen && (
-              <>
-                {/* Mouse-only dismissal; Escape closes this surface as well. */}
-                <div aria-hidden="true" className="fixed inset-0 z-99998" onClick={closeMenu} />
-                <DropdownPortal
-                  open={menuOpen}
-                  pos={menuPos}
-                  dropdownRef={menuRef}
-                  className="w-40 rounded-lg border border-border bg-surface shadow-(--shadow-overlay) py-1"
-                >
-                  <div onKeyDown={onMenuKeyDown} role="menu" tabIndex={-1} aria-label="Certificate actions">
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => { void copy(cert.id); closeMenu(); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text hover:bg-card/60 transition-colors"
-                    >
-                      <HashIcon className="size-3.5" />
-                      Copy ID
-                    </button>
-                    <div className="my-1 border-t border-border" />
-                    <button
-                      type="button"
-                      onClick={() => { closeMenu(); setConfirmOpen(true); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger-500 hover:bg-danger-500/5 transition-colors"
-                    >
-                      <Trash2Icon className="size-3.5" />
-                      Delete
-                    </button>
-                  </div>
-                </DropdownPortal>
-              </>
-            )}
-          </div>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex size-7 items-center justify-center rounded-md border border-border text-text-muted hover:text-text hover:bg-card/60 transition-colors"
+                aria-label="Certificate actions"
+              >
+                <EllipsisVerticalIcon className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-40" aria-label="Certificate actions">
+              <DropdownMenuItem onSelect={() => void copy(cert.id)}>
+                <HashIcon />
+                Copy ID
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => setConfirmOpen(true)}
+                className="text-danger-500 focus:text-danger-500"
+              >
+                <Trash2Icon />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
     </div>
@@ -822,7 +708,7 @@ function CreateCertificateModal({
           />
         </div>
 
-        {error && <p className="text-xs text-danger-500">{error}</p>}
+        {error && <Alert variant="error">{error}</Alert>}
 
         <Button
           type="submit"
