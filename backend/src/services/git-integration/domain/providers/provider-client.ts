@@ -21,7 +21,13 @@ export type ListedRepo = {
 
 const MAX_REPO_PAGES = 10;
 const REPOS_PER_PAGE = 100;
-/** Page budget when serving a search — keeps provider-side search responsive. */
+/**
+ * Page budget when serving a search — keeps provider-side search responsive.
+ * shortcut: GitHub has no search param on /user/repos so matching is local,
+ * which caps search coverage at SEARCH_MAX_PAGES * REPOS_PER_PAGE (300) of the
+ * most recently updated repos; switch to GET /search/repositories if an
+ * account with more than that reports missing results.
+ */
 export const SEARCH_MAX_PAGES = 3;
 
 export interface ListReposOptions {

@@ -169,3 +169,51 @@ describe("listRepos (GitLab)", () => {
     expect(fetchMock.mock.calls.every(([u]) => !String(u).includes("associations"))).toBe(true);
   });
 });
+
+// ─── GitHub repo search (local filtering across pages) ─────────────
+
+describe("listRepos (GitHub search)", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  function ghPage(repos: Array<Record<string, unknown>>, next: string | null): Response {
+    return {
+      ok: true,
+      status: 200,
+      statusText: "",
+      json: async () => repos,
+      text: async () => "",
+      headers: { get: (k: string) => (k === "Link" && next ? `<${next}>; rel="next"` : null) },
+    } as unknown as Response;
+  }
+
+  it("collects matches from every page, not just the first", async () => {
+    const conn: ConnectionLike = { provider: "github", personal_token: "tok", endpoint: null };
+    // 100 repos per page; two matches on page 1 and nine on page 2 — the shape
+    // of the bug where only the cached first page was searched.
+    const filler = (n: number, prefix: string) =>
+      Array.from({ length: n }, (_, i) => ({ name: `${prefix}${i}`, full_name: `me/${prefix}${i}`, html_url: "" }));
+    const page1 = [...filler(98, "other"), ...filler(2, "maildrill-a")];
+    const page2 = [...filler(91, "misc"), ...filler(9, "maildrill-b")];
+
+    fetchMock
+      .mockResolvedValueOnce(ghPage(page1, "https://api.github.com/user/repos?page=2"))
+      .mockResolvedValueOnce(ghPage(page2, null));
+
+    const repos = await listRepos(conn, { search: "maildrill", maxPages: 3 });
+
+    expect(repos).toHaveLength(11);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Page size is the provider default, independent of the response limit.
+    expect(String(fetchMock.mock.calls[0][0])).toContain("per_page=100");
+  });
+});

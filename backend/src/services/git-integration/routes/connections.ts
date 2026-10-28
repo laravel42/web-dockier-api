@@ -17,7 +17,7 @@ import {
   updateConnection,
   parseRepoUrl,
 } from "../domain/connections.js";
-import { listBranches, listRepos, matchesRepoSearch, SEARCH_MAX_PAGES } from "../domain/providers/provider-client.js";
+import { listBranches, listRepos, SEARCH_MAX_PAGES } from "../domain/providers/provider-client.js";
 import { parseJsonField, writeRepoListCache } from "../domain/cache.js";
 import { requireConnection } from "./shared.js";
 
@@ -183,17 +183,13 @@ export async function registerConnectionRoutes(app: FastifyInstance) {
       };
 
       // ── Search path ──────────────────────────────────────────────
-      // Try the cache first (instant, no network). Only hit the provider when
-      // the cached page has no match. Search results are never cached, so they
-      // can't shrink the cached default list.
+      // Always ask the provider. The cache only ever holds the first page of
+      // the default list, so a match found in it is a SUBSET of the real
+      // results — answering from it silently hid repos the user has.
+      // Page size stays at the provider default (100), independent of the
+      // response `limit`, so a small limit doesn't shrink how far we look.
       if (search) {
-        const cachedRepos = await readFreshCache();
-        const fromCache = (cachedRepos ?? []).filter((r) => matchesRepoSearch(r, search));
-        if (fromCache.length > 0) {
-          return { repos: fromCache.slice(0, limit), cached: true, hasMore: fromCache.length > limit };
-        }
-
-        const found = await listRepos(conn, { search, perPage: limit, maxPages: SEARCH_MAX_PAGES });
+        const found = await listRepos(conn, { search, maxPages: SEARCH_MAX_PAGES });
         return { repos: found.slice(0, limit), cached: false, hasMore: found.length > limit };
       }
 
