@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useId } from "react";
+import { useState, useEffect, useCallback, useId, type ReactNode } from "react";
 import { processesApi } from "@/services/processes";
 import { deployApi } from "@/services/api";
 import type {
@@ -352,6 +352,47 @@ function JobActionsMenu({
   );
 }
 
+// ─── Queue-worker form rows ───
+
+const fieldLabelCls = cn(labelCls, "flex w-28 items-center gap-1.5 text-xs");
+
+/**
+ * One row of the queue-worker form: fixed-width label left, control right.
+ * A row whose control is a `ToggleSwitch` passes no `htmlFor` — that renders a
+ * button, which a label cannot name, so it gets a span instead.
+ */
+function FieldRow({ htmlFor, label, children }: { htmlFor?: string; label: ReactNode; children: ReactNode }) {
+  const content = <><InfoIcon className="size-3.5 text-primary-500" />{label}</>;
+  return (
+    <div className="flex items-center gap-3">
+      {htmlFor
+        ? <label htmlFor={htmlFor} className={fieldLabelCls}>{content}</label>
+        : <span className={fieldLabelCls}>{content}</span>}
+      {children}
+    </div>
+  );
+}
+
+/** Right padding per unit, so the printed unit never sits under the value. */
+const UNIT_PAD = { seconds: "pr-16", tries: "pr-12", MB: "pr-10" } as const;
+
+/** Number input with its unit printed inside the right edge. */
+function UnitInput({ id, unit, value, onChange, min }: {
+  id: string;
+  /** Keyed, not free text: a unit with no measured padding will not compile. */
+  unit: keyof typeof UNIT_PAD;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+}) {
+  return (
+    <div className="relative flex-1">
+      <Input id={id} type="number" className={UNIT_PAD[unit]} value={value} onChange={(e) => onChange(Number(e.target.value))} min={min} />
+      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">{unit}</span>
+    </div>
+  );
+}
+
 // ─── Create/Edit Process Modal ───
 
 function CreateProcessModal({
@@ -500,125 +541,55 @@ function CreateProcessModal({
 
         {type === "queue_worker" ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-runtime`}>
-                <InfoIcon className="size-3.5 text-primary-500" />
-                Runtime
-              </label>
-              <select id={`${fid}-runtime`}  value={runtime} onChange={(e) => { setRuntime(e.target.value); setRuntimeVersion(""); }}>
+            <FieldRow htmlFor={`${fid}-runtime`} label="Runtime">
+              <select id={`${fid}-runtime`} value={runtime} onChange={(e) => { setRuntime(e.target.value); setRuntimeVersion(""); }}>
                 {RUNTIME_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
-            </div>
+            </FieldRow>
             {currentRuntimeOpts && currentRuntimeOpts.versions.length > 0 && (
-              <div className="flex items-center gap-3">
-                <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-version`}>
-                  <InfoIcon className="size-3.5 text-primary-500" />
-                  Version
-                </label>
-                <select id={`${fid}-version`}  value={runtimeVersion || currentRuntimeOpts.versions[0]} onChange={(e) => setRuntimeVersion(e.target.value)}>
+              <FieldRow htmlFor={`${fid}-version`} label="Version">
+                <select id={`${fid}-version`} value={runtimeVersion || currentRuntimeOpts.versions[0]} onChange={(e) => setRuntimeVersion(e.target.value)}>
                   {currentRuntimeOpts.versions.map((v) => <option key={v} value={v}>{currentRuntimeOpts.label} {v}</option>)}
                 </select>
-              </div>
+              </FieldRow>
             )}
-            <div className="flex items-center gap-3">
-              <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-field-3`}>
-                <InfoIcon className="size-3.5 text-primary-500" />
-                {runtime === "php" ? "Connection" : "Entry point"}
-              </label>
-              <Input id={`${fid}-field-3`} type="text"  value={connection} onChange={(e) => setConnection(e.target.value)} placeholder={runtime === "php" ? "redis" : runtime === "node" ? "worker.js" : runtime === "python" ? "worker.py" : "./worker"} />
-            </div>
-            <div className="flex items-center gap-3">
-              <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-processes`}>
-                <InfoIcon className="size-3.5 text-primary-500" />
-                processes
-              </label>
-              <Input id={`${fid}-processes`} type="number"  value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
-            </div>
-            <div className="flex items-center gap-3">
-              <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-queue`}>
-                <InfoIcon className="size-3.5 text-primary-500" />
-                --queue
-              </label>
-              <Input id={`${fid}-queue`} type="text"  value={queue} onChange={(e) => setQueue(e.target.value)} placeholder={runtime === "php" ? "default,emails" : "default"} />
-            </div>
+            <FieldRow htmlFor={`${fid}-field-3`} label={runtime === "php" ? "Connection" : "Entry point"}>
+              <Input id={`${fid}-field-3`} type="text" value={connection} onChange={(e) => setConnection(e.target.value)} placeholder={runtime === "php" ? "redis" : runtime === "node" ? "worker.js" : runtime === "python" ? "worker.py" : "./worker"} />
+            </FieldRow>
+            <FieldRow htmlFor={`${fid}-processes`} label="processes">
+              <Input id={`${fid}-processes`} type="number" value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
+            </FieldRow>
+            <FieldRow htmlFor={`${fid}-queue`} label="--queue">
+              <Input id={`${fid}-queue`} type="text" value={queue} onChange={(e) => setQueue(e.target.value)} placeholder={runtime === "php" ? "default,emails" : "default"} />
+            </FieldRow>
 
-            <div className="flex items-center gap-3">
-              <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-timeout`}>
-                <InfoIcon className="size-3.5 text-primary-500" />
-                Timeout
-              </label>
-              <div className="relative flex-1">
-                <Input id={`${fid}-timeout`} type="number" className={` pr-16`} value={timeout} onChange={(e) => setTimeout(Number(e.target.value))} min={0} />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-tries`}>
-                <InfoIcon className="size-3.5 text-primary-500" />
-                Tries
-              </label>
-              <div className="relative flex-1">
-                <Input id={`${fid}-tries`} type="number" className={` pr-12`} value={tries} onChange={(e) => setTries(Number(e.target.value))} min={0} />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">tries</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-memory`}>
-                <InfoIcon className="size-3.5 text-primary-500" />
-                Memory
-              </label>
-              <div className="relative flex-1">
-                <Input id={`${fid}-memory`} type="number" className={` pr-10`} value={memory} onChange={(e) => setMemory(Number(e.target.value))} min={32} />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">MB</span>
-              </div>
-            </div>
+            <FieldRow htmlFor={`${fid}-timeout`} label="Timeout">
+              <UnitInput id={`${fid}-timeout`} unit="seconds" value={timeout} onChange={setTimeout} min={0} />
+            </FieldRow>
+            <FieldRow htmlFor={`${fid}-tries`} label="Tries">
+              <UnitInput id={`${fid}-tries`} unit="tries" value={tries} onChange={setTries} min={0} />
+            </FieldRow>
+            <FieldRow htmlFor={`${fid}-memory`} label="Memory">
+              <UnitInput id={`${fid}-memory`} unit="MB" value={memory} onChange={setMemory} min={32} />
+            </FieldRow>
             {/* PHP-specific fields */}
             {runtime === "php" && (
               <>
-                <div className="flex items-center gap-3">
-                  <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-backoff`}>
-                    <InfoIcon className="size-3.5 text-primary-500" />
-                    --backoff
-                  </label>
-                  <div className="relative flex-1">
-                    <Input id={`${fid}-backoff`} type="number" className={` pr-16`} value={backoff} onChange={(e) => setBackoff(Number(e.target.value))} min={0} />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-sleep`}>
-                    <InfoIcon className="size-3.5 text-primary-500" />
-                    --sleep
-                  </label>
-                  <div className="relative flex-1">
-                    <Input id={`${fid}-sleep`} type="number" className={` pr-16`} value={sleep} onChange={(e) => setSleep(Number(e.target.value))} min={0} />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-rest`}>
-                    <InfoIcon className="size-3.5 text-primary-500" />
-                    --rest
-                  </label>
-                  <div className="relative flex-1">
-                    <Input id={`${fid}-rest`} type="number" className={` pr-16`} value={rest} onChange={(e) => setRest(Number(e.target.value))} min={0} />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">seconds</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")} htmlFor={`${fid}-env`}>
-                    <InfoIcon className="size-3.5 text-primary-500" />
-                    --env
-                  </label>
-                  <Input id={`${fid}-env`} type="text"  value={env} onChange={(e) => setEnv(e.target.value)} />
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className={cn(labelCls, "flex w-28 items-center gap-1.5 text-xs")}>
-                    <InfoIcon className="size-3.5 text-primary-500" />
-                    --force
-                  </span>
+                <FieldRow htmlFor={`${fid}-backoff`} label="--backoff">
+                  <UnitInput id={`${fid}-backoff`} unit="seconds" value={backoff} onChange={setBackoff} min={0} />
+                </FieldRow>
+                <FieldRow htmlFor={`${fid}-sleep`} label="--sleep">
+                  <UnitInput id={`${fid}-sleep`} unit="seconds" value={sleep} onChange={setSleep} min={0} />
+                </FieldRow>
+                <FieldRow htmlFor={`${fid}-rest`} label="--rest">
+                  <UnitInput id={`${fid}-rest`} unit="seconds" value={rest} onChange={setRest} min={0} />
+                </FieldRow>
+                <FieldRow htmlFor={`${fid}-env`} label="--env">
+                  <Input id={`${fid}-env`} type="text" value={env} onChange={(e) => setEnv(e.target.value)} />
+                </FieldRow>
+                <FieldRow label="--force">
                   <ToggleSwitch checked={force} onChange={setForce} ariaLabel="--force" />
-                </div>
+                </FieldRow>
               </>
             )}
 
