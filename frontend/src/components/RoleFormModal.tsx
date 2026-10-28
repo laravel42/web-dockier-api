@@ -4,6 +4,8 @@ import SettingsModalFooter from "./SettingsModalFooter";
 import Button from "./ui/Button";
 import { Input } from "./ui/input";
 import { SearchIcon, CheckIcon, MinusIcon, ChevronDownIcon, LockIcon } from "lucide-react";
+import { cn } from "@/utils/cn";
+import { labelCls } from "@/utils/styles";
 import {
   PERMISSION_SECTIONS,
   ASSIGNABLE_PERMISSION_KEYS,
@@ -142,7 +144,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
         <div className="shrink-0 space-y-5">
         {/* Name */}
         <div>
-          <label htmlFor="role-name" className="mb-0.5 block text-sm font-semibold text-foreground">
+          <label htmlFor="role-name" className={cn(labelCls, "mb-0.5 font-semibold")}>
             Name
           </label>
           <p className="mb-1.5 text-xs text-muted-foreground">The name of the role.</p>
@@ -157,7 +159,7 @@ function RoleFormInner({ onSubmit, initialData, submitLabel, onDelete, deleteAri
 
         {/* Description */}
         <div>
-          <label htmlFor="role-desc" className="mb-0.5 block text-sm font-semibold text-foreground">
+          <label htmlFor="role-desc" className={cn(labelCls, "mb-0.5 font-semibold")}>
             Description <span className="ml-1 rounded border border-border px-1.5 py-0.5 text-xs font-normal text-muted-foreground">Optional</span>
           </label>
           <p className="mb-1.5 text-xs text-muted-foreground">An optional, informational description of the role.</p>

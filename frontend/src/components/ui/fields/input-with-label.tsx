@@ -29,15 +29,22 @@ export function InputWithLabel({
       <div className="flex items-center justify-between gap-2">
         <Label htmlFor={id}>
           {label}
-          {required ? <span className="text-destructive"> *</span> : null}
+          {/* Hidden from the name so it does not read as "Email*", paired with
+              a spoken word so the hint is not lost. */}
+          {required ? (
+            <>
+              <span aria-hidden="true" className="text-danger-500">*</span>
+              <span className="sr-only">(required)</span>
+            </>
+          ) : null}
         </Label>
         {optional ? (
-          <span className="text-xs text-muted-foreground">Optional</span>
+          <span className="text-xs text-text-muted">Optional</span>
         ) : null}
       </div>
       <Input id={id} required={required} className={className} {...props} />
       {description ? (
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p className="text-xs text-text-muted">{description}</p>
       ) : null}
     </div>
   );

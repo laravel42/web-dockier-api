@@ -5,7 +5,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
 import SourceControlBadge, { getSourceControl } from "@/components/SourceControlBadge";
 import { Combobox } from "@/components/ui/Combobox";
-import { settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
+import { labelCls, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Button from "@/components/ui/Button";
 import { getErrorMessage } from "@/utils/errors";
@@ -97,7 +97,7 @@ export default function SourceControlTab() {
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Connection">
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
-            <label htmlFor="git-provider" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
+            <label htmlFor="git-provider" className={`${labelCls} mb-1.5`}>Provider</label>
             <Combobox
               id="git-provider"
               value={form.provider}
@@ -112,15 +112,15 @@ export default function SourceControlTab() {
             />
           </div>
           <div>
-            <label htmlFor="git-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
+            <label htmlFor="git-label" className={`${labelCls} mb-1.5`}>Label</label>
             <Input id="git-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="My GitHub Account" required />
           </div>
           <div>
-            <label htmlFor="git-token" className="block text-sm font-medium text-text-secondary mb-1.5">Personal Access Token</label>
+            <label htmlFor="git-token" className={`${labelCls} mb-1.5`}>Personal Access Token</label>
             <Input id="git-token" type="password" value={form.personalToken} onChange={(e) => setForm({ ...form, personalToken: e.target.value })} required />
           </div>
           <div>
-            <label htmlFor="git-endpoint" className="block text-sm font-medium text-text-secondary mb-1.5">
+            <label htmlFor="git-endpoint" className={`${labelCls} mb-1.5`}>
               API Endpoint <span className="text-text-muted font-normal">(optional)</span>
             </label>
             <Input
@@ -161,18 +161,18 @@ export default function SourceControlTab() {
             <div className="border-t border-border pt-4 space-y-4">
               <h3 className="text-sm font-semibold text-text">Configuration</h3>
               <div>
-                <label htmlFor="edit-conn-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
+                <label htmlFor="edit-conn-label" className={`${labelCls} mb-1.5`}>Label</label>
                 <Input id="edit-conn-label" type="text" value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} required />
               </div>
               <div>
-                <label htmlFor="edit-conn-token" className="block text-sm font-medium text-text-secondary mb-1.5">
+                <label htmlFor="edit-conn-token" className={`${labelCls} mb-1.5`}>
                   Personal Access Token <span className="text-text-muted font-normal">(leave empty to keep current)</span>
                 </label>
                 <Input id="edit-conn-token" type="password" value={editForm.personalToken} onChange={(e) => setEditForm({ ...editForm, personalToken: e.target.value })} placeholder="••••••••" autoComplete="off" />
                 <p className="text-xs text-text-muted mt-1">Enter a new token to replace the existing one. Leave blank to keep the current token.</p>
               </div>
               <div>
-                <label htmlFor="edit-conn-endpoint" className="block text-sm font-medium text-text-secondary mb-1.5">
+                <label htmlFor="edit-conn-endpoint" className={`${labelCls} mb-1.5`}>
                   API Endpoint <span className="text-text-muted font-normal">(optional)</span>
                 </label>
                 <Input id="edit-conn-endpoint" type="url" value={editForm.endpoint} onChange={(e) => setEditForm({ ...editForm, endpoint: e.target.value })} placeholder="Leave empty for default" />

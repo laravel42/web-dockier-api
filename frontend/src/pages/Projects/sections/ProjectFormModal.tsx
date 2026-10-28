@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { CheckIcon, ChevronDownIcon, LinkIcon } from "lucide-react";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { useProjectForm } from "../useProjectForm";
+import { labelCls } from "@/utils/styles";
 
 interface Props {
   open: boolean;
@@ -68,7 +69,7 @@ export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
 
         {/* ── Source Control flow ── */}
         <div>
-          <span id={`${fid}-source-control`} className="block text-sm font-medium text-text-secondary mb-1.5">Source Control</span>
+          <span id={`${fid}-source-control`} className={`${labelCls} mb-1.5`}>Source Control</span>
           <SourceControlSelect labelledBy={`${fid}-source-control`}
             value={selectedConnectionId}
             onChange={setSelectedConnectionId}
@@ -89,14 +90,14 @@ export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
 
         {selectedConnectionId && (
           <div>
-            <span id={`${fid}-repository`} className="block text-sm font-medium text-text-secondary mb-1.5">Repository</span>
+            <span id={`${fid}-repository`} className={`${labelCls} mb-1.5`}>Repository</span>
             <RepoSelect labelledBy={`${fid}-repository`} value={selectedRepo} onChange={handleRepoChange} repos={repos} loading={loadingRepos} onRefresh={refreshRepos} refreshing={refreshingRepos} onSearch={searchRepos} searching={searchingRepos} hasMore={hasMoreRepos} />
           </div>
         )}
 
         {selectedRepo && (
           <div>
-            <label htmlFor="project-name" className="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
+            <label htmlFor="project-name" className={`${labelCls} mb-1.5`}>Name</label>
             <Input
               id="project-name"
               type="text"
@@ -110,7 +111,7 @@ export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
 
         {selectedRepo && (
           <div>
-            <span id={`${fid}-branch`} className="block text-sm font-medium text-text-secondary mb-1.5">Branch</span>
+            <span id={`${fid}-branch`} className={`${labelCls} mb-1.5`}>Branch</span>
             <BranchSelect labelledBy={`${fid}-branch`} value={selectedBranch} onChange={setSelectedBranch} branches={branches} loading={loadingBranches} />
           </div>
         )}
@@ -118,7 +119,7 @@ export default function ProjectFormModal({ open, onClose, onSuccess }: Props) {
         {/* Framework/Platform selector — shown after repo+branch are chosen */}
         {selectedBranch && (
           <div className="relative">
-            <span id={`${fid}-framework`} className="block text-sm font-medium text-text-secondary mb-1.5">
+            <span id={`${fid}-framework`} className={`${labelCls} mb-1.5`}>
               Framework
               {detectingPlatform && (
                 <span className="ml-2 text-xs font-normal text-text-muted">Detecting…</span>

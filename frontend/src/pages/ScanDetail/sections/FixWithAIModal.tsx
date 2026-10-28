@@ -4,6 +4,7 @@ import { Combobox } from "@/components/ui/Combobox";
 import Button from "@/components/ui/Button";
 import type { Finding, RepoMember, FixResult } from "@/types";
 import { CircleCheckIcon, ExternalLinkIcon } from "lucide-react";
+import { labelCls } from "@/utils/styles";
 
 interface Props {
   open: boolean;
@@ -67,17 +68,17 @@ export default function FixWithAIModal({
       ) : finding ? (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5" htmlFor={`${fid}-title`}>Title</label>
+            <label className={`${labelCls} mb-1.5`} htmlFor={`${fid}-title`}>Title</label>
             <input id={`${fid}-title`} type="text" value={mrTitle} onChange={(e) => onTitleChange(e.target.value)} disabled={titleGenerating}
               className={`w-full h-11 px-3 rounded border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors ${titleGenerating ? "opacity-50 cursor-wait" : ""}`} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5" htmlFor={`${fid}-description`}>Description</label>
+            <label className={`${labelCls} mb-1.5`} htmlFor={`${fid}-description`}>Description</label>
             <textarea id={`${fid}-description`} value={mrDescription} onChange={(e) => onDescriptionChange(e.target.value)} rows={5}
               className="w-full px-3 py-2 rounded border border-border bg-card text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors font-mono resize-y" />
           </div>
           <div>
-            <span id={`${fid}-assignee`} className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</span>
+            <span id={`${fid}-assignee`} className={`${labelCls} mb-1.5`}>Assignee</span>
             <Combobox aria-labelledby={`${fid}-assignee`}
               value={mrAssignee}
               onValueChange={onAssigneeChange}
@@ -91,7 +92,7 @@ export default function FixWithAIModal({
             />
           </div>
           <div>
-            <span id={`${fid}-reviewer`} className="block text-sm font-medium text-text-secondary mb-1.5">Reviewer</span>
+            <span id={`${fid}-reviewer`} className={`${labelCls} mb-1.5`}>Reviewer</span>
             <Combobox aria-labelledby={`${fid}-reviewer`}
               value={mrReviewer}
               onValueChange={onReviewerChange}

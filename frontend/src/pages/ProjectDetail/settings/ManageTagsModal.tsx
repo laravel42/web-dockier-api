@@ -10,6 +10,7 @@ import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
 import { EllipsisVerticalIcon, SearchIcon } from "lucide-react";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { labelCls } from "@/utils/styles";
 
 interface ManageTagsModalProps {
   open: boolean;
@@ -84,7 +85,7 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
 
         {/* Add tag */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-text" htmlFor={`${fid}-add-tag`}>Add tag</label>
+          <label className={`${labelCls} mb-1.5`} htmlFor={`${fid}-add-tag`}>Add tag</label>
           <div className="flex items-center gap-2">
             <Input id={`${fid}-add-tag`}
               type="text"
@@ -106,7 +107,7 @@ export default function ManageTagsModal({ open, onClose }: ManageTagsModalProps)
 
         {/* Tags list */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-text" htmlFor={`${fid}-tags`}>Tags</label>
+          <label className={`${labelCls} mb-1.5`} htmlFor={`${fid}-tags`}>Tags</label>
           <div className="rounded-lg border border-border">
             {/* Search */}
             <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 transition-colors focus-within:border-primary/60">

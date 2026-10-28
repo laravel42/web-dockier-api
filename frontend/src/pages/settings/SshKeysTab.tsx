@@ -3,7 +3,7 @@ import { deployApi } from "@/services/api";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
-import { readonlyFieldCls, settingsBadgeCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "@/utils/styles";
+import { labelCls, readonlyFieldCls, settingsBadgeCls, typePanelDesc, typePanelTitle, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import Button from "@/components/ui/Button";
@@ -101,11 +101,11 @@ export default function SshKeysTab() {
       <Modal open={showForm} onClose={() => { setShowForm(false); setFormError(""); setSubmitting(false); }} title="Add SSH Key">
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
-            <label htmlFor="ssh-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
+            <label htmlFor="ssh-label" className={`${labelCls} mb-1.5`}>Label</label>
             <Input id="ssh-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="e.g. MacBook Pro" required />
           </div>
           <div>
-            <label htmlFor="ssh-pubkey" className="block text-sm font-medium text-text-secondary mb-1.5">Public Key</label>
+            <label htmlFor="ssh-pubkey" className={`${labelCls} mb-1.5`}>Public Key</label>
             <Textarea id="ssh-pubkey" value={form.publicKey} onChange={(e) => setForm({ ...form, publicKey: e.target.value })}
               className="h-28 font-mono text-xs resize-none"
               placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host" required />
@@ -124,11 +124,11 @@ export default function SshKeysTab() {
         {viewingKey && (
           <div className="space-y-4">
             <div>
-              <span className="block text-sm font-medium text-text-secondary mb-1.5">Algorithm</span>
+              <span className={`${labelCls} mb-1.5`}>Algorithm</span>
               <p className="text-sm text-text">{keyType(viewingKey.publicKey)}</p>
             </div>
             <div>
-              <label htmlFor="ssh-view-pubkey" className="block text-sm font-medium text-text-secondary mb-1.5">Public Key</label>
+              <label htmlFor="ssh-view-pubkey" className={`${labelCls} mb-1.5`}>Public Key</label>
               <Textarea
                 id="ssh-view-pubkey"
                 readOnly

@@ -7,6 +7,7 @@ import type { PMIntegration, PMTeam, PMMember } from "@/types";
 import Spinner from "@/components/Spinner";
 import { Combobox } from "@/components/ui/Combobox";
 import { CircleCheckIcon, ExternalLinkIcon } from "lucide-react";
+import { labelCls } from "@/utils/styles";
 
 interface Props {
   open: boolean;
@@ -82,7 +83,7 @@ export default function CreateIssueModal({
         <form onSubmit={onSubmit} className="space-y-4">
           {pmIntegrations.length > 1 && (
             <div>
-              <label htmlFor="issue-integration" className="block text-sm font-medium text-text-secondary mb-1.5">Integration</label>
+              <label htmlFor="issue-integration" className={`${labelCls} mb-1.5`}>Integration</label>
               <Combobox
                 id="issue-integration"
                 value={issueIntegration}
@@ -99,13 +100,13 @@ export default function CreateIssueModal({
           )}
           {pmIntegrations.length === 0 && repoUrl && (
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1.5" htmlFor={`${fid}-repository`}>Repository</label>
+              <label className={`${labelCls} mb-1.5`} htmlFor={`${fid}-repository`}>Repository</label>
               <Input id={`${fid}-repository`} type="text" value={repoUrl} readOnly className="bg-secondary-50 text-text-muted cursor-default" />
             </div>
           )}
           {pmIntegrations.length > 0 && (<>
           <div>
-            <label htmlFor="issue-pm-team" className="block text-sm font-medium text-text-secondary mb-1.5">
+            <label htmlFor="issue-pm-team" className={`${labelCls} mb-1.5`}>
               {pmTeamLabel}
               {pmProjectsLoading && <span className="ml-2 text-xs text-text-muted font-normal">Loading…</span>}
             </label>
@@ -135,7 +136,7 @@ export default function CreateIssueModal({
           </div>
           {pmProjectLabel && (
             <div>
-              <label htmlFor="issue-pm-project" className="block text-sm font-medium text-text-secondary mb-1.5">
+              <label htmlFor="issue-pm-project" className={`${labelCls} mb-1.5`}>
                 {pmProjectLabel}
                 {pmSubProjectsLoading && <span className="ml-2 text-xs text-text-muted font-normal">Loading…</span>}
               </label>
@@ -170,18 +171,18 @@ export default function CreateIssueModal({
           )}
           </>)}
           <div>
-            <label htmlFor="issue-title" className="block text-sm font-medium text-text-secondary mb-1.5">Title</label>
+            <label htmlFor="issue-title" className={`${labelCls} mb-1.5`}>Title</label>
             <Input id="issue-title" type="text" value={issueTitle} onChange={(e) => onTitleChange(e.target.value)} disabled={titleGenerating}
               className={titleGenerating ? "opacity-50 cursor-wait" : ""} required />
           </div>
           <div>
-            <label htmlFor="issue-desc" className="block text-sm font-medium text-text-secondary mb-1.5">Description</label>
+            <label htmlFor="issue-desc" className={`${labelCls} mb-1.5`}>Description</label>
             <Textarea id="issue-desc" value={issueDescription} onChange={(e) => onDescriptionChange(e.target.value)} rows={8}
               className="font-mono resize-y" />
           </div>
           {pmMembers.length > 0 && (
             <div>
-              <span id={`${fid}-assignee`} className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</span>
+              <span id={`${fid}-assignee`} className={`${labelCls} mb-1.5`}>Assignee</span>
               <Combobox aria-labelledby={`${fid}-assignee`}
                 value={selectedPmAssignee}
                 onValueChange={onAssigneeChange}
@@ -198,7 +199,7 @@ export default function CreateIssueModal({
           )}
           {pmIntegrations.length === 0 && gitMembers && gitMembers.length > 0 && onGitAssigneeChange && (
             <div>
-              <span id={`${fid}-git-assignee`} className="block text-sm font-medium text-text-secondary mb-1.5">Assignee</span>
+              <span id={`${fid}-git-assignee`} className={`${labelCls} mb-1.5`}>Assignee</span>
               <Combobox
                 aria-labelledby={`${fid}-git-assignee`}
                 value={selectedGitAssignee || ""}

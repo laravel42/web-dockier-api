@@ -79,8 +79,13 @@ export const choiceCardIconSelectedCls = "bg-primary/15 text-primary";
 export const btnLink =
   "inline-flex items-center gap-1 text-ui font-medium text-primary hover:text-primary/80 transition-colors";
 
-/** Form field labels */
-export const labelCls = "mb-1 block text-xs font-medium leading-none text-muted-foreground";
+/**
+ * The one form-label treatment: anything that names a control uses this.
+ * Vertical spacing stays per-site (`mb-1.5`, `mb-1`, or none inside a grid),
+ * and so does a smaller size — pass them through `cn()` so Tailwind's
+ * last-wins merge applies. `ui/label` composes this, so the two cannot drift.
+ */
+export const labelCls = "block text-sm font-medium text-text-secondary";
 
 /** Sidebar nav link */
 export const navLinkCls =

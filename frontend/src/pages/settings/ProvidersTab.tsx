@@ -7,7 +7,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import ProviderBadge from "@/components/ProviderBadge";
 import { getProviderStyle } from "@/data/providers";
 import { Combobox } from "@/components/ui/Combobox";
-import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "@/utils/styles";
+import { labelCls, settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import Button from "@/components/ui/Button";
@@ -140,7 +140,7 @@ export default function ProvidersTab() {
       <Modal open={showForm} onClose={() => { setShowForm(false); resetAddForm(); }} title="Add Provider">
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
-            <label htmlFor="provider-type" className="block text-sm font-medium text-text-secondary mb-1.5">Provider</label>
+            <label htmlFor="provider-type" className={`${labelCls} mb-1.5`}>Provider</label>
             <Combobox
               id="provider-type"
               value={addProviderKind}
@@ -153,19 +153,19 @@ export default function ProvidersTab() {
             />
           </div>
           <div>
-            <label htmlFor="provider-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
+            <label htmlFor="provider-label" className={`${labelCls} mb-1.5`}>Label</label>
             <Input id="provider-label" type="text" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required />
           </div>
 
           {addProviderKind === "aws" ? (
             <>
               <div>
-                <label htmlFor="provider-access-key-id" className="block text-sm font-medium text-text-secondary mb-1.5">Access Key ID</label>
+                <label htmlFor="provider-access-key-id" className={`${labelCls} mb-1.5`}>Access Key ID</label>
                 <Input id="provider-access-key-id" type="text" autoComplete="off" placeholder="AKIA…"
                   value={form.accessKeyId} onChange={(e) => setForm({ ...form, accessKeyId: e.target.value })} required />
               </div>
               <div>
-                <label htmlFor="provider-secret-access-key" className="block text-sm font-medium text-text-secondary mb-1.5">Secret Access Key</label>
+                <label htmlFor="provider-secret-access-key" className={`${labelCls} mb-1.5`}>Secret Access Key</label>
                 <div className="relative">
                   <Input id="provider-secret-access-key" type={showSecret ? "text" : "password"} autoComplete="off" className="pr-10"
                     value={form.secretAccessKey} onChange={(e) => setForm({ ...form, secretAccessKey: e.target.value })} required />
@@ -179,7 +179,7 @@ export default function ProvidersTab() {
             </>
           ) : (
             <div>
-              <label htmlFor="provider-sa-key" className="block text-sm font-medium text-text-secondary mb-1.5">Service Account Key (JSON)</label>
+              <label htmlFor="provider-sa-key" className={`${labelCls} mb-1.5`}>Service Account Key (JSON)</label>
               <Textarea id="provider-sa-key" rows={6} autoComplete="off" className="font-mono text-xs"
                 placeholder={'{\n  "type": "service_account",\n  "project_id": "…",\n  "private_key": "…"\n}'}
                 value={form.serviceAccountKey} onChange={(e) => setForm({ ...form, serviceAccountKey: e.target.value })} required />
@@ -222,19 +222,19 @@ export default function ProvidersTab() {
               <div className="border-t border-border pt-4 space-y-4">
                 <h3 className="text-sm font-semibold text-text">Configuration</h3>
                 <div>
-                  <label htmlFor="edit-provider-label" className="block text-sm font-medium text-text-secondary mb-1.5">Label</label>
+                  <label htmlFor="edit-provider-label" className={`${labelCls} mb-1.5`}>Label</label>
                   <Input id="edit-provider-label" type="text" value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} required />
                 </div>
 
                 {editKind === "aws" ? (
                   <>
                     <div>
-                      <label htmlFor="edit-provider-access-key-id" className="block text-sm font-medium text-text-secondary mb-1.5">Access Key ID</label>
+                      <label htmlFor="edit-provider-access-key-id" className={`${labelCls} mb-1.5`}>Access Key ID</label>
                       <Input id="edit-provider-access-key-id" type="text" autoComplete="off" placeholder="Leave blank to keep current"
                         value={editForm.accessKeyId} onChange={(e) => setEditForm({ ...editForm, accessKeyId: e.target.value })} />
                     </div>
                     <div>
-                      <label htmlFor="edit-provider-secret-access-key" className="block text-sm font-medium text-text-secondary mb-1.5">Secret Access Key</label>
+                      <label htmlFor="edit-provider-secret-access-key" className={`${labelCls} mb-1.5`}>Secret Access Key</label>
                       <div className="relative">
                         <Input id="edit-provider-secret-access-key" type={showSecret ? "text" : "password"} autoComplete="off" className="pr-10" placeholder="Leave blank to keep current"
                           value={editForm.secretAccessKey} onChange={(e) => setEditForm({ ...editForm, secretAccessKey: e.target.value })} />
@@ -249,7 +249,7 @@ export default function ProvidersTab() {
                   </>
                 ) : (
                   <div>
-                    <label htmlFor="edit-provider-sa-key" className="block text-sm font-medium text-text-secondary mb-1.5">Service Account Key (JSON)</label>
+                    <label htmlFor="edit-provider-sa-key" className={`${labelCls} mb-1.5`}>Service Account Key (JSON)</label>
                     <Textarea id="edit-provider-sa-key" rows={6} autoComplete="off" className="font-mono text-xs" placeholder="Leave blank to keep current"
                       value={editForm.serviceAccountKey} onChange={(e) => setEditForm({ ...editForm, serviceAccountKey: e.target.value })} />
                     <p className="text-xs text-text-muted mt-1.5">To rotate credentials, paste a new service-account JSON key. Leaving this blank keeps the existing one.</p>

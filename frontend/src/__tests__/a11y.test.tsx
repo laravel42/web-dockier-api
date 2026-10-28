@@ -241,16 +241,20 @@ describe("SettingsField", () => {
     expect(screen.getByRole("combobox", { name: "Role" })).toBeInTheDocument();
   });
 
-  // `requiredMark` is documented as "purely visual", but the asterisk is inside
-  // the <label> and lands in the computed name as "Name*". Left as is: it is a
-  // garbled required hint, and removing it without adding `aria-required` to
-  // every wrapped control would leave a screen-reader user with no hint at all.
-  it("folds the required asterisk into the accessible name", () => {
+  // The asterisk used to land in the computed name as "Name*". It is now
+  // aria-hidden and paired with an sr-only word, so the name reads cleanly and
+  // the hint survives on controls that cannot carry `required` themselves
+  // (a combobox, a toggle) — which is most of the requiredMark call sites.
+  it("spells out the required hint instead of garbling the name with an asterisk", () => {
     render(
       <SettingsField id="name" label="Name" requiredMark>
         <Input id="name" type="text" />
       </SettingsField>,
     );
-    expect(screen.getByRole("textbox", { name: "Name*" })).toBeInTheDocument();
+    // Regex, not a literal: dom-accessibility-api concatenates sibling nodes
+    // with no separator ("Name(required)") where a browser inserts a space per
+    // accname step 2F. Both forms satisfy the guarantee being asserted.
+    expect(screen.getByRole("textbox", { name: /^Name\s*\(required\)$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /\*/ })).not.toBeInTheDocument();
   });
 });

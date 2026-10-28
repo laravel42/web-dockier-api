@@ -5,7 +5,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
 import { SettingsField, SettingsTextField } from "@/components/SettingsField";
 import { Combobox } from "@/components/ui/Combobox";
-import { settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "@/utils/styles";
+import { labelCls, settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Button from "@/components/ui/Button";
 import { formatCardDateTime } from "@/utils/formatCardDate";
@@ -296,7 +296,11 @@ export default function UsersTab() {
           <SettingsTextField id="invite-email" label="Email" requiredMark required type="email" value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))} placeholder="user@example.com" />
           <SettingsTextField id="invite-name" label="Name" requiredMark required type="text" value={inviteForm.name} onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))} placeholder="John Doe" />
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5" htmlFor={`${fid}-password`}>Password <span className="text-danger-500">*</span></label>
+            <label className={`${labelCls} mb-1.5`} htmlFor={`${fid}-password`}>
+              Password
+              <span aria-hidden="true" className="text-danger-500"> *</span>
+              <span className="sr-only"> (required)</span>
+            </label>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Input id={`${fid}-password`}

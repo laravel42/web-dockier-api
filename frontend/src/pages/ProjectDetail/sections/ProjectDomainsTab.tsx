@@ -15,7 +15,8 @@ import ConfirmModal from "@/components/ConfirmModal";
 import Alert from "@/components/ui/Alert";
 import { Input } from "@/components/ui/input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
-import { settingsBadgeCls } from "@/utils/styles";
+import { cn } from "@/utils/cn";
+import { labelCls, settingsBadgeCls } from "@/utils/styles";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import {
@@ -698,7 +699,7 @@ function CreateCertificateModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-domain`}>Domain</label>
+          <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-domain`}>Domain</label>
           <Input id={`${fid}-domain`}
             type="text"
             placeholder="your-domain.com"

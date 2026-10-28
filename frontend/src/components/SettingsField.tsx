@@ -1,11 +1,13 @@
 import type { ComponentProps, ReactNode } from "react";
 import { Input } from "./ui/input";
+import { cn } from "@/utils/cn";
+import { labelCls } from "@/utils/styles";
 
 interface SettingsFieldProps {
   /** Associates the label with a control via `htmlFor`. */
   id?: string;
   label: ReactNode;
-  /** Renders a danger-colored asterisk after the label (purely visual). */
+  /** Marks the field as required, visually and to a screen reader. */
   requiredMark?: boolean;
   /** Classes applied to the wrapping `<div>` (e.g. `sm:col-span-2`). */
   className?: string;
@@ -17,15 +19,23 @@ interface SettingsFieldProps {
  * repeated `<div><label/>…</div>` markup so individual tabs stay declarative.
  * Wrap any control (combobox, custom input, etc.) as `children`.
  *
- * Note: `requiredMark` only controls the asterisk. HTML validation is the
+ * Note: `requiredMark` only controls the marker. HTML validation is the
  * concern of the wrapped control (e.g. `<input required>`).
  */
 export function SettingsField({ id, label, requiredMark, className, children }: SettingsFieldProps) {
   return (
     <div className={className}>
-      <label htmlFor={id} className="block text-sm font-medium text-text-secondary mb-1.5">
+      <label htmlFor={id} className={cn(labelCls, "mb-1.5")}>
         {label}
-        {requiredMark ? <span className="text-danger-500"> *</span> : null}
+        {/* The asterisk folded into the accessible name as "Name*". It is now
+            hidden and paired with a spoken word, so the hint survives for a
+            control that cannot carry `required` itself (a combobox, a toggle). */}
+        {requiredMark ? (
+          <>
+            <span aria-hidden="true" className="text-danger-500"> *</span>
+            <span className="sr-only"> (required)</span>
+          </>
+        ) : null}
       </label>
       {children}
     </div>

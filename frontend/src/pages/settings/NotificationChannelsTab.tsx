@@ -5,7 +5,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
 import TechBadge from "@/components/TechBadge";
 import { Combobox } from "@/components/ui/Combobox";
-import { settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
+import { labelCls, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Button from "@/components/ui/Button";
 import { usePermissions } from "@/context/PermissionsContext";
@@ -106,7 +106,7 @@ export default function NotificationChannelsTab() {
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Channel">
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
-            <label htmlFor="channel-type" className="block text-sm font-medium text-text-secondary mb-1.5">Channel Type</label>
+            <label htmlFor="channel-type" className={`${labelCls} mb-1.5`}>Channel Type</label>
             <Combobox
               id="channel-type"
               value={formData.type}
@@ -121,7 +121,7 @@ export default function NotificationChannelsTab() {
           </div>
           {formData.type !== "in_app" && (
             <div>
-              <label htmlFor="channel-config" className="block text-sm font-medium text-text-secondary mb-1.5">{configLabel[formData.type]}</label>
+              <label htmlFor="channel-config" className={`${labelCls} mb-1.5`}>{configLabel[formData.type]}</label>
               <Input id="channel-config" type="text" value={formData.configValue} onChange={(e) => setFormData({ ...formData, configValue: e.target.value })} required />
             </div>
           )}
@@ -181,7 +181,7 @@ export default function NotificationChannelsTab() {
               <div className="border-t border-border pt-4 space-y-4">
                 <h3 className="text-sm font-semibold text-text">Configuration</h3>
                 <div>
-                  <label htmlFor="edit-ch-config" className="block text-sm font-medium text-text-secondary mb-1.5">{configLabel[editingChannel.type]}</label>
+                  <label htmlFor="edit-ch-config" className={`${labelCls} mb-1.5`}>{configLabel[editingChannel.type]}</label>
                   <Input id="edit-ch-config" type="text" value={editConfigValue} onChange={(e) => setEditConfigValue(e.target.value)} required />
                 </div>
               </div>

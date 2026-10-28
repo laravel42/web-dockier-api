@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { EyeIcon, EyeOffIcon, PlusIcon, XIcon } from "lucide-react";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import TabSpinner from "@/components/ui/TabSpinner";
+import { cn } from "@/utils/cn";
+import { labelCls } from "@/utils/styles";
 
 interface Props {
   project: Project;
@@ -305,7 +307,7 @@ function CreateSecurityRuleModal({
     <Modal open onClose={onClose} title="New security rule">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-name`}>Name</label>
+          <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-name`}>Name</label>
           <Input id={`${fid}-name`}
             type="text"
             
@@ -317,7 +319,7 @@ function CreateSecurityRuleModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-path-optional`}>
+          <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-path-optional`}>
             Path <span className="text-text-muted/60 ml-1 font-normal">Optional</span>
           </label>
           <p className="text-xs text-text-muted mb-1.5">
@@ -417,7 +419,7 @@ function InlineCredentialForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-username`}>Username</label>
+        <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-username`}>Username</label>
         <Input id={`${fid}-username`}
           type="text"
           
@@ -427,7 +429,7 @@ function InlineCredentialForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-password`}>Password</label>
+        <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-password`}>Password</label>
         <div className="relative">
           <Input id={`${fid}-password`}
             type={showPassword ? "text" : "password"}
@@ -499,7 +501,7 @@ function AddCredentialModal({
     <Modal open onClose={onClose} title="New security credential">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-username`}>Username</label>
+          <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-username`}>Username</label>
           <Input id={`${fid}-username`}
             type="text"
             
@@ -509,7 +511,7 @@ function AddCredentialModal({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-password`}>Password</label>
+          <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-password`}>Password</label>
           <div className="relative">
             <Input id={`${fid}-password`}
               type={showPassword ? "text" : "password"}
@@ -697,7 +699,7 @@ function CreateRedirectRuleModal({
     <Modal open onClose={onClose} title="New redirect rule">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-from`}>From</label>
+          <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-from`}>From</label>
           <Input id={`${fid}-from`}
             type="text"
             
@@ -708,7 +710,7 @@ function CreateRedirectRuleModal({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-to`}>To</label>
+          <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-to`}>To</label>
           <Input id={`${fid}-to`}
             type="text"
             placeholder="/to"

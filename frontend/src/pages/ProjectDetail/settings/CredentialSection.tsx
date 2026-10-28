@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { SectionTitle } from "./shared";
 import SettingsCard from "./SettingsCard";
+import { labelCls } from "@/utils/styles";
 
 // ─── Types ───
 
@@ -175,7 +176,7 @@ export default function CredentialSection<T extends Credential>({
           <div className="flex flex-col gap-4">
             {fields.map((field, idx) => (
               <div key={field.key}>
-                <label className="mb-1.5 block text-sm font-medium text-text-muted" htmlFor={`${fid}-${field.key}`}>
+                <label className={`${labelCls} mb-1.5`} htmlFor={`${fid}-${field.key}`}>
                   {field.label}
                   {field.optional && (
                     <span className="inline-flex items-center rounded border border-border/60 bg-card/40 px-1.5 py-0.5 text-xs font-medium text-text-muted ml-1">

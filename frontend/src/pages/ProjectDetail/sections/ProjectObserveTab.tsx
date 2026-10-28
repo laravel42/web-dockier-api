@@ -24,7 +24,7 @@ import { getErrorMessage } from "@/utils/errors";
 import { timeAgo } from "@/utils/timeAgo";
 import TabSpinner from "@/components/ui/TabSpinner";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import { toneDotCls } from "@/utils/styles";
+import { labelCls, toneDotCls } from "@/utils/styles";
 
 interface Props {
   project: Project;
@@ -237,7 +237,7 @@ function CreateHeartbeatModal({
     <Modal open onClose={onClose} title="New heartbeat">
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-text" htmlFor={`${fid}-name`}>Name</label>
+          <label className={`${labelCls} mb-1.5`} htmlFor={`${fid}-name`}>Name</label>
           <Input id={`${fid}-name`}
             type="text"
             value={name}
@@ -248,7 +248,7 @@ function CreateHeartbeatModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-text" htmlFor={`${fid}-frequency`}>Frequency</label>
+          <label className={`${labelCls} mb-1`} htmlFor={`${fid}-frequency`}>Frequency</label>
           <p className="mb-1.5 text-xs text-text-muted">How frequently the scheduled task runs.</p>
           <select id={`${fid}-frequency`} value={frequency} onChange={(e) => setFrequency(e.target.value as HeartbeatFrequency)} className={selectCls}>
             {FREQUENCY_OPTIONS.map((opt) => (
@@ -258,7 +258,7 @@ function CreateHeartbeatModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-text" htmlFor={`${fid}-notify-me-after`}>Notify me after</label>
+          <label className={`${labelCls} mb-1`} htmlFor={`${fid}-notify-me-after`}>Notify me after</label>
           <p className="mb-1.5 text-xs text-text-muted">
             The amount of time to wait after a scheduled job's expected run time before sending a notification.
           </p>

@@ -18,6 +18,8 @@ import type { RepoAnalysis } from "@/components/DeployWizard";
 import { resolveFrameworkVersion } from "../utils/frameworkVersion";
 import { useProjectDelete } from "../hooks/useProjectDelete";
 import { useInfraTeardown } from "../hooks/useInfraTeardown";
+import { cn } from "@/utils/cn";
+import { labelCls } from "@/utils/styles";
 
 interface Props {
   project: Project;
@@ -124,7 +126,7 @@ export default function GeneralSection({ project, analysis, canManage, onProject
 
         <div className="flex flex-col gap-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-root-directory`}>Root directory</label>
+            <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-root-directory`}>Root directory</label>
             <div className="flex items-center gap-0">
               <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
                 /home/dockier/{project.name}/
@@ -139,7 +141,7 @@ export default function GeneralSection({ project, analysis, canManage, onProject
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-web-directory`}>Web directory</label>
+            <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-web-directory`}>Web directory</label>
             <div className="flex items-center gap-0">
               <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
                 /home/dockier/{project.name}/
@@ -274,7 +276,7 @@ export default function GeneralSection({ project, analysis, canManage, onProject
             <span className="font-semibold text-text">{project.name}</span> will be permanently deleted.
           </p>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-muted" htmlFor={`${fid}-type-to-confirm`}>
+            <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-type-to-confirm`}>
               Type <span className="font-mono text-text">{project.name}</span> to confirm
             </label>
             <Input id={`${fid}-type-to-confirm`}
