@@ -18,7 +18,7 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "@/components/ui/command";
+} from "@/components/ui/Command";
 import { sidebarData } from "@/data/sidebar-data";
 
 import { useSearch } from "./search-provider";

@@ -19,7 +19,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from "@/components/ui/Command";
 import { todoRoutes } from "@/lib/todo-routes";
 
 import { projects } from "../../data/data";
