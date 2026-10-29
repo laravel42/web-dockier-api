@@ -20,6 +20,27 @@
 
 ## Notes
 
+### `deployStrategy`
+
+`POST /deploy/deployments` accepts `deployStrategy: "vps" | "managed" | "static" | "compose"`.
+It decides the pipeline, not merely the infrastructure shape:
+
+| Value | Pipeline |
+|---|---|
+| `vps`, `managed` | Dokploy application — one image, one container |
+| `static` | Native object storage + CDN; ignores `DEPLOY_PROVIDER` |
+| `compose` | Dokploy Compose — the repo's own compose file as one stack; ignores `DEPLOY_PROVIDER` |
+
+The value is persisted on the deployment row, so redeploy and rollback reuse it.
+
+`compose` reads its configuration from `projects.settings.compose`
+(`{ path, entryService, entryPort }`) rather than from the request body, so the choice of compose
+file and public service survives a redeploy and a rollback and can be changed without deploying.
+A compose deploy with no such setting fails with an actionable message rather than guessing
+`./docker-compose.yml`. See `AGENTS.md` → *Docker Compose deploys*.
+
+### Other
+
 - `POST /deploy/tofu/generate` now uses restored domain planning logic for:
   - runtime/build/start command inference
   - normalized app naming and provider region defaults

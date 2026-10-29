@@ -80,6 +80,82 @@ The response shape is deliberately `200 { success: false }` on a bad token rathe
 
 The sibling route `POST /deploy/webhook/git-push` is different — it is protected by `requireWebhookSignature` and is the pattern to copy for new webhooks.
 
+### Docker Compose deploys
+
+`deployStrategy: "compose"` runs the repo's own compose file as ONE Dokploy Compose resource
+holding N containers. Pipeline: `deploy/domain/dokploy/compose-pipeline.ts`.
+
+**Compose is a resource KIND, not a build type.** Dokploy's `compose` table has no build type and
+there is no `compose.saveBuildType` — each service builds from its own `build:` or runs its own
+`image:`. So it is parallel to an application (and to `mysql`/`postgres`/`redis`), not a seventh
+member of `DokployBuildType`. Nothing from `configure-app` carries over: no build type, no run
+command, no PORT/HOST injection, no Railpack tuning.
+
+**Routing inverts `DEPLOY_PROVIDER`, like static does.** `routePipeline` sends compose to Dokploy
+always: the native pipeline builds one image and runs one container and has no compose target at
+all, so `native` would fail obscurely rather than deploy.
+
+**Two tables, two purposes.** The user's choices (which compose file, which service is public, its
+port) live in `projects.settings.compose` — they must survive a redeploy and a rollback and be
+editable without deploying. The Dokploy ids live in `dokploy_composes` (migration 0079), which
+keeps `UNIQUE (project_id)` because a stack is one resource. `getProjectResource()` in
+`dokploy/mappings.ts` is the single chokepoint every consumer branches on; it checks compose first,
+so a stale application row can never win over a live stack.
+
+**The entry port is the routing decision, not metadata.** Dokploy writes whatever is passed to
+`domain.create` straight into that service's Traefik `loadbalancer.server.port` label (verified via
+`compose.getConvertedCompose`). A wrong value is a Bad Gateway behind a valid certificate, with no
+other symptom. So when the port cannot be determined, **no domain is attached** and the log says
+why — never a 3000 default. Resolution chain, first hit wins (`lib/compose/entry.ts`): `ports:`
+(the CONTAINER side of `8080:3000`) → `expose:` → the service's own Traefik loadbalancer label →
+`EXPOSE` in the service's build Dockerfile → ask the user.
+
+**Entry-service choice is not a ports heuristic.** The reference repo publishes no ports at all.
+Order: on `dokploy-network` AND declaring no Traefik router of its own (a service that routes
+itself is already reachable and is not the front door) → on `dokploy-network` → has a published
+port → conventionally named → give up and ask. Build-only pseudo-services (`network_mode: none`,
+`entrypoint: ["true"]`) are never candidates.
+
+**Compose files are not at the repo root.** `lib/compose/discovery.ts` scans the whole tree and
+ranks candidates (a path containing `dokploy` → the root → a deploy/prod path → everything else;
+local/dev/test/CI paths sort last). `build.context` is relative to the **compose file's directory**,
+not the repo root — resolving it against the root reports every context as missing.
+
+**Dokploy does not read `env_file`.** The project's env vars are the ONLY source, written via
+`compose.saveEnvironment` with `createEnvFile: true`. This is what makes the pre-flight check
+possible: `${VAR:?…}` makes `docker compose` abort, and its error reaches only a build log the user
+cannot read — so `stageConfigureCompose` blocks the deploy up front and names every missing
+variable, before creating anything.
+
+**`composePath` can only be set by `compose.update`.** `compose.create` ignores it and keeps the
+`./docker-compose.yml` default. `serverId` is the opposite — fixed at create, absent from the
+update schema. `compose.delete` defaults `deleteVolumes` to **false**, so teardown must pass
+`true` or the stack's named volumes outlive it.
+
+**Teardown shipped with the deploy path, deliberately.** A compose project's `server.remove` is
+rejected while the stack runs ("Server has active services"), so without the compose branch in
+`lifecycle/dokploy-teardown.ts` the VM is never terminated and keeps billing on the user's own
+cloud account. Domains are enumerated by `domain.byComposeId` — `domain.byApplicationId` returns
+nothing for a stack and would leave every host claimed by a deleted resource.
+
+**Deliberately not supported, each for a reason:**
+- **Basic Auth and redirects: impossible.** Dokploy's `security` and `redirects` tables reference
+  `applications.applicationId` with no compose column, and their create procedures take only an
+  applicationId. `network/domain/dokploy-applier.ts` returns an explicit message naming the
+  workaround (Traefik middleware labels in the compose file). It still reports compose as a Dokploy
+  project, so it cannot fall through to the legacy nginx/SSM applier.
+- **Database provisioning**, when the stack declares its own (`lib/compose/databases.ts`).
+  Injecting a second Postgres and overriding `DATABASE_URL` points a working stack at the wrong
+  server. A file declaring none keeps the normal service picker.
+- **Post-deploy commands and command execution.** A stack is N containers named
+  `<appName>-<service>-N`; running a command means naming a service first, which the API does not
+  express yet.
+
+**Status: no compose deploy has been run end to end.** The Dokploy API calls are verified against a
+live instance (create → update → `loadServices` → `domain.create` → delete, all confirmed), and
+`lib/compose/*` is tested against a real compose file checked in as a fixture. The pipeline itself
+has not been exercised against a real repository.
+
 ### Custom domains for static deployments
 
 Two unrelated things in this repo are called "static". Do not conflate them — it wastes a lot of time:
@@ -165,7 +241,11 @@ not recycled while historical deploy logs still contain the marker.
 **Pipeline routing — this is the rule, not a flag to tune.** `routePipeline` in `deploy/domain/worker.ts` decides, in this order:
 
 1. `deployStrategy === "static"` → **native** pipeline (`executePipeline`), always, whatever `DEPLOY_PROVIDER` says. Object storage + CDN is cheaper and faster than nginx on a VPS, and Dokploy has no equivalent target. Same inversion applies to teardown (`isNativeOnlyStack` in `lifecycle/project-teardown.ts`) — a static site torn down through the Dokploy path leaves its bucket, distribution and CFN stack running and billing.
-2. Everything else → **Dokploy**. `DEPLOY_PROVIDER` defaults to `"dokploy"` and production never sets it to anything else.
+2. `deployStrategy === "compose"` → the **compose** pipeline (`executeComposePipeline`), always,
+   whatever `DEPLOY_PROVIDER` says. The same inversion as static and for the mirror-image reason:
+   the native pipeline builds one image and runs one container, so it has no compose target to fall
+   back to. See *Docker Compose deploys* below.
+3. Everything else → **Dokploy**. `DEPLOY_PROVIDER` defaults to `"dokploy"` and production never sets it to anything else.
 
 `DEPLOY_PROVIDER=native` for a *server* deploy is a local-only escape hatch, not a supported rollback: the native pipeline shells out to the `pulumi` CLI (`deploy/domain/infra/pulumi-workspace.ts`) and `backend/Dockerfile` does not install it, so it fails with "command not found" in any container. Do not write new code behind the `native` branch, and do not treat `"dokploy"` as conditional — the only real conditional in deploy routing is the static strategy.
 

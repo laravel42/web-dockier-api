@@ -113,7 +113,32 @@ We're replacing it with **Dokploy** — a self-hosted PaaS that handles the enti
 - Entire pipeline is idempotent — safe to retry from any point
 - Timeout: 15 minutes max for the full pipeline
 
-### Requirement 7: AI-Assisted Deploy Recovery (Dokploy AI)
+### Requirement 7: AI-Assisted Deploy Recovery (Dokploy AI) — **SUPERSEDED, PREMISE WAS FALSE**
+
+> **This requirement was built but never worked, because it rests on a procedure that does not
+> exist.** The implementation called `application.aiFixDeployment`; verified against the live
+> Dokploy instance, that returns the same path-less 404 as a name that was never implemented,
+> while a real procedure's 404 carries a `path` field. So every failed deploy logged "Running
+> automated deployment diagnosis…", received a 404, discarded it, and retried unchanged. A
+> mocked-fetch unit test asserted the request shape, which is why it went unnoticed.
+>
+> The acceptance criteria below are therefore not satisfiable as written. In particular "Dokploy
+> AI analyzes the deployment logs and applies fixes" and "After Dokploy AI applies a fix, trigger
+> a redeploy" describe a capability Dokploy does not expose for an application on any version. Its
+> one real AI procedure, `ai.analyzeLogs`, returns diagnosis TEXT and never applies anything — and
+> requires an AI provider configured inside Dokploy.
+>
+> **Replaced by** Dockier-side diagnosis in
+> `deploy/domain/dokploy/stages/ai-diagnosis.ts`: deterministic classifiers first, then an OpenAI
+> pass over the redacted build-log tail. It diagnoses and reports; it does not fix, because nothing
+> can edit a user's repository mid-deploy. The two-attempt retry is kept for genuinely transient
+> failures and is no longer described as a retry-after-fix. See `AGENTS.md` →
+> *Build-failure diagnosis*.
+>
+> Note that criterion 2 below ("Do NOT call OpenAI directly") was inverted by this finding: calling
+> OpenAI directly is now the only working option, and it is also the better one — we control the
+> output shape, redact secrets before they leave the network, and do not depend on instance-side
+> configuration that can silently disappear.
 
 **ID**: REQ-7  
 **Description**: When a Dokploy deployment fails, use Dokploy's built-in AI to analyze logs and attempt a fix, then retry. Dokploy has its own AI integration already configured on the Dockier Dokploy account — this is preferred over calling OpenAI directly because it is tightly integrated with Dokploy's build system and understands deployment-specific errors better.

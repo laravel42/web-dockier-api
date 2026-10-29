@@ -102,7 +102,11 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
   - [x] 9.4 Extract appUrl from application once deployed
   - [x] 9.5 Return success/failure with logs
 
-- [x] 10. AI Recovery Stage (Dokploy AI)
+- [x] 10. AI Recovery Stage (Dokploy AI) — **REMOVED: the Dokploy procedure does not exist**
+  > These items were marked complete but never functioned: `application.aiFixDeployment` is not a
+  > Dokploy procedure, so 10.2 and 10.4–10.6 could not work and `ai-recovery.ts` has been deleted.
+  > 10.3 ("Do NOT call OpenAI directly") was inverted — see REQ-7 in `requirements.md`. Replaced by
+  > `stages/ai-diagnosis.ts`, which diagnoses from the build log and does not claim to fix.
   - [x] 10.1 Create `backend/src/services/deploy/domain/dokploy/stages/ai-recovery.ts`
   - [x] 10.2 On deploy failure, invoke Dokploy's built-in AI fix feature via the Dokploy API (already configured on Dokploy account)
   - [x] 10.3 Do NOT call OpenAI directly — Dokploy AI is tightly integrated with its build system and handles deployment errors better
@@ -118,6 +122,9 @@ Replace the existing native deploy pipeline (CloudFormation/Pulumi + custom imag
   - [x] 11.2 Function `executeDokployPipeline(event: PipelineInput): Promise<void>`
   - [x] 11.3 Coordinate stages: ensure-project → (sync-git || provision-server) → configure-app → deploy-with-retry
   - [x] 11.4 Retry loop: up to 3 attempts with Dokploy AI recovery between failures
+    <!-- Now 2 attempts, with no AI recovery between them: the retry covers transient
+         failures only. See task 10 above. -->
+    
   - [x] 11.5 Update deployment status and logs at each stage
   - [x] 11.6 Handle timeouts (15 min max)
   - [x] 11.7 Idempotency: safe to re-run from any stage

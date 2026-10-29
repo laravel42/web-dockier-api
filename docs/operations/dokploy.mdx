@@ -14,9 +14,12 @@ Dokploy handles **every** deploy except static sites. The one branch is the proj
 | Deploy strategy | Pipeline | Target |
 |---|---|---|
 | `static` | Native (`executePipeline`) | Object storage + CDN — S3 + CloudFront, or GCS + Cloud CDN, on the user's account |
+| `compose` | Dokploy compose (`executeComposePipeline`) | The repo's own compose file, run as one Dokploy Compose resource on a VPS |
 | `vps`, `managed` | Dokploy | A VPS provisioned on the user's account and registered as a Dokploy remote server |
 
 Static sites bypass Dokploy because object storage behind a CDN is cheaper and faster for them than running nginx on a VPS: no instance is consumed and the content is served from the edge instead of one region. Dokploy has no equivalent target — its own `static` *build type* only serves build output already committed to the repo, which is a different thing. The same inversion applies to teardown: a static project is destroyed through the native adapters, because the Dokploy teardown would find no `dokploy_*` records and leave the bucket, the CDN distribution and the CloudFormation stack running.
+
+Docker Compose deploys invert `DEPLOY_PROVIDER` the same way, for the mirror-image reason: the native pipeline builds one image and runs one container, so it has no compose target to fall back to. A compose stack is **one** Dokploy Compose resource holding N containers — a different resource *kind*, not a build type (Dokploy's compose table has no build type; each service builds from its own `build:` or runs its own `image:`). Compose is covered in detail in `AGENTS.md` → *Docker Compose deploys*.
 
 `DEPLOY_PROVIDER` defaults to `dokploy`, and static deploys ignore it entirely. Setting `DEPLOY_PROVIDER=native` for a *server* deploy is a local-only escape hatch, **not** a production rollback: that path shells out to the `pulumi` CLI, which the backend container image does not install, so it fails with "command not found" wherever the backend is actually hosted.
 
@@ -24,13 +27,29 @@ Static sites bypass Dokploy because object storage behind a CDN is cheaper and f
 
 | Concern | Owner |
 |---------|-------|
-| Orchestration (projects, servers, apps, deploy, AI recovery) | Dokploy API |
+| Orchestration (projects, servers, applications, compose stacks, deploy) | Dokploy API |
 | Compute (the VPS that runs the app) | The user's connected AWS/GCP account |
 | Build strategy detection (dockerfile / static / railpack / nixpacks) | Dockier repo analyzer |
 | Container build, Traefik routing, TLS | Dokploy |
+| Build-failure diagnosis | **Dockier** (`stages/ai-diagnosis.ts`, Dockier's own OpenAI key) |
 | Per-tenant cloud credentials | Dockier `server_providers` table (by `providerId`) |
 
 Pipeline stages: **Ensure Project → (Sync Git ‖ Provision Server) → Configure Application → Deploy with Retry**.
+
+For a compose deploy: **Ensure Project → (Sync Git ‖ Provision Server) → Configure Compose → Read Services → Deploy**. There is no build-type step, because a compose stack has no build type.
+
+<Note>
+Dokploy has **no AI that fixes a failed deploy.** An earlier version of these docs said it diagnosed
+failures and applied fixes automatically before retrying. That was never true on any Dokploy
+version: the pipeline called `application.aiFixDeployment`, a procedure that does not exist on the
+Dokploy API, so the call 404'd on every failed deploy and the result was discarded.
+
+Build failures are now diagnosed by Dockier: deterministic classifiers first (out-of-memory, a
+missing start command, a missing compose build context, an unpullable image, …), then an OpenAI
+pass over the redacted build-log tail for anything unrecognised. The retry — still two attempts —
+exists because builds fail transiently; it is **not** a retry-after-fix, and nothing edits the
+user's repository between attempts.
+</Note>
 
 ## Prerequisites
 
@@ -97,7 +116,11 @@ After the VM is reachable on port 22, it is registered in Dokploy (`server.creat
 
 ## Teardown
 
-Deleting a project — or calling `POST /projects/:id/infrastructure/teardown` — removes the Dokploy application (`application.remove`) and remote server (`server.remove`) and terminates the cloud VM (EC2 `TerminateInstances` / GCE instance delete). Teardown is best-effort and idempotent: a single failure (e.g. an already-deleted resource) is logged and does not block project deletion. Outcomes aggregate to `torn_down`, `partial`, or `nothing_to_tear_down`.
+Deleting a project — or calling `POST /projects/:id/infrastructure/teardown` — removes the project's domains, then its Dokploy resource (`application.delete`, or `compose.delete` with `deleteVolumes: true` for a compose stack), then any provisioned database services, then the remote server (`server.remove`), and finally terminates the cloud VM (EC2 `TerminateInstances` / GCE instance delete). Teardown is best-effort and idempotent: a single failure (e.g. an already-deleted resource) is logged and does not block project deletion. Outcomes aggregate to `torn_down`, `partial`, or `nothing_to_tear_down`.
+
+The ORDER is load-bearing. Dokploy rejects `server.remove` while the server still hosts a service ("Server has active services"), so the application or compose stack and every database must go first — otherwise the VM is never terminated and keeps billing on the user's own account. Each delete is then **verified** (`application.one` / `compose.one` 404ing) before the mapping row is dropped, because a delete can return OK while the resource lingers. A mapping row is only deleted once the thing it tracks is actually gone, so a failed teardown stays retryable instead of orphaning resources silently.
+
+One nuance in the reported status: when the VM is terminated but a Dokploy-side record could not be removed, the result is still `torn_down`. The VM is the billable resource, so billing has stopped; the message names the leftovers, which cost nothing and can be cleared by an administrator.
 
 ## Troubleshooting
 
@@ -108,4 +131,8 @@ Deleting a project — or calling `POST /projects/:id/infrastructure/teardown` �
 | "invalid or lack permission" during provisioning | The tenant's AWS/GCP credentials are wrong or missing IAM roles (EC2/Compute admin). |
 | "capacity or quota limit" | The user's cloud account hit a quota — try another instance type or region. |
 | GCE create fails on zone | Region has no `-b` zone and zone listing failed; check the account's zone availability. |
+| Compose deploy stops before anything is created, naming variables | The compose file marks them `${VAR:?…}`, which makes `docker compose` abort. Set them in the project's environment variables. |
+| Compose deploy succeeds but there is no URL | No public service or no container port is configured, or the chosen service is not on `dokploy-network`. No domain is attached rather than one pointed at a guessed port. |
+| Compose stack deploys but the domain returns Bad Gateway | The configured container port is not where that service listens. Dokploy writes it into the service's Traefik `loadbalancer.server.port` label verbatim; `compose.getConvertedCompose` shows the merged file. |
+| Compose teardown leaves the server behind | The stack delete did not take effect, so `server.remove` was skipped. Re-run the teardown — only the resources that failed are still tracked. |
 | Orphaned VM after delete | Teardown returned `partial` — check logs and remove the instance manually. |
