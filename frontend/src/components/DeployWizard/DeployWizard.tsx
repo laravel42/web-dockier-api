@@ -51,6 +51,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             analysisLoading={analysisLoading}
             analysisError={analysisError}
             detectionHints={state.envDetectionHints || {}}
+            onDockerfileChoice={(useRepoDockerfile) => setState(prev => ({ ...prev, useRepoDockerfile }))}
             onChange={(modes) => {
               const changed = Object.keys(modes).filter(k => modes[k] !== state.servicesModes[k]);
               setState(prev => ({

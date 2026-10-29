@@ -79,6 +79,12 @@ export interface ConfigureAppResult {
 
 export interface RepoAnalysisInfo {
   hasDockerfile: boolean;
+  /**
+   * Port from the repo Dockerfile's first `EXPOSE`, when it declares one. Only
+   * meaningful for a `dockerfile` build: the image decides where it listens, so
+   * nothing else can be inferred from the language or the builder.
+   */
+  dockerfilePort?: number;
   isStaticSite: boolean;
   publishDirectory?: string;
   /**
@@ -253,6 +259,14 @@ export async function stageConfigureApp(params: {
   const buildType = determineBuildType(repoAnalysis);
   await log(`[stage:configure-app] Setting build type: ${buildType}`);
 
+  if (buildType === "dockerfile") {
+    await log(
+      repoAnalysis.dockerfilePort
+        ? `[stage:configure-app] Building from the repository Dockerfile (EXPOSE ${repoAnalysis.dockerfilePort}).`
+        : `[stage:configure-app] Building from the repository Dockerfile. It declares no EXPOSE port — routing to ${resolveContainerPort(buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? [], repoAnalysis.kind)}. Add an EXPOSE line if the app listens elsewhere.`,
+    );
+  }
+
   // A PHP version Railpack can't build is the one case where we silently switch
   // builders; tell the user, since the real fix is upgrading PHP.
   if (buildType === "nixpacks" && requiresNixpacksForPhp(repoAnalysis)) {
@@ -286,7 +300,7 @@ export async function stageConfigureApp(params: {
   // known, and PERSIST it. Consumers that run outside a deploy (the custom-domain
   // applier) cannot re-derive it correctly from buildType alone, so storing it
   // keeps a single source of truth instead of two derivations that drift.
-  const containerPort = resolveContainerPort(buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? [], repoAnalysis.kind);
+  const containerPort = resolveContainerPort(buildType, repoAnalysis.primaryLanguage, repoAnalysis.techStack ?? [], repoAnalysis.kind, repoAnalysis.dockerfilePort);
 
   // Update stored build type + port (and appName if we resolved a fresh one on
   // the reuse path — omitted when undefined so we never clobber a stored value).
@@ -674,7 +688,9 @@ function isPythonApp(primaryLanguage: string | undefined, techStack: string[]): 
  *  - railpack + Node server → NODE_RAILPACK_PORT: a Node server honors the PORT
  *    env we inject (see nodeRuntimeEnv), so we route to that same port.
  *  - railpack + non-Node (PHP via FrankenPHP) → 80.
- *  - any other builder (dockerfile/nixpacks) → Dokploy's conventional 3000.
+ *  - dockerfile → the Dockerfile's own `EXPOSE`; with none stated, 80 for PHP
+ *    (nginx/apache images) and otherwise Dokploy's conventional 3000.
+ *  - nixpacks → 80 for PHP, else Dokploy's conventional 3000.
  *
  * A wrong port is the classic Bad Gateway: Traefik routes fine but the
  * container isn't listening where it forwards.
@@ -690,7 +706,16 @@ export function resolveContainerPort(
   primaryLanguage: string | undefined,
   techStack: string[],
   kind?: "server" | "static",
+  dockerfilePort?: number,
 ): number {
+  // The image decides where it listens, so its EXPOSE outranks every guess
+  // below. Without it a PHP image serving on 80 would be routed to 3000.
+  if (buildType === "dockerfile") {
+    if (dockerfilePort) return dockerfilePort;
+    // No EXPOSE to read: PHP images conventionally serve on 80 (nginx/apache),
+    // everything else on Dokploy's conventional 3000.
+    return isPhpApp(primaryLanguage, techStack) ? 80 : 3000;
+  }
   if (buildType === "railpack") {
     if (kind === "static") return 80;
     if (isPythonApp(primaryLanguage, techStack)) return PYTHON_RAILPACK_PORT;

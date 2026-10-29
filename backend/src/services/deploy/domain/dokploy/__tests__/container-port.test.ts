@@ -117,13 +117,23 @@ describe("resolveContainerPort", () => {
   });
 
   describe("other build types", () => {
-    it("routes dockerfile builds to 3000 — the image owns its own port", () => {
-      expect(resolveContainerPort("dockerfile", "typescript", ["Node.js"], "server")).toBe(3000);
+    it("routes a dockerfile build to the port it EXPOSEs", () => {
+      expect(resolveContainerPort("dockerfile", "php", ["Laravel"], "server", 80)).toBe(80);
+      expect(resolveContainerPort("dockerfile", "typescript", ["Node.js"], "server", 8080)).toBe(8080);
     });
 
-    it("routes dockerfile builds to 3000 even for a static kind", () => {
-      // A Dockerfile's EXPOSE is authoritative; kind must not override it.
+    it("prefers EXPOSE over every language and kind guess", () => {
+      expect(resolveContainerPort("dockerfile", "typescript", ["Vite"], "static", 4321)).toBe(4321);
+    });
+
+    it("routes a dockerfile build with no EXPOSE to 3000", () => {
+      expect(resolveContainerPort("dockerfile", "typescript", ["Node.js"], "server")).toBe(3000);
       expect(resolveContainerPort("dockerfile", "typescript", ["Vite"], "static")).toBe(3000);
+    });
+
+    it("routes a PHP dockerfile build with no EXPOSE to 80, not 3000", () => {
+      // PHP images serve behind nginx/apache on 80; 3000 would Bad Gateway.
+      expect(resolveContainerPort("dockerfile", "php", ["Laravel"], "server")).toBe(80);
     });
   });
 

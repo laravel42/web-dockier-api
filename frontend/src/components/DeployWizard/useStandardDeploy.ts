@@ -54,6 +54,11 @@ export function useStandardDeploy() {
       techStack: analysis?.techStack.map(t => t.name) || [],
       primaryLanguage: analysis?.primaryLanguage || "",
       deployStrategy: state.deployStrategy,
+      // Only meaningful when the repo actually has a Dockerfile; otherwise leave
+      // it unset so the backend keeps choosing the builder on its own. Sent as
+      // `buildMethod` because that column is persisted and reused by
+      // redeploy/rollback, so the choice survives beyond this wizard run.
+      buildMethod: analysis?.hasDocker ? (state.useRepoDockerfile ? "dockerfile" : "railpack") : undefined,
       instanceType,
       region: state.tofuRegion || undefined,
       templateId: project.sourceType === "template" ? project.template : undefined,

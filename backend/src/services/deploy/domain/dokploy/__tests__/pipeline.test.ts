@@ -173,6 +173,57 @@ describe("executeDokployPipeline", () => {
     );
   });
 
+  // `event.hasDocker` comes from a `buildMethod` only the API can send: the
+  // wizard step where the user used to pick it was removed with the Dokploy
+  // migration, so for every wizard deploy it is false. Without the analyzer's
+  // own signal a committed Dockerfile was never used at all.
+  it("takes the Dockerfile signal from repo analysis, not just the deploy event", async () => {
+    mockResolveRuntime.mockResolvedValueOnce({ hasDockerfile: true, dockerfilePort: 8080, kind: "server" });
+
+    await executeDokployPipeline({ ...basePipelineInput, hasDocker: false });
+
+    expect(mockConfigureApp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoAnalysis: expect.objectContaining({ hasDockerfile: true, dockerfilePort: 8080 }),
+      }),
+    );
+  });
+
+  it("ignores the repo Dockerfile when the deploy picked another build method", async () => {
+    // "Build it for me" in the wizard's Analysis step sends buildMethod:
+    // "railpack". The Dockerfile is still there; the user asked us not to use it.
+    mockResolveRuntime.mockResolvedValueOnce({ hasDockerfile: true, dockerfilePort: 8080 });
+
+    await executeDokployPipeline({ ...basePipelineInput, buildMethod: "railpack" });
+
+    expect(mockConfigureApp).toHaveBeenCalledWith(
+      expect.objectContaining({ repoAnalysis: expect.objectContaining({ hasDockerfile: false }) }),
+    );
+  });
+
+  it("does not point Dokploy at a Dockerfile the repo does not have", async () => {
+    // buildMethod carries a template default, so "dockerfile" can arrive on a
+    // redeploy the user never configured. Analysis saw the real file tree: with
+    // no Dockerfile there, a dockerfile build would fail on a missing file.
+    mockResolveRuntime.mockResolvedValueOnce({ hasDockerfile: false });
+
+    await executeDokployPipeline({ ...basePipelineInput, buildMethod: "dockerfile", hasDocker: true });
+
+    expect(mockConfigureApp).toHaveBeenCalledWith(
+      expect.objectContaining({ repoAnalysis: expect.objectContaining({ hasDockerfile: false }) }),
+    );
+  });
+
+  it("keeps the deploy event's Dockerfile signal when analysis reports none", async () => {
+    mockResolveRuntime.mockResolvedValueOnce({});
+
+    await executeDokployPipeline({ ...basePipelineInput, hasDocker: true });
+
+    expect(mockConfigureApp).toHaveBeenCalledWith(
+      expect.objectContaining({ repoAnalysis: expect.objectContaining({ hasDockerfile: true }) }),
+    );
+  });
+
   // The previous fix was inert in production because the classifier was only
   // ever fed an empty errorMessage; the stage cannot read the build log unless
   // THIS call site injects the fetch.

@@ -125,6 +125,20 @@ export interface RepoRuntimeInfo {
    * its start (Railpack uses it) or when static/undetermined.
    */
   injectableStartCommand?: string;
+  /**
+   * Whether the repo root has a `Dockerfile`. Only the ROOT one counts: that is
+   * the single path the Dokploy build type is configured with (`./Dockerfile`
+   * with context `./`), so a Dockerfile that only exists in a subdir would make
+   * the build fail rather than succeed.
+   */
+  hasDockerfile: boolean;
+  /**
+   * Port from the root Dockerfile's first `EXPOSE`, when it states one. The
+   * image owns its port, so this is the only reliable routing signal for a
+   * Dockerfile build — a PHP image serving on 80 routed to Dokploy's
+   * conventional 3000 is an instant Bad Gateway.
+   */
+  dockerfilePort?: number;
 }
 
 /**
@@ -180,13 +194,43 @@ export async function analyzeRepoRuntime(connection: ConnectionLike, ref: RepoRe
     if (!isPassthrough) injectableStartCommand = config.startCommand;
   }
 
+  // A committed Dockerfile wins over any builder we would pick, so its port has
+  // to come with it. The tree already tells us it exists; the content is one
+  // extra fetch, made only when it does.
+  const hasDockerfile = files.exists("Dockerfile");
+  let dockerfilePort: number | undefined;
+  if (hasDockerfile) {
+    try {
+      const dockerfile = await fetchRepoFile(connection, ref, "Dockerfile");
+      dockerfilePort = exposedPort(dockerfile);
+    } catch {
+      // Non-fatal: port resolution falls back to the builder convention.
+    }
+  }
+
   return {
     config,
     kind,
     hasStartScript,
     injectableStartCommand,
+    hasDockerfile,
+    dockerfilePort,
     platformAdapter: config.features.has("astro-platform-adapter") || undefined,
   };
+}
+
+/**
+ * First port declared by an `EXPOSE` line, or undefined.
+ *
+ * shortcut: takes the FIRST EXPOSE and ignores `EXPOSE $PORT`/`EXPOSE 80 443`
+ * extras — the first literal port is the one a single-port Traefik route needs.
+ * Revisit if multi-port images show up.
+ */
+function exposedPort(dockerfile: string | null): number | undefined {
+  const match = dockerfile?.match(/^\s*EXPOSE\s+(\d{1,5})/im);
+  if (!match) return undefined;
+  const port = Number(match[1]);
+  return port > 0 && port <= 65535 ? port : undefined;
 }
 
 /** Detect Payload CMS from the fetched package.json at the repo root + app subdir. */

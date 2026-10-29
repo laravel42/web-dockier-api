@@ -82,6 +82,7 @@ export const INITIAL_WIZARD_STATE: import("./types").WizardState = {
   selectedProviderId: "",
   deployStrategy: "vps",
   envVars: [],
+  useRepoDockerfile: true,
   servicesModes: {},
   envDetectionHints: {},
   manualServiceOverrides: [],

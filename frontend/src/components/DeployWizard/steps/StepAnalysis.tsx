@@ -20,13 +20,15 @@ const SERVICE_DISPLAY_NAMES: Record<string, string> = {
   broadcasting: "WebSocket / Broadcasting",
 };
 
-export default function StepAnalysis({ state, analysis, analysisLoading, analysisError, detectionHints, onChange }: {
+export default function StepAnalysis({ state, analysis, analysisLoading, analysisError, detectionHints, onChange, onDockerfileChoice }: {
   state: WizardState;
   analysis: RepoAnalysis | null;
   analysisLoading?: boolean;
   analysisError?: string;
   detectionHints?: Record<string, string>;
   onChange: (modes: Record<string, "vps" | "external">) => void;
+  /** Build from the repo's own Dockerfile (true) or let the platform build the image (false). */
+  onDockerfileChoice: (useRepoDockerfile: boolean) => void;
 }) {
   if (analysisLoading) {
     return (
@@ -128,12 +130,39 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
       )}
 
       {analysis.hasDocker && (
-        <div className="flex items-start gap-2 p-3 bg-secondary-50 border border-border rounded-lg">
-          <DockerfileIcon className="size-4 text-primary-500 mt-0.5 shrink-0" />
-          <div className="text-xs text-text-secondary">
-            <span className="font-semibold text-text">Dockerfile detected.</span>{" "}
-            You can choose whether to use it or let Dockier generate one in the Deploy script step.
+        <div className="rounded-lg border border-border bg-secondary-50 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start gap-2 min-w-0">
+              <DockerfileIcon className="size-4 text-primary-500 mt-0.5 shrink-0" />
+              <div className="text-xs text-text-secondary">
+                <span className="font-semibold text-text">Dockerfile detected.</span>{" "}
+                Choose how your image is built.
+              </div>
+            </div>
+            <div className="flex rounded-md overflow-hidden border border-border shrink-0">
+              <button
+                type="button"
+                onClick={() => onDockerfileChoice(true)}
+                aria-pressed={state.useRepoDockerfile}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${state.useRepoDockerfile ? "bg-primary-500 text-primary-foreground" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
+              >
+                Use my Dockerfile
+              </button>
+              <button
+                type="button"
+                onClick={() => onDockerfileChoice(false)}
+                aria-pressed={!state.useRepoDockerfile}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${!state.useRepoDockerfile ? "bg-primary-500 text-primary-foreground" : "bg-card text-text-secondary hover:bg-secondary-50"}`}
+              >
+                Build it for me
+              </button>
+            </div>
           </div>
+          <p className="mt-2 text-xs text-text-muted">
+            {state.useRepoDockerfile
+              ? "Your repository Dockerfile is built as-is. It must EXPOSE the port your app listens on."
+              : "Your Dockerfile is ignored. The platform detects the stack and builds the image itself."}
+          </p>
         </div>
       )}
 

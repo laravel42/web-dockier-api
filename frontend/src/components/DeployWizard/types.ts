@@ -138,6 +138,14 @@ export interface WizardState {
   // Env Vars
   envVars: Array<{ name: string; value: string }>;
   // Analysis
+  /**
+   * Whether to build from the repository's own Dockerfile (true, the default
+   * when one exists) or let the platform's builder generate the image (false).
+   * Sent as `buildMethod` so it persists on the deployment row and a
+   * redeploy/rollback reuses the same choice. Ignored when the repo has no
+   * Dockerfile — the Analysis step only offers the choice when it detects one.
+   */
+  useRepoDockerfile: boolean;
   servicesModes: Record<string, "vps" | "external">;
   envDetectionHints: Record<string, string>;
   manualServiceOverrides: string[];

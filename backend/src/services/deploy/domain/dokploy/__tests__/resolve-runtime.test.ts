@@ -45,7 +45,13 @@ describe("resolveRuntimeStartCommand", () => {
 
   afterEach(() => vi.clearAllMocks());
 
-  it("prefers an explicit start command and skips repo fetching entirely", async () => {
+  it("prefers an explicit start command but still analyzes the repo", async () => {
+    // The explicit command must not suppress the rest of the descriptor: build
+    // type selection reads hasDockerfile from the same call, so skipping the
+    // analysis here would make the same repo build differently depending on
+    // whether a start command happened to be supplied.
+    serveRepo(["package.json", "Dockerfile"], { Dockerfile: "FROM node:22\nEXPOSE 8080\n" });
+
     const result = await resolveRuntimeStartCommand({
       gitConnectionId: "g1",
       repo: "acme/app",
@@ -54,8 +60,39 @@ describe("resolveRuntimeStartCommand", () => {
       log,
     });
     expect(result.startCommand).toBe("node server.mjs");
-    expect(mockGetCreds).not.toHaveBeenCalled();
-    expect(mockGetRepoFileTree).not.toHaveBeenCalled();
+    expect(result.hasDockerfile).toBe(true);
+    expect(result.dockerfilePort).toBe(8080);
+  });
+
+  it("reports a root Dockerfile and its EXPOSE port", async () => {
+    serveRepo(
+      ["package.json", "Dockerfile"],
+      {
+        "package.json": pkg({ scripts: { start: "node index.js" } }),
+        Dockerfile: "FROM node:22-slim\nWORKDIR /app\nEXPOSE 4321/tcp\nCMD [\"node\", \"index.js\"]\n",
+      },
+    );
+
+    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    expect(result.hasDockerfile).toBe(true);
+    expect(result.dockerfilePort).toBe(4321);
+  });
+
+  it("reports a Dockerfile with no EXPOSE as having no port", async () => {
+    serveRepo(["Dockerfile"], { Dockerfile: "FROM nginx:alpine\nCOPY dist /usr/share/nginx/html\n" });
+
+    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    expect(result.hasDockerfile).toBe(true);
+    expect(result.dockerfilePort).toBeUndefined();
+  });
+
+  it("ignores a Dockerfile that is not at the repo root", async () => {
+    // Dokploy is pointed at "./Dockerfile" with context "./", so a subdir-only
+    // Dockerfile would fail the build rather than be used.
+    serveRepo(["package.json", "docker/Dockerfile.prod"], { "package.json": pkg({ scripts: { start: "node ." } }) });
+
+    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    expect(result.hasDockerfile).toBe(false);
   });
 
   it("derives the start command for SSR Astro (@astrojs/node) with no start script", async () => {

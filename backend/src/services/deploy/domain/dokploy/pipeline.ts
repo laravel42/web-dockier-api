@@ -154,6 +154,27 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     });
     const { startCommand } = resolvedRuntime;
 
+    // Does the repo have a root Dockerfile, and may we use it?
+    //
+    // Existence comes from the analyzer, which looked at the real file tree.
+    // `event.hasDocker` is only a fallback for when that analysis could not run
+    // (no credentials, provider error): it is derived from `buildMethod`, which
+    // carries a template default, so trusting it alone would point Dokploy at a
+    // `./Dockerfile` that may not exist.
+    //
+    // The user's choice in the Analysis step arrives as that same buildMethod
+    // ("dockerfile" = use mine, anything else = build it for me), which is
+    // persisted on the deployment row so a redeploy or rollback keeps it.
+    // `useRepoDockerfile: false` is the equivalent opt-out for API callers.
+    const repoHasDockerfile = resolvedRuntime.hasDockerfile ?? (event.hasDocker ?? false);
+    const optedOutOfDockerfile =
+      event.useRepoDockerfile === false ||
+      (event.buildMethod !== undefined && event.buildMethod !== "dockerfile");
+    const useRepoDockerfile = repoHasDockerfile && !optedOutOfDockerfile;
+    if (repoHasDockerfile && optedOutOfDockerfile) {
+      await log("[stage:configure-app] Repository Dockerfile ignored — this deploy was configured to build the image automatically.");
+    }
+
     // ─── Stage 5: Configure Application ──────────────────────────
     const { dokployApplicationId, buildType, containerPort } = await stageConfigureApp({
       projectId: projectId || deploymentId,
@@ -162,7 +183,9 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
       serverId: serverResult.dokployServerId,
       gitConfig: gitResult.gitConfig,
       repoAnalysis: {
-        hasDockerfile: event.hasDocker ?? false,
+        hasDockerfile: useRepoDockerfile,
+        // The image owns its port, so EXPOSE decides the Traefik route.
+        dockerfilePort: resolvedRuntime.dockerfilePort,
         // "static" here means a repo that ships its ALREADY-BUILT output (so
         // Dokploy's nginx "static" build type can just COPY it). Source-only
         // static generators like Astro/Vite must build with Railpack instead,

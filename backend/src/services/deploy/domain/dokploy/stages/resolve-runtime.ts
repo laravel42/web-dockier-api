@@ -53,13 +53,19 @@ export interface ResolvedRuntime {
   packageManager?: string;
   /** Declared package manager version, e.g. "11.22.0". Only set alongside `packageManager`. */
   packageManagerVersion?: string;
+  /** Whether the repo ROOT has a Dockerfile — the build type Dokploy is pointed at. */
+  hasDockerfile?: boolean;
+  /** Port from that Dockerfile's first `EXPOSE`, when it declares one. */
+  dockerfilePort?: number;
 }
 
 /**
  * Resolve a high-confidence start command for the repo, or undefined.
  *
  * @param explicit A start command already supplied on the deploy event (e.g.
- *   from the wizard). When present it wins and no fetch happens.
+ *   from the wizard). When present it wins over the derived one, but the repo is
+ *   still analyzed: the rest of the descriptor (build type signals, ports) must
+ *   not depend on whether a start command happened to be supplied.
  */
 export async function resolveRuntimeStartCommand(params: {
   gitConnectionId: string;
@@ -69,14 +75,11 @@ export async function resolveRuntimeStartCommand(params: {
   log: (line: string) => Promise<void>;
 }): Promise<ResolvedRuntime> {
   const { gitConnectionId, repo, branch, explicit, log } = params;
-
-  if (explicit && explicit.trim()) {
-    return { startCommand: explicit.trim() };
-  }
+  const explicitStart = explicit?.trim() || undefined;
 
   try {
     const creds = await getGitConnectionCredentials(gitConnectionId);
-    if (!creds) return {};
+    if (!creds) return explicitStart ? { startCommand: explicitStart } : {};
 
     const connection: ConnectionLike = {
       provider: creds.provider.toLowerCase(),
@@ -94,6 +97,8 @@ export async function resolveRuntimeStartCommand(params: {
       platformAdapter: runtime.platformAdapter,
       runtime: runtime.config.runtime,
       phpVersion: runtime.config.phpVersion || undefined,
+      hasDockerfile: runtime.hasDockerfile,
+      dockerfilePort: runtime.dockerfilePort,
       ...(runtime.config.features.has("declaredPackageManager")
         ? {
             packageManager: runtime.config.packageManager,
@@ -110,6 +115,10 @@ export async function resolveRuntimeStartCommand(params: {
       );
     }
 
+    if (explicitStart) {
+      return { ...descriptor, startCommand: explicitStart };
+    }
+
     if (runtime.injectableStartCommand) {
       await log(
         `[stage:configure-app] Detected ${runtime.config.framework || "server"} app with no start script — using "${runtime.injectableStartCommand}".`,
@@ -120,7 +129,7 @@ export async function resolveRuntimeStartCommand(params: {
     return descriptor;
   } catch {
     // Non-fatal: fall back to Railpack's own inference.
-    return {};
+    return explicitStart ? { startCommand: explicitStart } : {};
   }
 }
 
