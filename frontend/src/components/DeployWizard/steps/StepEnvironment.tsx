@@ -2,7 +2,8 @@ import type { WizardState, RepoAnalysis } from "../types";
 import { PROVIDER_REGIONS } from "../constants";
 import { getPlans } from "../plans";
 import { isServerOnly } from "../serverOnly";
-import { CircleCheckIcon, FlaskConicalIcon, RocketIcon, ServerIcon, GlobeIcon } from "lucide-react";
+import { CircleCheckIcon, FlaskConicalIcon, RocketIcon, ServerIcon, GlobeIcon, LayersIcon } from "lucide-react";
+import ComposeServices from "./ComposeServices";
 
 /** Per-provider names for the static hosting stack, for accurate labelling. */
 const STATIC_STACK: Record<string, string> = {
@@ -22,11 +23,19 @@ export default function StepEnvironment({ state, templateId, analysis, onChange,
   analysis: RepoAnalysis | null;
   onChange: (env: "staging" | "production", plan: number) => void;
   onRegionChange: (region: string) => void;
-  onStrategyChange: (strategy: "vps" | "static") => void;
+  onStrategyChange: (strategy: "vps" | "static" | "compose") => void;
+  /** Persists the compose file + public service choices into wizard state. */
+  onComposeChange: (next: WizardState["compose"]) => void;
 }) {
   const plans = getPlans(state.selectedProvider, state.environment, state.servicesModes, templateId);
   const regions = PROVIDER_REGIONS[state.selectedProvider] || [];
   const serverOnly = isServerOnly(analysis);
+  // A compose file with blocking problems (a build context that does not exist)
+  // is not offered: deploying it produces a build failure, and the Analysis
+  // step already explained why.
+  const compose = analysis?.compose?.problems.length === 0 ? analysis.compose : null;
+  const hasCompose = Boolean(compose);
+  const isCompose = state.deployStrategy === "compose" && hasCompose;
   const isStatic = state.deployStrategy === "static" && !serverOnly;
   const staticStack = STATIC_STACK[state.selectedProvider] || "object storage + CDN";
 
@@ -51,24 +60,47 @@ export default function StepEnvironment({ state, templateId, analysis, onChange,
             </span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className={`grid grid-cols-1 gap-3 ${hasCompose ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
             <button
               type="button"
               onClick={() => onStrategyChange("vps")}
-              aria-pressed={!isStatic}
+              aria-pressed={!isStatic && !isCompose}
               className={`flex flex-col gap-1.5 p-3 rounded-xl border-2 text-left transition-all ${
-                !isStatic ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"
+                !isStatic && !isCompose ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"
               }`}
             >
               <div className="flex items-center gap-2">
                 <ServerIcon className="size-4 text-text-secondary shrink-0" />
                 <span className="text-sm font-semibold text-text">Server</span>
-                {!isStatic && <CircleCheckIcon className="size-4 text-primary-500 ml-auto" />}
+                {!isStatic && !isCompose && <CircleCheckIcon className="size-4 text-primary-500 ml-auto" />}
               </div>
               <p className="text-xs/relaxed text-text-muted">
                 Runs your app on a virtual machine. Needed for a backend, server-side rendering, or a database.
               </p>
             </button>
+            {/* Offered only when analysis actually found a deployable compose
+                file: without one there is nothing for this strategy to run, and
+                the pipeline refuses rather than guessing a path. */}
+            {hasCompose && (
+              <button
+                type="button"
+                onClick={() => onStrategyChange("compose")}
+                aria-pressed={isCompose}
+                className={`flex flex-col gap-1.5 p-3 rounded-xl border-2 text-left transition-all ${
+                  isCompose ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <LayersIcon className="size-4 text-text-secondary shrink-0" />
+                  <span className="text-sm font-semibold text-text">Docker Compose</span>
+                  {isCompose && <CircleCheckIcon className="size-4 text-primary-500 ml-auto" />}
+                </div>
+                <p className="text-xs/relaxed text-text-muted">
+                  Runs your repository&apos;s compose file as one stack on a virtual machine — every
+                  service together, on its own network.
+                </p>
+              </button>
+            )}
 
             <button
               type="button"
@@ -94,6 +126,11 @@ export default function StepEnvironment({ state, templateId, analysis, onChange,
           <p className="mt-2 text-xs/relaxed text-text-muted">
             Your site is built from source and the output uploaded, so no instance size applies.
           </p>
+        )}
+        {isCompose && compose && (
+          <div className="mt-3 pt-3 border-t border-border">
+            <ComposeServices compose={compose} state={state} onChange={onComposeChange} />
+          </div>
         )}
       </div>
 

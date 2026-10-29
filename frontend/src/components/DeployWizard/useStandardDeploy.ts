@@ -7,12 +7,22 @@
  */
 
 import { useRef, useCallback } from "react";
-import { deployApi } from "@/services/api";
+import { deployApi, projectsApi } from "@/services/api";
 import type { WizardState, RepoAnalysis } from "./types";
 
 interface StandardDeployParams {
   state: WizardState;
-  project: { id: string; name: string; repository: string; branch: string; connectionId: string; sourceType?: string; template?: string };
+  project: {
+    id: string;
+    name: string;
+    repository: string;
+    branch: string;
+    connectionId: string;
+    sourceType?: string;
+    template?: string;
+    /** Merged with the compose choices before saving, so nothing else is lost. */
+    settings?: Record<string, unknown>;
+  };
   analysis: RepoAnalysis | null;
   repo: string;
   instanceType?: string;
@@ -44,6 +54,23 @@ export function useStandardDeploy() {
     onComplete,
   }: StandardDeployParams) => {
     mountedRef.current = true;
+
+    // Persist the compose choices BEFORE creating the deployment: the pipeline
+    // reads them from project settings rather than the deploy request, so they
+    // survive a redeploy and a rollback and stay editable afterwards. Creating
+    // the deployment first risks the worker picking it up before they land.
+    if (state.deployStrategy === "compose" && state.compose.path) {
+      await projectsApi.update(project.id, {
+        settings: {
+          ...project.settings,
+          compose: {
+            path: state.compose.path,
+            entryService: state.compose.entryService,
+            entryPort: state.compose.entryPort,
+          },
+        },
+      });
+    }
 
     const deployment = await deployApi.createDeployment({
       providerId: state.selectedProviderId,

@@ -91,9 +91,63 @@ export interface RepoAnalysis {
    * only — drives a warning in the Analysis step, never blocks the wizard.
    */
   multiService?: MultiServiceHint | null;
+  /**
+   * Present when the repo holds a Docker Compose file. Unlike `multiService`
+   * (which only warns), this is actionable: it drives the compose deploy
+   * strategy. When both are set the wizard shows this and hides the warning.
+   *
+   * `null` means checked and no compose file.
+   */
+  compose?: ComposeAnalysis | null;
   aiAnalysis?: AIAnalysis;
   sensitiveData?: SensitiveField[];
   dependencies?: Dependency[];
+}
+
+/** One service declared in the compose file. */
+export interface ComposeServiceSummary {
+  name: string;
+  /**
+   * Container port, when any signal states one: `ports:`, `expose:`, a Traefik
+   * label, or the service's build Dockerfile `EXPOSE`. Absent means the user
+   * has to supply it — Dokploy routes Traefik to this exact port, so a guess
+   * is a permanent Bad Gateway.
+   */
+  port?: number;
+  /** On `dokploy-network`, so Traefik can reach it. */
+  routable: boolean;
+  /** Exists only to build an image; never runs, never a domain target. */
+  buildOnly: boolean;
+  image?: string;
+  /** Recognised database/cache engine, when it is one. */
+  engine?: string;
+}
+
+/** A compose file found in the repo, with why it was ranked where it was. */
+export interface ComposeCandidate {
+  path: string;
+  dir: string;
+  reason: string;
+}
+
+export interface ComposeAnalysis {
+  /** Every compose file in the repo, best default first. */
+  candidates: ComposeCandidate[];
+  /** The analysed file. */
+  path: string;
+  services: ComposeServiceSummary[];
+  /** Suggested public service; absent when the evidence names none. */
+  entryService?: string;
+  entryPort?: number;
+  /** Variables the file marks `${VAR:?…}` — unset ones abort the deploy. */
+  requiredVars: string[];
+  /** Databases the stack runs itself; Dockier then provisions none. */
+  databases: Array<{ service: string; engine: string; serviceType: string; image: string }>;
+  declaresDatabase: boolean;
+  /** Blocking: the stack cannot deploy as-is. */
+  problems: string[];
+  /** Advisory. */
+  warnings: string[];
 }
 
 export interface SensitiveField {
@@ -127,14 +181,30 @@ export interface WizardState {
   selectedProviderId: string;
   /**
    * Where the app runs.
-   *  - "vps"    → a virtual machine (EC2 / Compute Engine) via Dokploy
-   *  - "static" → object storage + CDN (S3 + CloudFront / GCS + Cloud CDN)
+   *  - "vps"     → a virtual machine (EC2 / Compute Engine) via Dokploy
+   *  - "static"  → object storage + CDN (S3 + CloudFront / GCS + Cloud CDN)
+   *  - "compose" → the repo's own Docker Compose file, run as one stack of N
+   *    containers on a VM via Dokploy. Offered only when analysis found a
+   *    compose file.
    *
    * Chosen in the Plan step. Once repo analysis exposes a static/server
    * classification, this should be pre-selected from it rather than left to the
    * user to get right — see .kiro/specs/static-deploy-targets task 3.
    */
-  deployStrategy: "vps" | "static";
+  deployStrategy: "vps" | "static" | "compose";
+  /**
+   * The user's compose choices, persisted to `projects.settings.compose` on
+   * deploy. Which file to run, and which of its services gets the domain.
+   *
+   * Kept out of the deploy request body on purpose: these must survive a
+   * redeploy and a rollback, and be editable later without running a deploy,
+   * so the pipeline reads them from project settings instead.
+   */
+  compose: {
+    path: string;
+    entryService?: string;
+    entryPort?: number;
+  };
   // Env Vars
   envVars: Array<{ name: string; value: string }>;
   // Analysis

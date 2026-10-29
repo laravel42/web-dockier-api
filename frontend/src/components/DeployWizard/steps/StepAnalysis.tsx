@@ -118,14 +118,35 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
         </div>
       )}
 
-      {analysis.multiService && (
+      {/* A compose file is actionable, so it replaces the multi-service warning
+          below rather than appearing beside it: telling the user their services
+          "won't be deployed" is simply wrong once Docker Compose is on offer. */}
+      {analysis.compose && (
+        analysis.compose.problems.length > 0 ? (
+          <Alert variant="warning">
+            <span className="font-semibold">
+              The Docker Compose file in this repository cannot be deployed as-is.
+            </span>{" "}
+            {analysis.compose.problems.join(" ")}{" "}
+            Fix the compose file and re-run the analysis, or deploy a single service instead.
+          </Alert>
+        ) : (
+          <Alert variant="info">
+            <span className="font-semibold">
+              Docker Compose file found ({analysis.compose.path}).
+            </span>{" "}
+            It declares {analysis.compose.services.filter((s) => !s.buildOnly).length} services
+            {analysis.compose.declaresDatabase ? ", including its own database" : ""}. Choose
+            &ldquo;Docker Compose&rdquo; in the next step to deploy the whole stack together.
+            {analysis.compose.warnings.length > 0 && ` ${analysis.compose.warnings.join(" ")}`}
+          </Alert>
+        )
+      )}
+      {analysis.multiService && !analysis.compose && (
         <Alert variant="warning">
-          {analysis.multiService.composeFile
-            ? `A Docker Compose file (${analysis.multiService.composeFile}) and ${analysis.multiService.serviceDirs.length} service directories were found.`
-            : `App manifests were found in ${analysis.multiService.serviceDirs.length} directories.`}{" "}
+          {`App manifests were found in ${analysis.multiService.serviceDirs.length} directories.`}{" "}
           Dockier builds and deploys a single service from the repository root, so the other
-          services here won't be deployed. Create one Dockier project per service, or deploy the
-          compose file directly on your provider.
+          services here won&apos;t be deployed. Create one Dockier project per service.
         </Alert>
       )}
 

@@ -70,6 +70,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             onChange={(env, plan) => setState(prev => ({ ...prev, environment: env, selectedPlan: plan }))}
             onRegionChange={(region) => setState(prev => ({ ...prev, tofuRegion: region }))}
             onStrategyChange={(strategy) => setState(prev => ({ ...prev, deployStrategy: strategy }))}
+            onComposeChange={(compose) => setState(prev => ({ ...prev, compose }))}
           />
         )}
         {step === 3 && <StepDeploy state={state} />}

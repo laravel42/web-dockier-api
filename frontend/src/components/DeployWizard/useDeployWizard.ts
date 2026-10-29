@@ -157,6 +157,21 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     setState((prev) => (prev.deployStrategy === "static" ? { ...prev, deployStrategy: "vps" } : prev));
   }, [open, analysis]);
 
+  // ─── Reset a stale "compose" selection ───────────────────────────
+  //
+  // Same class of bug as the static reset above: the Compose card is only
+  // rendered when analysis found a deployable compose file, so a selection made
+  // before analysis resolved — or kept after a re-analysis found the file gone
+  // or broken — would leave deployStrategy on "compose" with no card to
+  // un-select it. The pipeline would then refuse the deploy for a reason the
+  // user cannot see any control for.
+  useEffect(() => {
+    if (!open || !analysis) return;
+    const deployable = analysis.compose && analysis.compose.problems.length === 0;
+    if (deployable) return;
+    setState((prev) => (prev.deployStrategy === "compose" ? { ...prev, deployStrategy: "vps" } : prev));
+  }, [open, analysis]);
+
   // ─── Start Deployment ────────────────────────────────────────────
 
   const onDeployCompleteRef = useRef(onDeployComplete);
