@@ -148,7 +148,7 @@ const clientMethods = {
   deployRedis: vi.fn(async () => undefined),
   // Reused DB services are verified to still exist; default to "exists".
   databaseExists: vi.fn(async () => true),
-  triggerAIFix: vi.fn(async () => ({ applied: true, summary: "bumped node version" })),
+  // No triggerAIFix: Dokploy has no such procedure (see stages/ai-diagnosis.ts).
 };
 vi.mock("../client.js", () => ({
   createDokployClient: () => clientMethods,
@@ -269,7 +269,7 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     );
   });
 
-  it("recovers via automated diagnosis: first deploy errors, retry succeeds", async () => {
+  it("retries a failed deploy and succeeds on the second attempt", async () => {
     clientMethods.listDeployments
       .mockResolvedValueOnce([]) // attempt 1 pre-trigger snapshot
       .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }])   // attempt 1 poll → error
@@ -278,13 +278,15 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
 
     await executeDokployPipeline(input());
 
-    // Deploy attempted twice, automated recovery invoked once between attempts.
+    // Deploy attempted twice, with the retry announced once between attempts.
     expect(clientMethods.deploy).toHaveBeenCalledTimes(2);
-    expect(clientMethods.triggerAIFix).toHaveBeenCalledTimes(1);
     expect(statusCalls).toContain("success");
 
-    const aiLog = logLines.find((l) => l.includes("Applied automatic fix"));
-    expect(aiLog).toContain("bumped node version");
+    // The retry is not a retry-after-fix: nothing edits the repository between
+    // attempts, so no log line may claim a fix was applied. One used to, from a
+    // Dokploy procedure that does not exist.
+    expect(logLines.some((l) => /applied automatic fix/i.test(l))).toBe(false);
+    expect(logLines.some((l) => /in case the failure was transient/i.test(l))).toBe(true);
   });
 
   it("fails after the configured attempts when deploy never succeeds", async () => {
@@ -294,8 +296,8 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
 
     // maxAttempts is 2 for the Dokploy pipeline.
     expect(clientMethods.deploy).toHaveBeenCalledTimes(2);
-    // Automated recovery attempted only between attempts (not after the last).
-    expect(clientMethods.triggerAIFix).toHaveBeenCalledTimes(1);
+    // The retry is announced only between attempts, never after the last.
+    expect(logLines.filter((l) => /in case the failure was transient/i.test(l))).toHaveLength(1);
     expect(statusCalls).toContain("failed");
     expect(statusCalls).not.toContain("success");
 
@@ -319,7 +321,8 @@ describe("Dokploy pipeline (end-to-end, real stages)", () => {
     expect(statusCalls).not.toContain("failed");
     expect(statusCalls).not.toContain("success");
     expect(clientMethods.deploy).toHaveBeenCalledTimes(1);
-    expect(clientMethods.triggerAIFix).not.toHaveBeenCalled();
+    // A cancel is not a failure, so no retry is announced.
+    expect(logLines.some((l) => /in case the failure was transient/i.test(l))).toBe(false);
     expect(logLines.some((l) => l.includes("Pipeline failed"))).toBe(false);
     expect(logLines.some((l) => /cancelled by user/i.test(l))).toBe(true);
   });

@@ -96,7 +96,16 @@ export const DOKPLOY_STAGE = {
   DEPLOY: "deploy",
   /** Run the project's user-defined post-deploy commands. */
   POST_DEPLOY: "post-deploy",
-  /** Dokploy's built-in AI diagnosing a failed deploy before a retry. */
+  /**
+   * Was: Dokploy's built-in AI diagnosing a failed deploy before a retry.
+   *
+   * Retained as a RESERVED id, not emitted by anything. The procedure it stood
+   * for does not exist on the Dokploy API, so the stage was removed; build
+   * failures are now diagnosed inline by the deploy stage
+   * (`stages/ai-diagnosis.ts`). Kept so the id is not recycled for something
+   * else while historical deploy logs still contain `[stage:ai-recovery]`
+   * markers that the frontend parser would then attach to the wrong step.
+   */
   AI_RECOVERY: "ai-recovery",
   /** Apply the project's network/service links. */
   NETWORK: "network",

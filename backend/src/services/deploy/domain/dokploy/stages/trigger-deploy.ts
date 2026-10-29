@@ -6,7 +6,6 @@
  */
 
 import type { DokployClient } from "../client.js";
-import { invokeDokployAI } from "./ai-recovery.js";
 import { classifyBuildFailure } from "./build-failure.js";
 import { sleep } from "../../../../../shared/utils/time.js";
 import { type Advisory, domainPortCorrectedAdvisory } from "../advisories.js";
@@ -182,16 +181,19 @@ export async function stageDeployWithRetry(params: {
 
     lastFailureReason = result.failureReason;
 
-    // Failed — try automated recovery diagnosis if we have retries left.
+    // Retry once more. This is NOT a retry-after-fix: nothing can edit the
+    // user's repository between attempts, and the diagnosis above has already
+    // been reported. The retry exists because a build can fail transiently —
+    // a flaky dependency download, a registry timeout — and re-running costs
+    // one build. A deterministic failure simply fails again with the same
+    // message.
+    //
+    // It used to call Dokploy's `application.aiFixDeployment` and claim a fix
+    // had been applied. That procedure does not exist on the Dokploy API
+    // (verified against the live instance), so the call 404'd on every failed
+    // deploy and the claim was never true.
     if (attempt < maxAttempts) {
-      await log("[stage:deploy] Running automated error diagnosis...");
-      const aiResult = await invokeDokployAI({ applicationId, client, log });
-
-      if (aiResult.fixed) {
-        await log(`[stage:deploy] Applied automatic fix: ${aiResult.description}`);
-      } else {
-        await log("[stage:deploy] No automatic fix available. Retrying...");
-      }
+      await log("[stage:deploy] Retrying in case the failure was transient...");
     }
   }
 
@@ -265,6 +267,10 @@ async function reportBuildFailure(
     await log(`[stage:deploy] Failing commit: ${commit}`);
   }
 
+  // Keep the raw evidence for the AI tier below: `evidence` is reused by the
+  // deterministic classifier, which does not need it preserved.
+  const logEvidence = evidence;
+
   // What the build actually reported outranks any heuristic about the repo (see
   // build-failure.ts); the branches below only format the diagnosis.
   const diagnosis = classifyBuildFailure(evidence, runtimeHint);
@@ -312,6 +318,25 @@ async function reportBuildFailure(
     return commit
       ? `No start command was detected for this ${runtimeHint?.framework ?? "server"} app (commit "${commit}"). Add a "start" script to package.json (e.g. "${suggested}") and redeploy.`
       : `No start command was detected for this ${runtimeHint?.framework ?? "server"} app. Add a "start" script to package.json (e.g. "${suggested}") and redeploy.`;
+  }
+
+  // Last tier before the generic guidance: ask a model to read the build log.
+  //
+  // Deliberately after every deterministic pattern above — those are free,
+  // exact and already cover the failures we understand. This is for the long
+  // tail, and it is the only thing standing between a user with no access to
+  // the build log and "something went wrong". Never throws; returns null when
+  // OPENAI_API_KEY is unset or anything at all goes wrong.
+  if (logEvidence.trim()) {
+    const { diagnoseBuildFailure } = await import("./ai-diagnosis.js");
+    const diagnosis = await diagnoseBuildFailure({ logTail: logEvidence, hint: runtimeHint });
+    if (diagnosis) {
+      await log(`[stage:deploy] ${diagnosis.summary}`);
+      await log(`[stage:deploy] Suggested fix: ${diagnosis.suggestion}`);
+      return commit
+        ? `${diagnosis.summary} (commit "${commit}") ${diagnosis.suggestion}`
+        : `${diagnosis.summary} ${diagnosis.suggestion}`;
+    }
   }
 
   await log(

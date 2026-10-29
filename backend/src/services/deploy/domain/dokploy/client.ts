@@ -36,7 +36,6 @@ import type {
   CreateRedirectParams,
   DokployRedirect,
   DeployParams,
-  AIFixResult,
   CreateSSHKeyParams,
   DokploySSHKey,
   CreateComposeParams,
@@ -613,11 +612,12 @@ export class DokployClient {
     await this.mutation<unknown>("application.cancelDeployment", { applicationId });
   }
 
-  // ─── AI Fix (Dokploy built-in) ────────────────────────────────
-
-  async triggerAIFix(applicationId: string): Promise<AIFixResult> {
-    return this.mutation<AIFixResult>("application.aiFixDeployment", { applicationId });
-  }
+  // NOTE: there is deliberately no AI-fix method here. Dokploy exposes no
+  // `application.aiFixDeployment` (verified against a live instance: it returns
+  // the same path-less 404 as a procedure that was never implemented), and its
+  // `ai.analyzeLogs` requires an AI provider configured inside Dokploy and
+  // returns unstructured markdown. Build-failure diagnosis is done in
+  // `stages/ai-diagnosis.ts` against Dockier's own OpenAI key instead.
 
   // ─── SSH Keys ──────────────────────────────────────────────────
 

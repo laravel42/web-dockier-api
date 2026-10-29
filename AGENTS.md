@@ -124,7 +124,43 @@ The primary deploy path (`DEPLOY_PROVIDER=dokploy`) delegates build and deployme
 
 **Build type detection:** Automatically selects `dockerfile`, `static`, `railpack`, or `nixpacks` based on repo analysis — no user configuration needed.
 
-**AI recovery:** Uses Dokploy's built-in AI (NOT OpenAI directly). Non-fatal — failures never block the pipeline.
+**Build-failure diagnosis (NOT an automated fix).** An earlier version of this section claimed the
+pipeline "invokes Dokploy's built-in AI to diagnose and fix issues, then retries". That was never
+true on any Dokploy version: the pipeline called `application.aiFixDeployment`, and **that
+procedure does not exist on the Dokploy API** — verified against the live instance, where it
+returns the same path-less 404 as a name that was never implemented, while a real procedure's 404
+carries a `path` field. Every failed deploy logged "Running automated deployment diagnosis…",
+received a 404, discarded it, and retried unchanged. A mocked-fetch unit test asserted the request
+shape, which is exactly how it went unnoticed for so long.
+
+What exists now (`deploy/domain/dokploy/stages/ai-diagnosis.ts`):
+
+- **Deterministic classifiers first.** `stages/build-failure.ts` for applications (out-of-memory,
+  missing start command, Astro platform adapter) and `COMPOSE_FAILURE_PATTERNS` in
+  `stages/deploy-compose.ts` for stacks (missing build context, missing Dockerfile, unpullable
+  image, empty required variable, missing external network). Free, exact, no network call.
+- **An LLM tier for the long tail**, reached only when those find nothing AND a build log tail was
+  retrieved. Calls OpenAI directly with Dockier's own `OPENAI_API_KEY`, following the raw-`fetch`
+  convention of `lib/repo-analyzer/ai-review.ts` (JSON mode, `temperature: 0`, manual shape
+  validation, never throws, `null` on any failure).
+- **It diagnoses; it cannot fix.** Nothing can edit a user's repository mid-deploy. The returned
+  `{summary, suggestion}` is logged and surfaced in the wizard; the log no longer claims a fix was
+  applied.
+- **The log tail is redacted before it leaves the network** (`REDACTIONS` in that module). Build
+  logs echo env values. Dokploy's own `ai.analyzeLogs` cannot do this — it builds the prompt
+  server-side from whatever it is handed.
+- **The prompt is constrained to remedies a Dockier user can apply**: their repository, their
+  project env vars, or a larger plan. Never "inspect the build server" or "reconfigure CI", which
+  they have no access to. (`ai.analyzeLogs` suggested `webpack-bundle-analyzer` for a Vite build.)
+
+`stageDeployWithRetry` still retries twice, because a build can fail transiently (a flaky
+dependency download, a registry timeout). It is NOT a retry-after-fix and must not be described as
+one. Dokploy's `ai.analyzeLogs` is deliberately unused: it needs an `aiId` from a provider
+configured inside Dokploy, and returns unstructured markdown that fits neither the deploy log's
+line stream nor the wizard's one-line summary.
+
+`DOKPLOY_STAGE.AI_RECOVERY` ("ai-recovery") is retained as a **reserved, unemitted** id so it is
+not recycled while historical deploy logs still contain the marker.
 
 **Pipeline routing — this is the rule, not a flag to tune.** `routePipeline` in `deploy/domain/worker.ts` decides, in this order:
 

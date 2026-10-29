@@ -252,17 +252,43 @@ describe("the [stage:<id>] marker contract", () => {
     expect(stages.find((s) => s.id === "sync-git")?.status).toBe("pending");
   });
 
-  it("still reads the ai-recovery marker for retry info even though it is not a step", () => {
+  it("reads the build-failure diagnosis from the deploy stage", () => {
+    // Was keyed on `[stage:ai-recovery] … Fix applied: …`, which the backend
+    // never emitted: the Dokploy procedure behind that stage does not exist, so
+    // this panel never rendered. The backend now diagnoses the build log inline
+    // in the deploy stage and emits a "Suggested fix:" line.
     const logs = [
-      "[2026-09-29 10:00:01] [stage:deploy] Attempt 1/3",
-      "[2026-09-29 10:00:02] [stage:ai-recovery] ✓ Fix applied: pinned the base image",
-      "[2026-09-29 10:00:03] [stage:deploy] Attempt 2/3",
+      "[2026-09-29 10:00:01] [stage:deploy] Attempt 1/2",
+      "[2026-09-29 10:00:02] [stage:deploy] The build failed in `pnpm run build`.",
+      "[2026-09-29 10:00:03] [stage:deploy] Suggested fix: pin the base image to node:22.",
+      "[2026-09-29 10:00:04] [stage:deploy] Attempt 2/2",
     ];
     const { stages, retries } = parseStages(logs, false, "vps", false);
 
     expect(stages.map((s) => s.id)).not.toContain("ai-recovery");
     expect(retries).toEqual([
-      { attempt: 1, maxAttempts: 3, fixDescription: "pinned the base image" },
+      { attempt: 1, maxAttempts: 2, fixDescription: "pin the base image to node:22." },
+    ]);
+  });
+
+  it("renders no diagnosis panel for a deploy that never failed", () => {
+    const logs = [
+      "[2026-09-29 10:00:01] [stage:deploy] Attempt 1/2",
+      "[2026-09-29 10:00:02] [stage:deploy] ✓ Deployment successful!",
+    ];
+    expect(parseStages(logs, false, "vps", true).retries).toEqual([]);
+  });
+
+  it("reads a compose diagnosis from the same marker", () => {
+    const logs = [
+      "[2026-09-29 10:00:02] [stage:deploy] Suggested fix: add POSTGRES_PASSWORD to the project environment.",
+    ];
+    expect(parseStages(logs, true, "compose", false).retries).toEqual([
+      {
+        attempt: 1,
+        maxAttempts: 2,
+        fixDescription: "add POSTGRES_PASSWORD to the project environment.",
+      },
     ]);
   });
 });

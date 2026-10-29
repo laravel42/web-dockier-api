@@ -289,6 +289,21 @@ async function reportComposeFailure(
     }
   }
 
+  // Same long-tail tier as the application path: the deterministic patterns
+  // above cover the compose failures we understand, and this reads the log for
+  // everything else. Never throws; null when OPENAI_API_KEY is unset.
+  if (evidence.trim()) {
+    const { diagnoseBuildFailure } = await import("./ai-diagnosis.js");
+    const diagnosis = await diagnoseBuildFailure({ logTail: evidence });
+    if (diagnosis) {
+      await log(`${MARKER} ${diagnosis.summary}`);
+      await log(`${MARKER} Suggested fix: ${diagnosis.suggestion}`);
+      return commit
+        ? `${diagnosis.summary} (commit "${commit}") ${diagnosis.suggestion}`
+        : `${diagnosis.summary} ${diagnosis.suggestion}`;
+    }
+  }
+
   // No recognised pattern. The merged compose file is the most useful thing we
   // can still show: it is what Dokploy actually ran, including the Traefik
   // labels it injected, so a reader can see the real build contexts and ports.

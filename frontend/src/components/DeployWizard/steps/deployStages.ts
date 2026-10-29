@@ -14,6 +14,13 @@ export interface PipelineStage {
   logs: string[];
 }
 
+/**
+ * A build-failure diagnosis surfaced to the user.
+ *
+ * Named for its original purpose (an automatic fix + retry), which never
+ * happened — see the parser below. `fixDescription` now carries the suggested
+ * repository/env/plan change from the backend's log diagnosis.
+ */
 export interface AIRetryInfo {
   attempt: number;
   maxAttempts: number;
@@ -128,13 +135,19 @@ export function parseStages(
         }
       }
 
-      // Parse AI recovery info
-      if (stageId === "ai-recovery" && line.includes("Fix applied:")) {
-        const descMatch = line.match(/Fix applied:\s*(.+)/);
+      // Parse the build-failure diagnosis.
+      //
+      // Previously this looked for `[stage:ai-recovery] … Fix applied: …`,
+      // which the backend never emitted: the Dokploy procedure it came from
+      // does not exist, so this panel has never rendered. The backend now
+      // diagnoses the build log inline in the deploy stage and emits a
+      // "Suggested fix:" line, which is what we surface.
+      const fixMatch = line.match(/Suggested fix:\s*(.+)/);
+      if (fixMatch) {
         retries.push({
           attempt: retries.length + 1,
-          maxAttempts: 3,
-          fixDescription: descMatch?.[1] || "Applied automatic fix",
+          maxAttempts: 2,
+          fixDescription: fixMatch[1].trim(),
         });
       }
     }

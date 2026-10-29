@@ -469,13 +469,6 @@ export interface DeployParams {
   description?: string;
 }
 
-// ─── AI Fix ────────────────────────────────────────────────────────
-
-export interface AIFixResult {
-  applied: boolean;
-  summary: string | null;
-}
-
 // ─── SSH Keys ──────────────────────────────────────────────────────
 
 export interface CreateSSHKeyParams {

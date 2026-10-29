@@ -327,21 +327,17 @@ describe("DokployClient", () => {
       );
     });
 
-    it("triggerAIFix sends correct mutation", async () => {
-      fetchMock.mockResolvedValue(
-        new Response(JSON.stringify({ result: { data: { applied: true, summary: "Fixed env" } } }), { status: 200 }),
-      );
-
-      const result = await client.triggerAIFix("app-1");
-
-      expect(result).toEqual({ applied: true, summary: "Fixed env" });
-      expect(fetchMock).toHaveBeenCalledWith(
-        "https://dokploy.test/api/application.aiFixDeployment",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify({ applicationId: "app-1" }),
-        }),
-      );
+    // There is deliberately NO AI-fix test here any more.
+    //
+    // Dokploy exposes no `application.aiFixDeployment` procedure — verified
+    // against a live instance, where it returns the same path-less 404 as a
+    // name that was never implemented. This test passed anyway, because a
+    // mocked fetch answers whatever it is asked: it asserted the request shape
+    // of a call that could only ever 404 in production, which is precisely how
+    // the dead stage survived. Build failures are now diagnosed in
+    // `stages/ai-diagnosis.ts` against Dockier's own OpenAI key.
+    it.skip("triggerAIFix — removed, the Dokploy procedure does not exist", () => {
+      expect(true).toBe(true);
     });
 
     it("saveBuildType sends correct mutation", async () => {

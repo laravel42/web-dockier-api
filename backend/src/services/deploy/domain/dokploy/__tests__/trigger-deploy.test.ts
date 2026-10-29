@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock ai-recovery module
-const mockInvokeDokployAI = vi.fn();
-vi.mock("../stages/ai-recovery.js", () => ({
-  invokeDokployAI: (...args: unknown[]) => mockInvokeDokployAI(...args),
+// The long-tail build-log diagnosis. Mocked so no test reaches OpenAI, and so
+// the deterministic failure paths below are asserted without it interfering.
+// (This replaces a mock of the old `ai-recovery` stage, which called a Dokploy
+// procedure that does not exist.)
+const mockDiagnose = vi.fn();
+vi.mock("../stages/ai-diagnosis.js", () => ({
+  diagnoseBuildFailure: (...args: unknown[]) => mockDiagnose(...args),
 }));
 
 const { stageTriggerDeploy, stageDeployWithRetry } = await import("../stages/trigger-deploy.js");
@@ -536,7 +539,8 @@ describe("stageDeployWithRetry", () => {
     };
     logLines = [];
     mockLog = async (line: string) => { logLines.push(line); };
-    mockInvokeDokployAI.mockResolvedValue({ fixed: false, description: "No fix" });
+    // Default: no AI diagnosis available, so the deterministic guidance runs.
+    mockDiagnose.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -557,10 +561,10 @@ describe("stageDeployWithRetry", () => {
 
     expect(result.status).toBe("done");
     expect(mockClient.deploy).toHaveBeenCalledTimes(1);
-    expect(mockInvokeDokployAI).not.toHaveBeenCalled();
+    expect(logLines.some((l) => /in case the failure was transient/i.test(l))).toBe(false);
   });
 
-  it("invokes AI recovery on failure and retries", async () => {
+  it("retries after a failure and succeeds on the second attempt", async () => {
     // Attempt 1 → error, attempt 2 → done. Each attempt snapshots (pre-trigger)
     // then polls; return error for the first resolved poll, done thereafter.
     mockClient.listDeployments
@@ -568,8 +572,6 @@ describe("stageDeployWithRetry", () => {
       .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }]) // attempt 1 poll → error
       .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }]) // attempt 2 pre-trigger snapshot
       .mockResolvedValue([{ deploymentId: "d2", status: "done", createdAt: "y" }]); // attempt 2 poll → done
-
-    mockInvokeDokployAI.mockResolvedValue({ fixed: true, description: "Fixed missing env" });
 
     const result = await stageDeployWithRetry({
       applicationId: "app-1",
@@ -583,8 +585,11 @@ describe("stageDeployWithRetry", () => {
     // A genuine build failure must never be reclassified as a user cancel.
     expect(result.status).not.toBe("cancelled");
     expect(mockClient.deploy).toHaveBeenCalledTimes(2);
-    expect(mockInvokeDokployAI).toHaveBeenCalledTimes(1);
-    expect(logLines.some((l) => l.includes("Applied automatic fix"))).toBe(true);
+    // The retry is NOT a retry-after-fix: nothing edits the repository between
+    // attempts, so the log must not claim a fix was applied. It used to, via
+    // a Dokploy procedure that does not exist.
+    expect(logLines.some((l) => /applied automatic fix/i.test(l))).toBe(false);
+    expect(logLines.some((l) => /in case the failure was transient/i.test(l))).toBe(true);
   });
   it("threads the build-log fetch through to failure reporting", async () => {
     mockClient.listDeployments.mockResolvedValue([
@@ -621,13 +626,15 @@ describe("stageDeployWithRetry", () => {
 
     expect(result.status).toBe("cancelled");
     expect(mockClient.deploy).toHaveBeenCalledTimes(1);
-    expect(mockInvokeDokployAI).not.toHaveBeenCalled();
+    // A cancel must not look like a build failure, so neither the retry nor the
+    // failure diagnosis runs.
+    expect(mockDiagnose).not.toHaveBeenCalled();
+    expect(logLines.some((l) => /in case the failure was transient/i.test(l))).toBe(false);
     expect(logLines.some((l) => l.includes("Attempt 2/"))).toBe(false);
   });
 
   it("throws after max attempts exhausted", async () => {
     mockClient.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "error", createdAt: "x" }]);
-    mockInvokeDokployAI.mockResolvedValue({ fixed: false, description: "No fix" });
 
     await expect(
       stageDeployWithRetry({
@@ -640,11 +647,12 @@ describe("stageDeployWithRetry", () => {
     ).rejects.toThrow(/failed after 2 attempts/);
 
     expect(mockClient.deploy).toHaveBeenCalledTimes(2);
-    // AI recovery called only between attempts (not after last failure)
-    expect(mockInvokeDokployAI).toHaveBeenCalledTimes(1);
+    // The retry notice appears only BETWEEN attempts, never after the last
+    // failure — announcing a retry that will not happen.
+    expect(logLines.filter((l) => /in case the failure was transient/i.test(l))).toHaveLength(1);
   });
 
-  it("does not invoke AI after the last attempt", async () => {
+  it("does not announce a retry after the last attempt", async () => {
     mockClient.listDeployments.mockResolvedValue([{ deploymentId: "d1", status: "error", createdAt: "x" }]);
 
     await expect(
@@ -657,7 +665,7 @@ describe("stageDeployWithRetry", () => {
       }),
     ).rejects.toThrow(/failed after 1 attempts/);
 
-    expect(mockInvokeDokployAI).not.toHaveBeenCalled();
+    expect(logLines.some((l) => /in case the failure was transient/i.test(l))).toBe(false);
   });
 
   it("logs attempt count for each try", async () => {
@@ -666,8 +674,6 @@ describe("stageDeployWithRetry", () => {
       .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }]) // attempt 1 → error
       .mockResolvedValueOnce([{ deploymentId: "d1", status: "error", createdAt: "x" }]) // attempt 2 snapshot
       .mockResolvedValue([{ deploymentId: "d2", status: "done", createdAt: "y" }]); // attempt 2 → done
-
-    mockInvokeDokployAI.mockResolvedValue({ fixed: false, description: "" });
 
     await stageDeployWithRetry({
       applicationId: "app-1",
