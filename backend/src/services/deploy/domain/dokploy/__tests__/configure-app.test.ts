@@ -450,11 +450,122 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
       runtime?: string;
       phpVersion?: string;
       kind?: "server" | "static";
+      packageManager?: string;
+      packageManagerVersion?: string;
     },
     envVars: Array<{ name: string; value: string }> = [],
     instanceType?: string,
   ) =>
     stageConfigureApp({ ...base, repoAnalysis, envVars, instanceType, client: client as unknown as DokployClient });
+
+  // ─── Railpack pnpm pin ────────────────────────────────────────
+  //
+  // Railpack resolves pnpm from pnpm-lock.yaml, where pnpm 9/10/11 all write
+  // `lockfileVersion: '9.0'` → it always plans pnpm 9. mise then activates the
+  // repo's declared version inside /app, and pnpm 11 moved its global bin dir,
+  // so `pnpm add -g node-gyp` dies on "global bin directory ... not in PATH".
+  // Pinning the declared version makes the plan agree with the container.
+  describe("pins the repo's declared pnpm version for Railpack", () => {
+    const node = (extra: Record<string, unknown> = {}) => ({
+      hasDockerfile: false,
+      isStaticSite: false,
+      primaryLanguage: "typescript",
+      techStack: ["Node.js", "Astro"],
+      ...extra,
+    });
+    const someEnv = [{ name: "PUBLIC_URL", value: "https://example.com" }];
+
+    it("pins the declared version", async () => {
+      await run(node({ packageManager: "pnpm", packageManagerVersion: "11.22.0" }), someEnv);
+      expect(envMap().RAILPACK_PACKAGES).toBe("pnpm@11.22.0");
+    });
+
+    it("pins nothing when the repo declares no package manager", async () => {
+      await run(node(), someEnv);
+      expect(envMap().RAILPACK_PACKAGES).toBeUndefined();
+    });
+
+    it("leaves npm/yarn/bun to Railpack", async () => {
+      await run(node({ packageManager: "yarn", packageManagerVersion: "4.5.0" }), someEnv);
+      expect(envMap().RAILPACK_PACKAGES).toBeUndefined();
+    });
+
+    it("ignores a range or tag — Railpack's own inference beats a half-parsed constraint", async () => {
+      await run(node({ packageManager: "pnpm", packageManagerVersion: "^11" }), someEnv);
+      expect(envMap().RAILPACK_PACKAGES).toBeUndefined();
+
+      await run(node({ packageManager: "pnpm", packageManagerVersion: "latest" }), someEnv);
+      expect(envMap().RAILPACK_PACKAGES).toBeUndefined();
+    });
+
+    it("never overrides a user-set RAILPACK_PACKAGES", async () => {
+      await run(node({ packageManager: "pnpm", packageManagerVersion: "11.22.0" }), [
+        { name: "RAILPACK_PACKAGES", value: "pnpm@10.14.0 jq@1.7" },
+      ]);
+      expect(envMap().RAILPACK_PACKAGES).toBe("pnpm@10.14.0 jq@1.7");
+    });
+
+    it("does not pin for a non-railpack build", async () => {
+      const result = await run(
+        node({ hasDockerfile: true, packageManager: "pnpm", packageManagerVersion: "11.22.0" }),
+        someEnv,
+      );
+      expect(result.buildType).toBe("dockerfile");
+      expect(envMap().RAILPACK_PACKAGES).toBeUndefined();
+    });
+  });
+
+  // ─── pnpm 11 global bin dir ───────────────────────────────────
+  //
+  // Railpack runs `pnpm add -g node-gyp` in its install step and picks the pnpm
+  // global bin dir from the lockfile-derived version (always 9), while pnpm 11
+  // moved that dir to $PNPM_HOME/bin. The step then dies with "global bin
+  // directory ... is not in PATH" before installing anything. The version pin
+  // cannot fix it — Railpack applies config packages after building the step —
+  // so we own the install command and fix PATH there.
+  describe("repairs the Railpack install step for pnpm 11+", () => {
+    const node = (extra: Record<string, unknown> = {}) => ({
+      hasDockerfile: false,
+      isStaticSite: false,
+      primaryLanguage: "typescript",
+      techStack: ["Node.js", "Astro"],
+      ...extra,
+    });
+    const someEnv = [{ name: "PUBLIC_URL", value: "https://example.com" }];
+
+    it("puts the moved global bin dir on PATH and keeps node-gyp + install", async () => {
+      await run(node({ packageManager: "pnpm", packageManagerVersion: "11.22.0" }), someEnv);
+      const cmd = envMap().RAILPACK_INSTALL_CMD;
+      expect(cmd).toContain('export PATH="${PNPM_HOME:-/opt/pnpm}/bin:$PATH"');
+      expect(cmd).toContain("pnpm add -g node-gyp");
+      expect(cmd).toContain("pnpm install --prefer-offline");
+    });
+
+    it("leaves pnpm 10 and below alone — their bin dir is where Railpack expects", async () => {
+      await run(node({ packageManager: "pnpm", packageManagerVersion: "10.14.0" }), someEnv);
+      expect(envMap().RAILPACK_INSTALL_CMD).toBeUndefined();
+
+      await run(node({ packageManager: "pnpm", packageManagerVersion: "9.15.9" }), someEnv);
+      expect(envMap().RAILPACK_INSTALL_CMD).toBeUndefined();
+    });
+
+    it("does not override the install step when no package manager is declared", async () => {
+      await run(node(), someEnv);
+      expect(envMap().RAILPACK_INSTALL_CMD).toBeUndefined();
+    });
+
+    it("never overrides a user-set RAILPACK_INSTALL_CMD", async () => {
+      await run(node({ packageManager: "pnpm", packageManagerVersion: "11.22.0" }), [
+        { name: "RAILPACK_INSTALL_CMD", value: "pnpm install --no-frozen-lockfile" },
+      ]);
+      expect(envMap().RAILPACK_INSTALL_CMD).toBe("pnpm install --no-frozen-lockfile");
+    });
+
+    it("does not touch the install step for a non-railpack build", async () => {
+      await run(node({ hasDockerfile: true, packageManager: "pnpm", packageManagerVersion: "11.22.0" }), someEnv);
+      expect(envMap().RAILPACK_INSTALL_CMD).toBeUndefined();
+    });
+  });
 
   it("routes a Node railpack app (SSR Astro) to port 3000 and injects PORT + HOST", async () => {
     const result = await run(

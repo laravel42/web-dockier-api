@@ -424,3 +424,36 @@ describe("analyzeRepoFiles — Astro without the astro dependency", () => {
     expect(config.frameworkVersion).toBe("18.2.0");
   });
 });
+
+// The "declaredPackageManager" feature separates a version the repo ASKED for
+// from one we invented off a lockfile. Only the former may be pinned for a
+// builder: Railpack reads pnpm-lock.yaml itself, and overriding that inference
+// with our hardcoded "10.14.0" fallback would be strictly worse than leaving it
+// alone. (See withRailpackPackages in the Dokploy configure-app stage.)
+describe("analyzeRepoFiles — declared vs guessed package manager", () => {
+  it("marks the package manager as declared and strips the integrity hash", () => {
+    const config = analyzeRepoFiles(new MapRepoFiles({
+      "package.json": pkg({
+        deps: { astro: "^5.0.0" },
+        packageManager: "pnpm@11.22.0+sha512.521705bce689924eac72f5a3587122f362689ef6571e55ba80076fd637c1113",
+      }),
+      "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+    }));
+
+    expect(config.packageManager).toBe("pnpm");
+    expect(config.packageManagerVersion).toBe("11.22.0");
+    expect(config.features.has("declaredPackageManager")).toBe(true);
+  });
+
+  it("does NOT mark a lockfile-guessed package manager as declared", () => {
+    const config = analyzeRepoFiles(new MapRepoFiles({
+      "package.json": pkg({ deps: { astro: "^5.0.0" } }),
+      "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+    }));
+
+    expect(config.packageManager).toBe("pnpm");
+    // A hardcoded fallback, not something the repo asked for.
+    expect(config.packageManagerVersion).toBe("10.14.0");
+    expect(config.features.has("declaredPackageManager")).toBe(false);
+  });
+});

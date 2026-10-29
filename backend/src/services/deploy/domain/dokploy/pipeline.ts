@@ -187,6 +187,12 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         // "node ./dist/server/entry.mjs"). configure-app hands it to Railpack so
         // the server actually launches.
         startCommand,
+        // Package manager the repo DECLARES (never a lockfile guess).
+        // configure-app pins the pnpm version for Railpack, whose own pnpm
+        // resolution reads only the lockfile and lands on 9 for every modern
+        // lockfile — disagreeing with the pnpm mise activates in the container.
+        packageManager: resolvedRuntime.packageManager,
+        packageManagerVersion: resolvedRuntime.packageManagerVersion,
       },
       services: event.services,
       provisionedDatabases: dbResult.databases,

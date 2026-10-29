@@ -29,7 +29,7 @@ import {
  * Kept as a single constant so it's easy to bump when validating a newer
  * Railpack release.
  */
-const RAILPACK_VERSION = "0.41.0";
+const RAILPACK_VERSION = "0.43.0";
 
 /**
  * Default PHP extensions installed for Railpack PHP builds via the
@@ -111,6 +111,13 @@ export interface RepoAnalysisInfo {
    * script (e.g. SSR Astro → "node ./dist/server/entry.mjs").
    */
   startCommand?: string;
+  /**
+   * Node package manager the repo DECLARES in package.json `packageManager`,
+   * with its version. Set only when actually declared — never inferred from a
+   * lockfile. Drives the Railpack pnpm pin (see withRailpackPackages).
+   */
+  packageManager?: string;
+  packageManagerVersion?: string;
 }
 
 /**
@@ -315,7 +322,19 @@ export async function stageConfigureApp(params: {
   // Hand Railpack an explicit start command when analysis derived one (e.g. SSR
   // Astro with no `start` script). Without this, Railpack finds no start
   // command and the container runs nothing → Bad Gateway.
-  const finalEnv = withRailpackStartCommand(withNodeEnv, buildType, repoAnalysis.startCommand);
+  const withStartCmd = withRailpackStartCommand(withNodeEnv, buildType, repoAnalysis.startCommand);
+  // Pin pnpm for Railpack so its build plan matches the pnpm that mise will
+  // actually activate inside the container (see withRailpackPackages).
+  const withPackages = withRailpackPackages(withStartCmd, buildType, repoAnalysis.packageManager, repoAnalysis.packageManagerVersion);
+  if (!envHas(withStartCmd, "RAILPACK_PACKAGES") && envHas(withPackages, "RAILPACK_PACKAGES")) {
+    await log(`[stage:configure-app] Pinning pnpm@${repoAnalysis.packageManagerVersion} for the Railpack build (declared by the repo).`);
+  }
+  // Repair the install step for pnpm 11+, whose global bin directory moved to a
+  // place Railpack does not put on PATH (see withRailpackInstallCmd).
+  const finalEnv = withRailpackInstallCmd(withPackages, buildType, repoAnalysis.packageManager, repoAnalysis.packageManagerVersion);
+  if (!envHas(withPackages, "RAILPACK_INSTALL_CMD") && envHas(finalEnv, "RAILPACK_INSTALL_CMD")) {
+    await log("[stage:configure-app] pnpm 11+ detected — overriding the Railpack install step so its global bin directory is on PATH.");
+  }
   if (buildType === "railpack" && repoAnalysis.startCommand && !envHas(withNodeEnv, "RAILPACK_START_CMD")) {
     await log(`[stage:configure-app] Using derived start command: ${repoAnalysis.startCommand}`);
     advise?.(missingStartScriptAdvisory(repoAnalysis.startCommand, repoAnalysis.framework));
@@ -810,4 +829,110 @@ function withRailpackStartCommand(
   if (buildType !== "railpack" || !startCommand) return envVars;
   if (envHas(envVars, "RAILPACK_START_CMD")) return envVars;
   return [...envVars, { name: "RAILPACK_START_CMD", value: startCommand }];
+}
+
+/**
+ * Pin the repo's declared pnpm version for Railpack, via RAILPACK_PACKAGES.
+ *
+ * Railpack resolves pnpm at PLAN time, and for pnpm it deliberately ignores the
+ * `packageManager` field (its Corepack path excludes pnpm and bun). It reads
+ * `pnpm-lock.yaml` instead and maps the header to a major — but pnpm 9, 10 and
+ * 11 all write `lockfileVersion: '9.0'`, so every modern lockfile resolves to
+ * pnpm 9. Meanwhile the mise config Railpack writes into the image enables
+ * idiomatic version files for pnpm, so when a build step runs in /app, mise
+ * re-resolves pnpm from the repo's own package.json and installs THAT version.
+ *
+ * So the plan installs pnpm 9 while the container runs the repo's pnpm, and the
+ * install then happens under a different major than the plan claims. Pinning the
+ * declared version makes the two agree: mise installs it once, and `pnpm
+ * install` runs under the version the repo asked for instead of pnpm 9 reading a
+ * lockfile written by a newer one. Dokploy forwards every app env var to
+ * `railpack prepare` as `--env`, which is how this reaches Railpack's config
+ * (RAILPACK_PACKAGES is a space-separated `name@version` list).
+ *
+ * This pin does NOT fix the pnpm 11 PATH failure, and cannot — Railpack applies
+ * config packages in `Generate()`, AFTER the provider has already built the
+ * install step, so the PATH decision is made before this value exists. See
+ * withRailpackInstallCmd for that half.
+ *
+ * Scoped to pnpm on purpose: it is the only package manager whose version skew
+ * breaks the build, npm ships with node rather than as a separate mise package,
+ * and yarn/bun take their version from the `packageManager` field already. Only
+ * a concrete version is pinned — a range or tag is left to Railpack, whose
+ * inference is better than a half-parsed constraint. Never overrides a user-set
+ * RAILPACK_PACKAGES.
+ */
+function withRailpackPackages(
+  envVars: Array<{ name: string; value: string }>,
+  buildType: DokployBuildType,
+  packageManager: string | undefined,
+  packageManagerVersion: string | undefined,
+): Array<{ name: string; value: string }> {
+  if (buildType !== "railpack" || packageManager !== "pnpm") return envVars;
+  if (!packageManagerVersion || !/^\d+(\.\d+){0,2}$/.test(packageManagerVersion)) return envVars;
+  if (envHas(envVars, "RAILPACK_PACKAGES")) return envVars;
+  return [...envVars, { name: "RAILPACK_PACKAGES", value: `pnpm@${packageManagerVersion}` }];
+}
+
+/**
+ * Replace Railpack's install step for repos on pnpm 11+, so the build does not
+ * die before installing anything:
+ *
+ *     [ERROR] The configured global bin directory "/opt/pnpm/bin" is not in PATH
+ *     ERROR: process "pnpm add -g node-gyp" did not complete successfully
+ *
+ * Railpack's pnpm install step runs `pnpm add -g node-gyp` (pnpm, unlike npm,
+ * does not bundle node-gyp). pnpm refuses `-g` unless its global bin directory
+ * is on PATH, and pnpm 11 MOVED that directory from $PNPM_HOME to
+ * $PNPM_HOME/bin. Railpack knows this and picks the directory accordingly — but
+ * it decides while the provider builds the install step, and at that moment the
+ * only pnpm version it has is the one inferred from `pnpm-lock.yaml`, which is 9
+ * for every lockfile pnpm 9, 10 and 11 write (`lockfileVersion: '9.0'`). Every
+ * later override — our RAILPACK_PACKAGES pin, which Railpack applies in
+ * `Generate()`; mise's own reading of the repo's `packageManager` field inside
+ * /app — lands after the decision. So PATH gets /opt/pnpm, pnpm 11 wants
+ * /opt/pnpm/bin, and the step fails. No env var can relocate pnpm's global bin
+ * dir (verified against pnpm 11: npm_config_global_bin_dir, PNPM_GLOBAL_BIN_DIR
+ * and the NPM_CONFIG_ form are all ignored), so the only fix on this side of the
+ * boundary is to own the command and put the directory on PATH ourselves.
+ *
+ * RAILPACK_INSTALL_CMD replaces the install step's commands outright (Railpack
+ * spreads config commands over generated ones, and the env form carries no `...`
+ * marker). The step's inputs, env and pnpm store cache are NOT commands and
+ * survive, so install speed is unchanged. `pnpm install` is left bare rather
+ * than `--frozen-lockfile`: Railpack sets CI=true, under which pnpm freezes the
+ * lockfile by default, so this keeps Railpack's determinism for a repo WITH a
+ * lockfile while not breaking one without.
+ *
+ * Gated on a declared pnpm major >= 11, which is the only case that fails: pnpm
+ * 10 and below share the old bin location that Railpack's lockfile-derived
+ * default already produces, and an undeclared package manager leaves mise with
+ * nothing in the repo to override the plan's pinned version. Never overrides a
+ * user-set RAILPACK_INSTALL_CMD.
+ *
+ * shortcut: COPY "." makes the install layer's cache key the whole repo, where
+ * Railpack copies only manifests and lockfiles. Drop this override once Railpack
+ * resolves the package-manager version before planning the install step, or adds
+ * both bin directories to PATH.
+ */
+function withRailpackInstallCmd(
+  envVars: Array<{ name: string; value: string }>,
+  buildType: DokployBuildType,
+  packageManager: string | undefined,
+  packageManagerVersion: string | undefined,
+): Array<{ name: string; value: string }> {
+  if (buildType !== "railpack" || packageManager !== "pnpm") return envVars;
+  if (!pnpmMovedGlobalBinDir(packageManagerVersion)) return envVars;
+  if (envHas(envVars, "RAILPACK_INSTALL_CMD")) return envVars;
+
+  // PNPM_HOME is set on the install step by Railpack itself; the default mirrors
+  // its PNPM_HOME constant in case that ever stops being exported.
+  const cmd = 'export PATH="${PNPM_HOME:-/opt/pnpm}/bin:$PATH"; pnpm add -g node-gyp && pnpm install --prefer-offline';
+  return [...envVars, { name: "RAILPACK_INSTALL_CMD", value: cmd }];
+}
+
+/** True for a concrete pnpm version >= 11, where the global bin dir moved to $PNPM_HOME/bin. */
+function pnpmMovedGlobalBinDir(version: string | undefined): boolean {
+  if (!version || !/^\d+(\.\d+){0,2}$/.test(version)) return false;
+  return Number(version.split(".")[0]) >= 11;
 }

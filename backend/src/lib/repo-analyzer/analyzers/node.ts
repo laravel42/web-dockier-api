@@ -79,6 +79,11 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
     const [pm, ver] = (pkg.packageManager as string).split("@");
     config.packageManager = pm as RepoConfig["packageManager"];
     config.packageManagerVersion = ver?.split("+")[0] || "";
+    // The version below is DECLARED by the repo, not guessed from a lockfile.
+    // Only a declared version may be fed to a builder as an explicit pin: the
+    // lockfile fallbacks in the branches below are invented defaults, and
+    // pinning one would override a builder's own (better) inference.
+    config.features.add("declaredPackageManager");
   } else if (existsApp("pnpm-lock.yaml") || existsRoot("pnpm-lock.yaml")) {
     config.packageManager = "pnpm";
     config.packageManagerVersion = "10.14.0";

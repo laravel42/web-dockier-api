@@ -42,6 +42,17 @@ export interface ResolvedRuntime {
    * 8.2+, so this drives a fallback to Nixpacks for older apps.
    */
   phpVersion?: string;
+  /**
+   * Node package manager the repo DECLARES via package.json `packageManager`
+   * (e.g. "pnpm"), with its version — and only when declared. The analyzer also
+   * guesses a package manager from the lockfile, but those guesses carry an
+   * invented version, so they are deliberately not surfaced here: configure-app
+   * pins this version for Railpack, and pinning a guess would override
+   * Railpack's own inference with a worse answer.
+   */
+  packageManager?: string;
+  /** Declared package manager version, e.g. "11.22.0". Only set alongside `packageManager`. */
+  packageManagerVersion?: string;
 }
 
 /**
@@ -83,6 +94,12 @@ export async function resolveRuntimeStartCommand(params: {
       platformAdapter: runtime.platformAdapter,
       runtime: runtime.config.runtime,
       phpVersion: runtime.config.phpVersion || undefined,
+      ...(runtime.config.features.has("declaredPackageManager")
+        ? {
+            packageManager: runtime.config.packageManager,
+            packageManagerVersion: runtime.config.packageManagerVersion || undefined,
+          }
+        : {}),
     };
 
     if (runtime.platformAdapter) {
