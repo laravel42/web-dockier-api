@@ -25,9 +25,11 @@ import { DokployError } from "../dokploy/types.js";
 import {
   getServer,
   getApplication,
+  getCompose,
   listDatabases,
   deleteServerMapping,
   deleteApplicationMapping,
+  deleteComposeMapping,
   deleteDatabaseMappings,
 } from "../dokploy/mappings.js";
 import { terminateEc2Instance } from "../dokploy/provisioning/aws-ec2.js";
@@ -60,13 +62,18 @@ export async function teardownDokployProject(
   projectId: string,
   _tenantId: string,
 ): Promise<DokployTeardownResult> {
-  const [server, application, databases] = await Promise.all([
+  // A project is deployed as EITHER an application or a compose stack, never
+  // both — but both are fetched unconditionally, because a project that
+  // switched kinds could have left the other row behind and a leftover
+  // resource still bills.
+  const [server, application, compose, databases] = await Promise.all([
     getServer(projectId),
     getApplication(projectId),
+    getCompose(projectId),
     listDatabases(projectId),
   ]);
 
-  if (!server && !application && databases.length === 0) {
+  if (!server && !application && !compose && databases.length === 0) {
     return {
       status: "nothing_to_tear_down",
       message: "No managed infrastructure found for this project.",
@@ -85,17 +92,24 @@ export async function teardownDokployProject(
   // claimed by one application — so a domain left behind makes the NEXT deploy's
   // `domain.create` fail on a host that is still held by a deleted app, and the
   // project's custom domain silently never comes back.
-  if (application) {
-    for (const domain of await client.listDomains(application.dokployApplicationId)) {
-      if (!domain.domainId) continue;
-      steps.push(
-        await runStep(
-          `domain ${domain.host || domain.domainId}`,
-          () => client.deleteDomain(domain.domainId),
-          "record",
-        ),
-      );
-    }
+  // A compose stack's domains are enumerated by composeId, not applicationId —
+  // `domain.byApplicationId` would return nothing for one and silently leave
+  // every host claimed.
+  const domainsToRemove = application
+    ? await client.listDomains(application.dokployApplicationId)
+    : compose
+      ? await client.listComposeDomains(compose.dokployComposeId)
+      : [];
+
+  for (const domain of domainsToRemove) {
+    if (!domain.domainId) continue;
+    steps.push(
+      await runStep(
+        `domain ${domain.host || domain.domainId}`,
+        () => client.deleteDomain(domain.domainId),
+        "record",
+      ),
+    );
   }
 
   // ─── 2. Remove the application ─────────────────────────────────
@@ -114,6 +128,29 @@ export async function teardownDokployProject(
     );
     steps.push(step);
     applicationRemoved = step.success;
+  }
+
+  // ─── 2b. Remove the compose stack ──────────────────────────────
+  //
+  // `deleteVolumes: true` is NOT the Dokploy default. Without it the stack's
+  // named volumes survive the teardown and keep consuming disk on a server the
+  // user believes is gone — and a later deploy of the same project would
+  // silently adopt that stale data.
+  //
+  // Verified the same way as the application: the delete can return OK while
+  // the stack lingers, and a lingering stack blocks the server removal with
+  // "Server has active services".
+  let composeRemoved = true;
+  if (compose) {
+    const composeId = compose.dokployComposeId;
+    const step = await runStep(
+      `compose stack ${composeId}`,
+      () => client.deleteCompose(composeId, true),
+      "record",
+      () => client.composeExists(composeId),
+    );
+    steps.push(step);
+    composeRemoved = step.success;
   }
 
   // ─── 3. Remove provisioned database services ───────────────────
@@ -146,7 +183,7 @@ export async function teardownDokployProject(
     // or a database ("active services"). Only attempt it when those are
     // actually gone; otherwise report an honest skip rather than firing a call
     // that is guaranteed to fail and leaking the provider's raw error.
-    if (applicationRemoved && databasesRemoved) {
+    if (applicationRemoved && composeRemoved && databasesRemoved) {
       const step = await runStep(
         `managed server ${server.dokployServerId}`,
         () => client.deleteServer(server.dokployServerId),
@@ -192,6 +229,9 @@ export async function teardownDokployProject(
   // can no longer reach it) would never succeed.
   if (application && applicationRemoved) {
     steps.push(await runStep("application record", () => deleteApplicationMapping(projectId), "mapping"));
+  }
+  if (compose && composeRemoved) {
+    steps.push(await runStep("compose record", () => deleteComposeMapping(projectId), "mapping"));
   }
   if (databases.length > 0 && databasesRemoved) {
     steps.push(await runStep("database records", () => deleteDatabaseMappings(projectId), "mapping"));

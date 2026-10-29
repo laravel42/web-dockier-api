@@ -449,15 +449,20 @@ const REMOTE_CANCEL_TIMEOUT_MS = 5_000;
 
 async function requestRemoteBuildCancel(mappingKey: string, deploymentId: string): Promise<void> {
   // The native/static pipeline has no Dokploy build to stop.
+  //
+  // Not gated on the deployment's own strategy: a compose deploy always routes
+  // to Dokploy regardless of DEPLOY_PROVIDER (see routePipeline), but
+  // DEPLOY_PROVIDER=dokploy is the only configuration in which any Dokploy
+  // resource exists at all, so this guard still holds for both kinds.
   if (env.DEPLOY_PROVIDER !== "dokploy") return;
 
   try {
     // Dynamic import keeps the Dokploy modules out of this file's (widely
     // imported) static module graph, matching dokploy/pipeline.ts.
-    const { getApplication } = await import("./dokploy/mappings.js");
-    const mapping = await getApplication(mappingKey);
+    const { getProjectResource } = await import("./dokploy/mappings.js");
+    const resource = await getProjectResource(mappingKey);
     // Nothing was configured on Dokploy yet (e.g. cancel during provisioning).
-    if (!mapping?.dokployApplicationId) return;
+    if (resource.kind === "none") return;
 
     const { createDokployClient } = await import("./dokploy/client.js");
     // Bounded on purpose: this runs inside the user's Cancel request. The
@@ -466,10 +471,18 @@ async function requestRemoteBuildCancel(mappingKey: string, deploymentId: string
     // is unreachable, which is exactly when a user cancels. One short attempt
     // is enough: failing only means the remote build may keep running, and we
     // say so in the log below.
-    await createDokployClient({
+    const client = createDokployClient({
       timeout: REMOTE_CANCEL_TIMEOUT_MS,
       maxRetries: 0,
-    }).cancelDeployment(mapping.dokployApplicationId);
+    });
+    // Each resource kind has its own cancel procedure; calling
+    // `application.cancelDeployment` with a composeId is a 404 that this
+    // function's catch would swallow, leaving the stack building.
+    if (resource.kind === "compose") {
+      await client.cancelComposeDeployment(resource.compose.dokployComposeId);
+    } else {
+      await client.cancelDeployment(resource.application.dokployApplicationId);
+    }
     await appendDeploymentLog(
       deploymentId,
       `[${nowIso()}] ⛔ Asked the build server to stop the running build.`,

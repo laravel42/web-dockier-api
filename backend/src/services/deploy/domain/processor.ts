@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { generateTofuPreview, getDefaultRegion } from "./planning/planner.js";
 import { resolveDeployTemplate } from "./planning/templates.js";
 import { DeployError } from "./providers.js";
+import type { DeployStrategy } from "../types.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { emitDeploySuccessNotification, emitDeployFailureNotification } from "./pipeline/helpers.js";
 import { markProjectInfraLive } from "./lifecycle/project-teardown.js";
@@ -24,7 +25,7 @@ type CreateDeploymentInput = {
   techStack?: string[];
   primaryLanguage?: string;
   hasDocker?: boolean;
-  deployStrategy?: "vps" | "managed" | "static";
+  deployStrategy?: DeployStrategy;
   templateId?: string;
   buildMethod?: "dockerfile" | "railpack" | "nixpacks" | "codebuild";
   registryUrl?: string;
@@ -132,9 +133,15 @@ export function buildInfraMetadata(params: BuildInfraParams): InfraMetadata {
 
 export function buildDeploymentPreview(input: CreateDeploymentInput, provider: ProviderSummary) {
   const strategy = input.deployStrategy ?? "managed";
+  // The template and Tofu preview describe INFRASTRUCTURE, and a compose deploy
+  // provisions exactly what a vps deploy does: one server on the tenant's
+  // cloud, which Dokploy then runs the stack on. There is no separate compose
+  // template, so it borrows the vps one here. The persisted `deploy_strategy`
+  // stays "compose" — that is what routes the deploy.
+  const infraStrategy = strategy === "compose" ? "vps" : strategy;
   const template = resolveDeployTemplate({
     provider: provider.provider,
-    strategy,
+    strategy: infraStrategy,
     primaryLanguage: input.primaryLanguage ?? "",
     techStack: input.techStack ?? [],
     requestedTemplateId: input.templateId,
@@ -151,7 +158,7 @@ export function buildDeploymentPreview(input: CreateDeploymentInput, provider: P
     techStack: input.techStack ?? [],
     primaryLanguage: input.primaryLanguage ?? "",
     hasDocker: input.hasDocker ?? false,
-    deployStrategy: strategy,
+    deployStrategy: infraStrategy,
     services: input.services ?? template.defaultServices,
     aiAnalysis: input.aiAnalysis,
   });

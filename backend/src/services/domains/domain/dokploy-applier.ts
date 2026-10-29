@@ -79,6 +79,48 @@ function resolveDomainPort(mapping: { containerPort: number | null; buildType: s
   return PORT_80_BUILD_TYPES.has(mapping.buildType) ? 80 : 3000;
 }
 
+/** Where this project's custom domains should be registered. */
+type DomainTarget =
+  | { kind: "application"; applicationId: string; port: number }
+  | { kind: "compose"; composeId: string; serviceName: string; port: number }
+  /** Nothing to reconcile against; carries the user-facing explanation. */
+  | { message: string };
+
+/**
+ * Resolve the domain target for a project, or the reason there is none.
+ *
+ * A compose stack needs BOTH a chosen service and its port before a domain can
+ * be registered: Dokploy writes the port into that service's Traefik
+ * loadbalancer label, and a domain registered without them would issue a
+ * certificate for a host that forwards nowhere — a green UI over a permanent
+ * Bad Gateway.
+ */
+async function resolveDomainTarget(projectId: string): Promise<DomainTarget> {
+  const resource = await getProjectResource(projectId);
+
+  if (resource.kind === "compose") {
+    const { dokployComposeId, entryService, entryPort } = resource.compose;
+    if (!entryService || !entryPort) {
+      return {
+        message:
+          "This Docker Compose project has no public service configured, so custom domains cannot be " +
+          "applied yet. Choose the service and port to expose in the project's deploy settings.",
+      };
+    }
+    return { kind: "compose", composeId: dokployComposeId, serviceName: entryService, port: entryPort };
+  }
+
+  if (resource.kind === "application" && resource.application.dokployApplicationId) {
+    return {
+      kind: "application",
+      applicationId: resource.application.dokployApplicationId,
+      port: resolveDomainPort(resource.application),
+    };
+  }
+
+  return { message: "No application provisioned yet. Domains will be applied on next deployment." };
+}
+
 /**
  * True for the auto-generated free domain Dokploy assigns for reachability.
  * We must never delete it during reconcile — it's not a user domain.
@@ -105,16 +147,15 @@ export async function applyDomainConfigDokploy(params: {
   const { tenantId, projectId } = params;
 
   try {
-    const mapping = await getApplication(projectId);
-    if (!mapping?.dokployApplicationId) {
-      return { success: true, message: "No application provisioned yet. Domains will be applied on next deployment." };
-    }
-    const applicationId = mapping.dokployApplicationId;
-    const port = resolveDomainPort(mapping);
+    const target = await resolveDomainTarget(projectId);
+    if ("message" in target) return { success: true, message: target.message };
 
+    const { port } = target;
     const dbDomains = await listDomains({ tenantId, projectId });
     const client = createDokployClient();
-    const existing = await client.listDomains(applicationId);
+    const existing = target.kind === "compose"
+      ? await client.listComposeDomains(target.composeId)
+      : await client.listDomains(target.applicationId);
 
     const desiredHosts = new Set(dbDomains.map((d) => normHost(d.name)));
     const existingByHost = new Map(existing.map((d) => [normHost(d.host), d]));
@@ -139,10 +180,12 @@ export async function applyDomainConfigDokploy(params: {
       try {
         await client.createDomain({
           host: d.name,
-          applicationId,
+          ...(target.kind === "compose"
+            // A compose domain routes to one NAMED service inside the stack.
+            ? { composeId: target.composeId, serviceName: target.serviceName, domainType: "compose" as const }
+            : { applicationId: target.applicationId, domainType: "application" as const }),
           port,
           https: true,
-          domainType: "application",
           certificateType: "letsencrypt",
         });
         created++;
@@ -176,7 +219,17 @@ export async function applyDomainConfigDokploy(params: {
     //    those active would claim a certificate for a domain Traefik never saw.
     await markLetsEncryptActive(tenantId, projectId, liveHosts);
 
-    logger.info({ projectId, applicationId, created, removed, failed: failures.length }, "[domains:dokploy] reconciled domains");
+    logger.info(
+      {
+        projectId,
+        resource: target.kind === "compose" ? target.composeId : target.applicationId,
+        kind: target.kind,
+        created,
+        removed,
+        failed: failures.length,
+      },
+      "[domains:dokploy] reconciled domains",
+    );
 
     const domainWord = dbDomains.length === 1 ? "domain" : "domains";
 

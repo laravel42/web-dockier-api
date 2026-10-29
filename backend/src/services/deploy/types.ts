@@ -22,9 +22,9 @@ export type DeploymentStatus = "pending" | "building" | "deploying" | "success" 
  * Routing depends on this: "static" always takes the native pipeline regardless
  * of DEPLOY_PROVIDER, because Dokploy has no object-storage target.
  */
-export type DeployStrategy = "vps" | "managed" | "static";
+export type DeployStrategy = "vps" | "managed" | "static" | "compose";
 
-const DEPLOY_STRATEGIES: readonly DeployStrategy[] = ["vps", "managed", "static"];
+const DEPLOY_STRATEGIES: readonly DeployStrategy[] = ["vps", "managed", "static", "compose"];
 
 /**
  * Narrow an untrusted string to a DeployStrategy, falling back to `fallback`.

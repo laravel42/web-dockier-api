@@ -12,6 +12,7 @@
 import { createWorker, DEPLOY_QUEUE } from "../../../shared/database/queue.js";
 import { executePipeline, type PipelineInput } from "./pipeline/pipeline.js";
 import { executeDokployPipeline } from "./dokploy/pipeline.js";
+import { executeComposePipeline } from "./dokploy/compose-pipeline.js";
 import { assertDokployConfigured } from "./dokploy/config.js";
 import { env } from "../../../shared/config.js";
 
@@ -36,6 +37,16 @@ import { env } from "../../../shared/config.js";
 async function routePipeline(event: PipelineInput): Promise<void> {
   if (event.deployStrategy === "static") {
     return executePipeline(event);
+  }
+  // Compose is always Dokploy, whatever DEPLOY_PROVIDER says — the inverse of
+  // the static rule above. The native pipeline has no compose target at all: it
+  // builds ONE image and runs ONE container, while a compose stack is N
+  // containers Dokploy orchestrates from the repo's own file. There is nothing
+  // for `native` to fall back to, so routing it there would fail obscurely
+  // rather than deploy.
+  if (event.deployStrategy === "compose") {
+    assertDokployConfigured();
+    return executeComposePipeline(event);
   }
   if (env.DEPLOY_PROVIDER === "dokploy") {
     // Fail fast with a single clear error if the Dokploy provider is

@@ -13,6 +13,10 @@ import { DokployError } from "../types.js";
 
 const getServer = vi.fn();
 const getApplication = vi.fn();
+// A project is deployed as an application OR a compose stack. Defaults to no
+// compose row, so every application case below behaves exactly as before.
+const getCompose = vi.fn().mockResolvedValue(null);
+const deleteComposeMapping = vi.fn().mockResolvedValue(undefined);
 const listDatabases = vi.fn().mockResolvedValue([]);
 const deleteServerMapping = vi.fn().mockResolvedValue(undefined);
 const deleteApplicationMapping = vi.fn().mockResolvedValue(undefined);
@@ -21,6 +25,8 @@ const deleteDatabaseMappings = vi.fn().mockResolvedValue(undefined);
 vi.mock("../mappings.js", () => ({
   getServer: (...a: unknown[]) => getServer(...a),
   getApplication: (...a: unknown[]) => getApplication(...a),
+  getCompose: (...a: unknown[]) => getCompose(...a),
+  deleteComposeMapping: (...a: unknown[]) => deleteComposeMapping(...a),
   listDatabases: (...a: unknown[]) => listDatabases(...a),
   deleteServerMapping: (...a: unknown[]) => deleteServerMapping(...a),
   deleteApplicationMapping: (...a: unknown[]) => deleteApplicationMapping(...a),
@@ -37,6 +43,9 @@ const deleteDomain = vi.fn().mockResolvedValue(undefined);
 // these to return true.
 const applicationExists = vi.fn().mockResolvedValue(false);
 const databaseExists = vi.fn().mockResolvedValue(false);
+const deleteCompose = vi.fn().mockResolvedValue(undefined);
+const composeExists = vi.fn().mockResolvedValue(false);
+const listComposeDomains = vi.fn().mockResolvedValue([]);
 
 vi.mock("../client.js", () => ({
   createDokployClient: () => ({
@@ -47,6 +56,9 @@ vi.mock("../client.js", () => ({
     deleteDomain: (...a: unknown[]) => deleteDomain(...a),
     applicationExists: (...a: unknown[]) => applicationExists(...a),
     databaseExists: (...a: unknown[]) => databaseExists(...a),
+    deleteCompose: (...a: unknown[]) => deleteCompose(...a),
+    composeExists: (...a: unknown[]) => composeExists(...a),
+    listComposeDomains: (...a: unknown[]) => listComposeDomains(...a),
   }),
 }));
 
@@ -135,6 +147,131 @@ describe("teardownDokployProject — nothing to tear down", () => {
     expect(result.status).toBe("nothing_to_tear_down");
     expect(result.steps).toEqual([]);
     expect(deleteServer).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Compose stacks ────────────────────────────────────────────────
+
+/**
+ * A compose project tears down the STACK rather than an application. Without
+ * this path the user is left with containers, volumes and a VM they cannot
+ * remove from the UI: `server.remove` is rejected while the stack still runs
+ * ("Server has active services"), so the VM is never terminated and keeps
+ * billing on their own cloud account.
+ */
+describe("teardownDokployProject — compose stacks", () => {
+  // vi.clearAllMocks() clears CALLS but not implementations, so the compose row
+  // has to be cleared explicitly or it leaks into the suites that follow and
+  // makes their "nothing to tear down" cases find a stack.
+  afterEach(() => getCompose.mockResolvedValue(null));
+
+  const COMPOSE = {
+    id: "c1",
+    projectId: "proj-1",
+    dokployComposeId: "comp-xyz",
+    dokployServerId: "srv-abc",
+    appName: "compose-abc",
+    composePath: "./deploy/dokploy/docker-compose.yml",
+    entryService: "web",
+    entryPort: 3000,
+    serviceNames: ["postgres", "api", "web"],
+  };
+
+  it("removes the stack, the server, the VM and the mapping row", async () => {
+    getServer.mockResolvedValue(SERVER);
+    getApplication.mockResolvedValue(null);
+    getCompose.mockResolvedValue(COMPOSE);
+
+    const result = await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(deleteCompose).toHaveBeenCalledWith("comp-xyz", true);
+    expect(deleteServer).toHaveBeenCalledWith("srv-abc");
+    expect(terminateEc2Instance).toHaveBeenCalled();
+    expect(deleteComposeMapping).toHaveBeenCalledWith("proj-1");
+    expect(result.status).toBe("torn_down");
+    // An application delete must not be attempted for a compose project.
+    expect(deleteApplication).not.toHaveBeenCalled();
+    expect(deleteApplicationMapping).not.toHaveBeenCalled();
+  });
+
+  it("deletes the stack's volumes, which Dokploy does not do by default", async () => {
+    // compose.delete defaults deleteVolumes to false. Without the explicit
+    // true, the named volumes survive a teardown and a later deploy of the
+    // same project silently adopts the stale data.
+    getServer.mockResolvedValue(SERVER);
+    getApplication.mockResolvedValue(null);
+    getCompose.mockResolvedValue(COMPOSE);
+
+    await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(deleteCompose.mock.calls[0][1]).toBe(true);
+  });
+
+  it("enumerates the stack's domains by composeId, not applicationId", async () => {
+    // domain.byApplicationId returns nothing for a compose stack, which would
+    // leave every host claimed by a deleted resource — and a Traefik host can
+    // only be held by one, so the next deploy's domain.create fails.
+    getServer.mockResolvedValue(SERVER);
+    getApplication.mockResolvedValue(null);
+    getCompose.mockResolvedValue(COMPOSE);
+    listComposeDomains.mockResolvedValue([{ domainId: "dom-1", host: "app.example.com" }]);
+
+    await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(listComposeDomains).toHaveBeenCalledWith("comp-xyz");
+    expect(listDomains).not.toHaveBeenCalled();
+    expect(deleteDomain).toHaveBeenCalledWith("dom-1");
+    listComposeDomains.mockResolvedValue([]);
+  });
+
+  it("does not remove the server while the stack is still there", async () => {
+    // Dokploy rejects server.remove with "active services", so firing it would
+    // leak the provider's raw error instead of an honest skip.
+    getServer.mockResolvedValue(SERVER);
+    getApplication.mockResolvedValue(null);
+    getCompose.mockResolvedValue(COMPOSE);
+    // The delete call "succeeds" but the stack is still present.
+    composeExists.mockResolvedValue(true);
+
+    const result = await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(deleteServer).not.toHaveBeenCalled();
+    // The mapping row is KEPT so the teardown can be retried.
+    expect(deleteComposeMapping).not.toHaveBeenCalled();
+    // Still reported torn_down, by the existing rule: the VM is terminated, so
+    // the billable resource is gone and the leftovers are Dokploy records that
+    // cost nothing. The message says so rather than claiming a clean sweep.
+    expect(result.status).toBe("torn_down");
+    expect(result.message).toMatch(/could not be removed automatically/i);
+    composeExists.mockResolvedValue(false);
+  });
+
+  it("still terminates the VM when the stack cannot be removed", async () => {
+    // The VM is the billable resource, so stopping it is independent of the
+    // Dokploy-side records.
+    getServer.mockResolvedValue(SERVER);
+    getApplication.mockResolvedValue(null);
+    getCompose.mockResolvedValue(COMPOSE);
+    composeExists.mockResolvedValue(true);
+
+    await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(terminateEc2Instance).toHaveBeenCalled();
+    composeExists.mockResolvedValue(false);
+  });
+
+  it("reports a compose stack as something to tear down", async () => {
+    // Guards the early return: a compose-only project (no server row yet, e.g.
+    // a deploy that failed after creating the stack) must not report
+    // "nothing to tear down" and strand it.
+    getServer.mockResolvedValue(null);
+    getApplication.mockResolvedValue(null);
+    getCompose.mockResolvedValue(COMPOSE);
+
+    const result = await teardownDokployProject("proj-1", "tenant-1");
+
+    expect(result.status).not.toBe("nothing_to_tear_down");
+    expect(deleteCompose).toHaveBeenCalled();
   });
 });
 

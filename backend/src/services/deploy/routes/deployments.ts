@@ -45,7 +45,7 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
           // let an unrecognized value through to be silently coerced to
           // "managed" downstream — so a typo picked a different deploy target
           // instead of failing the request.
-          deployStrategy: z.enum(["vps", "managed", "static"]).optional(),
+          deployStrategy: z.enum(["vps", "managed", "static", "compose"]).optional(),
           buildMethod: z.enum(["dockerfile", "railpack", "nixpacks", "codebuild"]).optional(),
           useRepoDockerfile: z.boolean().optional(),
           skipPipeline: z.boolean().optional(),

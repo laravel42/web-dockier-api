@@ -49,13 +49,25 @@ vi.mock("../../../shared/supabase/client.js", () => ({
 }));
 
 const mockGetApplication = vi.fn();
+const mockGetCompose = vi.fn(async () => null as unknown);
 vi.mock("../domain/dokploy/mappings.js", () => ({
   getApplication: (...args: unknown[]) => mockGetApplication(...args),
+  // Mirrors the real resolver (compose first), so the application cases keep
+  // driving this through mockGetApplication.
+  getProjectResource: async (projectId: string) => {
+    const compose = await mockGetCompose();
+    if (compose) return { kind: "compose", compose };
+    const application = await mockGetApplication(projectId);
+    if (application) return { kind: "application", application };
+    return { kind: "none" };
+  },
 }));
 
 const mockCancelDeployment = vi.fn();
+const mockCancelComposeDeployment = vi.fn();
 const mockCreateClient = vi.fn((_config?: { timeout?: number; maxRetries?: number }) => ({
   cancelDeployment: mockCancelDeployment,
+  cancelComposeDeployment: mockCancelComposeDeployment,
 }));
 vi.mock("../domain/dokploy/client.js", () => ({
   createDokployClient: (config?: { timeout?: number; maxRetries?: number }) => mockCreateClient(config),
@@ -96,6 +108,20 @@ describe("cancelDeployment", () => {
     expect(mockCancelDeployment).toHaveBeenCalledWith("app-1");
     expect(result.status).toBe("cancelled");
     expect(logLines.some((l) => /stop the running build/i.test(l))).toBe(true);
+  });
+
+  it("uses the COMPOSE cancel procedure for a compose project", async () => {
+    // application.cancelDeployment with a composeId is a 404, which this
+    // function's catch swallows — the stack would keep building while the UI
+    // reported the deploy cancelled.
+    mockGetCompose.mockResolvedValue({ dokployComposeId: "comp-1" } as never);
+
+    const result = await cancelDeployment(DEPLOYMENT_ID, TENANT_ID);
+
+    expect(mockCancelComposeDeployment).toHaveBeenCalledWith("comp-1");
+    expect(mockCancelDeployment).not.toHaveBeenCalled();
+    expect(result.status).toBe("cancelled");
+    mockGetCompose.mockResolvedValue(null as never);
   });
 
   it("bounds the remote call so an unreachable Dokploy cannot hang the Cancel request", async () => {
