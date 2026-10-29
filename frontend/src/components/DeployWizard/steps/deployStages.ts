@@ -38,6 +38,21 @@ const DOKPLOY_STAGE_DEFS = [
   { id: "deploy", label: "Deploy" },
 ] as const;
 
+/**
+ * Docker Compose deploys. Same project/git/server prologue as a Dokploy
+ * application, then two different steps: there is no build type to configure
+ * (each service in the compose file builds from its own `build:`), and the
+ * services the file declares have to be read before one of them can be routed.
+ */
+const COMPOSE_STAGE_DEFS = [
+  { id: "ensure-project", label: "Create Project" },
+  { id: "sync-git", label: "Sync Git Credentials" },
+  { id: "provision-server", label: "Provision Server" },
+  { id: "configure-compose", label: "Configure Compose Stack" },
+  { id: "compose-services", label: "Read Services" },
+  { id: "deploy", label: "Deploy" },
+] as const;
+
 /** Static sites skip servers and containers entirely: build, upload, put a CDN in front. */
 const STATIC_STAGE_DEFS = [
   { id: "clone", label: "Clone Repository" },
@@ -49,7 +64,9 @@ const STATIC_STAGE_DEFS = [
 ] as const;
 
 export function stageDefsFor(deployStrategy: string): ReadonlyArray<{ id: string; label: string }> {
-  return deployStrategy === "static" ? STATIC_STAGE_DEFS : DOKPLOY_STAGE_DEFS;
+  if (deployStrategy === "static") return STATIC_STAGE_DEFS;
+  if (deployStrategy === "compose") return COMPOSE_STAGE_DEFS;
+  return DOKPLOY_STAGE_DEFS;
 }
 
 /**

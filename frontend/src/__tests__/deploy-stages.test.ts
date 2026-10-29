@@ -59,6 +59,24 @@ describe("stageDefsFor", () => {
       ]);
     }
   });
+
+  it("uses the compose timeline for a compose deploy", () => {
+    // Shares the project/git/server prologue, then diverges: no build type to
+    // configure, and the compose file's services must be read before one of
+    // them can be routed.
+    expect(stageDefsFor("compose").map((s) => s.id)).toEqual([
+      "ensure-project",
+      "sync-git",
+      "provision-server",
+      "configure-compose",
+      "compose-services",
+      "deploy",
+    ]);
+  });
+
+  it("never shows the application build step for a compose deploy", () => {
+    expect(stageDefsFor("compose").map((s) => s.id)).not.toContain("configure-app");
+  });
 });
 
 describe("parseStages — static pipeline", () => {
@@ -139,6 +157,8 @@ const BACKEND_STAGE_IDS = [
   "provision-server",
   "provision-databases",
   "configure-app",
+  "configure-compose",
+  "compose-services",
   "deploy",
   "post-deploy",
   "ai-recovery",
@@ -202,7 +222,11 @@ describe("the [stage:<id>] marker contract", () => {
   });
 
   it("ignores backend ids that are not timeline steps without breaking the timeline", () => {
-    const timeline = new Set<string>([...timelineIds("vps"), ...timelineIds("static")]);
+    const timeline = new Set<string>([
+      ...timelineIds("vps"),
+      ...timelineIds("static"),
+      ...timelineIds("compose"),
+    ]);
     const nonTimeline = BACKEND_STAGE_IDS.filter((id) => !timeline.has(id));
 
     // Every id the backend emits but the timeline does not render. Pinned so a

@@ -314,8 +314,12 @@ export class DokployClient {
    * Throws (404 NOT_FOUND "Services not found") when the file declares no
    * services.
    */
-  async loadComposeServices(composeId: string, type: "fetch" | "cache" = "fetch"): Promise<string[]> {
-    const rows = await this.query<string[]>("compose.loadServices", { composeId, type });
+  async loadComposeServices(
+    composeId: string,
+    type: "fetch" | "cache" = "fetch",
+    opts?: { timeout?: number },
+  ): Promise<string[]> {
+    const rows = await this.query<string[]>("compose.loadServices", { composeId, type }, opts?.timeout);
     return Array.isArray(rows) ? rows : [];
   }
 
@@ -631,7 +635,13 @@ export class DokployClient {
     return this.request<T>("POST", endpoint, input);
   }
 
-  private async query<T>(endpoint: string, input: unknown): Promise<T> {
+  /**
+   * @param timeoutMs Per-call override of the client timeout. Only
+   *   `compose.loadServices` needs one — it clones the repository before
+   *   parsing, so it runs orders of magnitude longer than any other read.
+   *   Raising the client default instead would slacken every call's deadline.
+   */
+  private async query<T>(endpoint: string, input: unknown, timeoutMs?: number): Promise<T> {
     // Dokploy's query endpoints read their parameters as DIRECT query-string
     // params (e.g. ?serverId=abc), NOT wrapped in a tRPC `?input=<json>`
     // envelope. Sending `?input={"serverId":...}` makes the handler see
@@ -639,7 +649,7 @@ export class DokployClient {
     // field of `input` as its own query param instead.
     const qs = buildQueryString(input);
     const url = qs ? `${this.baseUrl}/${endpoint}?${qs}` : `${this.baseUrl}/${endpoint}`;
-    return this.requestRaw<T>("GET", url, undefined, endpoint);
+    return this.requestRaw<T>("GET", url, undefined, endpoint, timeoutMs);
   }
 
   private async request<T>(method: string, endpoint: string, body?: unknown): Promise<T> {
@@ -647,7 +657,7 @@ export class DokployClient {
     return this.requestRaw<T>(method, url, body, endpoint);
   }
 
-  private async requestRaw<T>(method: string, url: string, body?: unknown, endpoint?: string): Promise<T> {
+  private async requestRaw<T>(method: string, url: string, body?: unknown, endpoint?: string, timeoutMs?: number): Promise<T> {
     // withRetry owns the exponential backoff + attempt bookkeeping. The inner
     // function performs ONE fetch+parse and THROWS a DokployError (with the
     // right statusCode) on any failure, so the control flow is expressed via
@@ -657,7 +667,7 @@ export class DokployClient {
     // that is the request timeout, not something withRetry replaces.
     try {
       return await withRetry<T>(
-        () => this.requestOnce<T>(method, url, body, endpoint),
+        () => this.requestOnce<T>(method, url, body, endpoint, timeoutMs),
         {
           attempts: this.maxRetries + 1,
           backoffMs: RETRY_BASE_DELAY,
@@ -685,9 +695,9 @@ export class DokployClient {
   }
 
   /** A single Dokploy request attempt. Throws a DokployError on any failure. */
-  private async requestOnce<T>(method: string, url: string, body?: unknown, endpoint?: string): Promise<T> {
+  private async requestOnce<T>(method: string, url: string, body?: unknown, endpoint?: string, timeoutMs?: number): Promise<T> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? this.timeout);
 
     // `finally` rather than a success-path clearTimeout: a rejected fetch
     // (network error, abort) used to leave the timer pending for the full

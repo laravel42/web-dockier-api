@@ -81,6 +81,17 @@ export const DOKPLOY_STAGE = {
   PROVISION_DATABASES: "provision-databases",
   /** Create/configure the Dokploy application (build type, env, git source). */
   CONFIGURE_APP: "configure-app",
+  /**
+   * Compose only: create/configure the Dokploy Compose stack (git source,
+   * compose path, env). Replaces CONFIGURE_APP on that path — a compose deploy
+   * has no build type to configure.
+   */
+  CONFIGURE_COMPOSE: "configure-compose",
+  /**
+   * Compose only: enumerate the services the compose file declares, and pick
+   * the one a domain routes to.
+   */
+  COMPOSE_SERVICES: "compose-services",
   /** Trigger the deploy and poll it to completion. */
   DEPLOY: "deploy",
   /** Run the project's user-defined post-deploy commands. */
