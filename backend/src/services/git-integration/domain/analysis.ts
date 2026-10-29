@@ -7,6 +7,7 @@ import { detectTechStack, type TechStackItem } from "./tech-stack.js";
 import { scanSensitiveData, type SensitiveField } from "./sensitive-data-scanner.js";
 import { detectStaticCapable } from "./repo-config.js";
 import { detectMultiService, type MultiServiceHint } from "./multi-service.js";
+import { analyzeComposeRepo, type ComposeAnalysis } from "./compose-analysis.js";
 
 export type { SensitiveField } from "./sensitive-data-scanner.js";
 
@@ -103,6 +104,22 @@ export type RepoAnalysisResult = {
    * cached before this field existed (the route backfills those).
    */
   multiService?: MultiServiceHint | null;
+  /**
+   * Set when the repo holds a Docker Compose file: every candidate file, the
+   * services the chosen one declares, the default entry service and port, the
+   * variables that must be set, and whether the stack runs its own database.
+   * Drives the compose deploy strategy.
+   *
+   * Related to but distinct from `multiService`: that one is a tree-only hint
+   * about a monorepo with no compose file, a case compose deploys cannot help.
+   * When both are set, this one is the actionable signal and the wizard shows
+   * it instead of the warning.
+   *
+   * `null` means checked and no compose file (or it could not be analysed);
+   * `undefined` means the analysis was cached before this field existed (the
+   * route backfills those).
+   */
+  compose?: ComposeAnalysis | null;
   sensitiveData?: SensitiveField[];
   dependencies?: Dependency[];
   _scannersRan: boolean;
@@ -251,6 +268,12 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
   const staticCapable = await detectStaticCapable(connection, ref);
   const detectedDbEngine = parseDbEngineFromEnvExample(configFiles);
 
+  // Compose analysis over the tree we already have. Best-effort:
+  // analyzeComposeRepo never throws (null on failure), so a compose file we
+  // cannot read falls back to a single-service deploy rather than failing the
+  // whole analysis the deploy wizard depends on.
+  const compose = await analyzeComposeRepo(connection, ref, files);
+
   return {
     techStack: mergedTechStack,
     deployOptions: suggestDeployOptions(mergedTechStack, hasDocker, files.length).map((option) => ({
@@ -260,6 +283,7 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
     })),
     detectedServices,
     multiService: detectMultiService(files),
+    compose,
     repoSize: files.length,
     primaryLanguage: mergedTechStack.find((item) => item.category === "language" || item.category === "runtime")?.name ?? "",
     hasDocker,

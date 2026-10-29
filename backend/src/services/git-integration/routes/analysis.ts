@@ -11,6 +11,7 @@ import type { Json } from "../../../shared/supabase/types.js";
 import { analyzeSensitiveDataFromText, detectDbEngine, runRepoAnalysis, type SensitiveColumn } from "../domain/analysis.js";
 import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
 import { detectMultiService } from "../domain/multi-service.js";
+import { analyzeComposeRepo } from "../domain/compose-analysis.js";
 import { resolveRepoFaviconDataUrl, isRepoFaviconCacheValid, isValidFaviconDataUrl, REPO_FAVICON_RESOLVER_VERSION, type RepoFaviconCacheEntry } from "../domain/repo-favicon.js";
 import { createMergeRequest, estimateFixMinutes, parseRepoKey, summarizeFindingTitle } from "../domain/ai/mr-generator.js";
 import { getFindingById } from "../../../shared/service-clients/findings.js";
@@ -397,15 +398,20 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
           await updateAnalysisCache(repoKey, branch, parsed as unknown as Json, log);
         }
 
-        // Same backfill for `multiService`, so a stale row still warns about a
-        // compose / multi-service repo. One file-tree fetch, only when absent.
-        if (!("multiService" in parsed)) {
+        // Same backfill for `multiService` and `compose`, so a stale row still
+        // describes a compose repo. Both derive from the file tree, so they
+        // share ONE fetch and run only when either field is absent.
+        if (!("multiService" in parsed) || !("compose" in parsed)) {
           try {
-            const multiService = detectMultiService(await getRepoFileTree(conn, ref));
-            parsed = { ...parsed, multiService };
+            const tree = await getRepoFileTree(conn, ref);
+            parsed = {
+              ...parsed,
+              multiService: detectMultiService(tree),
+              compose: await analyzeComposeRepo(conn, ref, tree),
+            };
             await updateAnalysisCache(repoKey, branch, parsed as unknown as Json, log);
           } catch {
-            // Best-effort: a failed tree fetch leaves the field absent so the
+            // Best-effort: a failed tree fetch leaves the fields absent so the
             // backfill retries, rather than failing a cached analysis read.
           }
         }

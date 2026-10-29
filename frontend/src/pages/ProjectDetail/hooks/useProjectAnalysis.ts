@@ -19,7 +19,11 @@ import { TEMPLATE_ANALYSIS } from "../constants/templateAnalysis";
 // discarded.
 // v15: the analysis schema gained `multiService`, so pre-field cached analyses
 // would never show the multi-service warning.
-const analysisCache = new SessionCache<RepoAnalysis>("analysis", 15);
+// v16: the analysis schema gained `compose` (compose files, their services, the
+// entry service and the variables a deploy requires). Without a bump, a repo
+// analysed before it existed would still be offered only a single-service
+// deploy.
+const analysisCache = new SessionCache<RepoAnalysis>("analysis", 16);
 
 
 /**
