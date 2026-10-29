@@ -25,7 +25,7 @@ import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDokployClient } from "../../deploy/domain/dokploy/client.js";
-import { getApplication } from "../../deploy/domain/dokploy/mappings.js";
+import { getApplication, getProjectResource } from "../../deploy/domain/dokploy/mappings.js";
 import type { DokployDomain } from "../../deploy/domain/dokploy/types.js";
 import { listDomains } from "./domains.js";
 
@@ -34,11 +34,20 @@ import { listDomains } from "./domains.js";
 import type { ApplyDomainsResult } from "./mappers.js";
 export type { ApplyDomainsResult } from "./mappers.js";
 
-/** Whether a project is deployed via Dokploy (has an application mapping). */
+/**
+ * Whether a project is deployed via Dokploy (application OR compose stack).
+ *
+ * Compose counts: a compose project must not fall through to the legacy
+ * VPS nginx/certbot branch in `domains/domain/applier.ts`, which would try to
+ * write an nginx vhost and run certbot on a server that runs Traefik.
+ */
 export async function isDokployProject(projectId: string): Promise<boolean> {
   try {
-    const app = await getApplication(projectId);
-    return Boolean(app?.dokployApplicationId);
+    const resource = await getProjectResource(projectId);
+    // An empty id is a corrupt mapping, not a deployment (unchanged semantics).
+    if (resource.kind === "compose") return Boolean(resource.compose.dokployComposeId);
+    if (resource.kind === "application") return Boolean(resource.application.dokployApplicationId);
+    return false;
   } catch {
     return false;
   }

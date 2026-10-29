@@ -2,8 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── Mocks ─────────────────────────────────────────────────────────
 const mockGetApplication = vi.fn();
+const mockGetCompose = vi.fn(async () => null as unknown);
 vi.mock("../../deploy/domain/dokploy/mappings.js", () => ({
   getApplication: (...a: unknown[]) => mockGetApplication(...a),
+  // Mirrors the real resolver (compose first) — see the network applier test.
+  getProjectResource: async (projectId: string) => {
+    const compose = await mockGetCompose();
+    if (compose) return { kind: "compose", compose };
+    const application = await mockGetApplication(projectId);
+    if (application) return { kind: "application", application };
+    return { kind: "none" };
+  },
 }));
 
 const mockClient = {

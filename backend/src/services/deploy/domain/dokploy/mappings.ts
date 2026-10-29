@@ -83,6 +83,44 @@ export interface DatabaseMapping {
   dbUser: string | null;
 }
 
+/**
+ * A project deployed as a Dokploy Compose stack.
+ *
+ * The sibling of {@link ApplicationMapping}: one project maps to one compose
+ * resource, which itself holds N containers. See migration 0079 for why this is
+ * a separate table rather than a discriminator on dokploy_applications.
+ */
+export interface ComposeMapping {
+  id: string;
+  projectId: string;
+  dokployComposeId: string;
+  dokployServerId: string | null;
+  /** Dokploy-assigned appName; compose containers are named `<appName>-<service>-N`. */
+  appName: string | null;
+  /** Compose file path inside the repo (not assumed to be at the root). */
+  composePath: string;
+  /** The service a domain routes to, and the container port it listens on. */
+  entryService: string | null;
+  entryPort: number | null;
+  /** Service names as Dokploy itself parsed them (`compose.loadServices`). */
+  serviceNames: string[];
+}
+
+/**
+ * Which kind of Dokploy resource a project is deployed as.
+ *
+ * Every consumer that used to call {@link getApplication} directly and assume
+ * "application" goes through {@link getProjectResource} instead. That is the
+ * single chokepoint keeping teardown, the domains and network appliers, command
+ * execution and the cancel route honest about the two kinds — without it, a
+ * compose project reads as having no resource at all and teardown silently
+ * leaves a running stack behind.
+ */
+export type DokployResource =
+  | { kind: "application"; application: ApplicationMapping }
+  | { kind: "compose"; compose: ComposeMapping }
+  | { kind: "none" };
+
 // ─── Tenant Project Mappings ───────────────────────────────────────
 
 /**
@@ -364,6 +402,108 @@ export async function deleteApplicationMapping(projectId: string): Promise<void>
     .eq("project_id", projectId);
 
   throwOnError(error, DokployMappingError, { internalMsg: "Failed to delete dokploy_applications row" });
+}
+
+// ─── Compose Mappings ──────────────────────────────────────────────
+
+function rowToComposeMapping(data: Record<string, unknown>): ComposeMapping {
+  return {
+    id: data.id as string,
+    projectId: data.project_id as string,
+    dokployComposeId: data.dokploy_compose_id as string,
+    dokployServerId: (data.dokploy_server_id as string | null) ?? null,
+    appName: (data.app_name as string | null) ?? null,
+    composePath: (data.compose_path as string) ?? "./docker-compose.yml",
+    entryService: (data.entry_service as string | null) ?? null,
+    entryPort: (data.entry_port as number | null) ?? null,
+    serviceNames: (data.service_names as string[] | null) ?? [],
+  };
+}
+
+/** Get the Dokploy compose mapping for a project, if it has one. */
+export async function getCompose(projectId: string): Promise<ComposeMapping | null> {
+  const { data, error } = await supabaseAdmin
+    .from("dokploy_composes")
+    .select("*")
+    .eq("project_id", projectId)
+    .maybeSingle();
+
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to query dokploy_composes" });
+  if (!data) return null;
+  return rowToComposeMapping(data);
+}
+
+/**
+ * Create or update the compose mapping for a project.
+ * Uses ON CONFLICT on project_id (unique constraint).
+ *
+ * Every optional field is omitted when undefined rather than written as null,
+ * so a later upsert (e.g. persisting the service list after the first one
+ * stored the ids) cannot clobber a value it does not know about — the same
+ * rule {@link upsertApplication} follows for appName and containerPort.
+ */
+export async function upsertCompose(params: {
+  projectId: string;
+  dokployComposeId: string;
+  dokployServerId?: string;
+  appName?: string;
+  composePath?: string;
+  entryService?: string;
+  entryPort?: number;
+  serviceNames?: string[];
+}): Promise<ComposeMapping> {
+  const { data, error } = await supabaseAdmin
+    .from("dokploy_composes")
+    .upsert(
+      {
+        project_id: params.projectId,
+        dokploy_compose_id: params.dokployComposeId,
+        dokploy_server_id: params.dokployServerId ?? null,
+        updated_at: nowIso(),
+        ...(params.composePath ? { compose_path: params.composePath } : {}),
+        ...(params.appName ? { app_name: params.appName } : {}),
+        ...(params.entryService ? { entry_service: params.entryService } : {}),
+        ...(params.entryPort !== undefined ? { entry_port: params.entryPort } : {}),
+        ...(params.serviceNames ? { service_names: params.serviceNames } : {}),
+      },
+      { onConflict: "project_id" },
+    )
+    .select("*")
+    .single();
+
+  const row = unwrapQuery(data, error, DokployMappingError, {
+    internalMsg: "Failed to upsert dokploy_composes",
+  });
+  return rowToComposeMapping(row);
+}
+
+/** Delete the compose mapping row for a project (used during teardown). */
+export async function deleteComposeMapping(projectId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("dokploy_composes")
+    .delete()
+    .eq("project_id", projectId);
+
+  throwOnError(error, DokployMappingError, { internalMsg: "Failed to delete dokploy_composes row" });
+}
+
+/**
+ * Resolve which kind of Dokploy resource a project is deployed as.
+ *
+ * Compose is checked FIRST. A project should never hold both rows, but if one
+ * ever did — a project switched from an application deploy to a compose deploy
+ * without the old row being cleaned up — the compose stack is the live one and
+ * the stale application row must not win, or teardown would remove an
+ * application that no longer exists and leave the running stack behind.
+ */
+export async function getProjectResource(projectId: string): Promise<DokployResource> {
+  const compose = await getCompose(projectId);
+  if (compose) return { kind: "compose", compose };
+
+  const application = await getApplication(projectId);
+  if (application) return { kind: "application", application };
+
+  return { kind: "none" };
 }
 
 // ─── Database Mappings ─────────────────────────────────────────────

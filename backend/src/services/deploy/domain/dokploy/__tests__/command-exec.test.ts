@@ -5,9 +5,19 @@ import { EventEmitter } from "node:events";
 // Mappings (target resolution reads server + application).
 const mockGetServer = vi.fn();
 const mockGetApplication = vi.fn();
+const mockGetCompose = vi.fn(async () => null as unknown);
 vi.mock("../mappings.js", () => ({
   getServer: (...a: unknown[]) => mockGetServer(...a),
   getApplication: (...a: unknown[]) => mockGetApplication(...a),
+  // Mirrors the real resolver (compose first), so the application cases keep
+  // driving this through mockGetApplication.
+  getProjectResource: async (projectId: string) => {
+    const compose = await mockGetCompose();
+    if (compose) return { kind: "compose", compose };
+    const application = await mockGetApplication(projectId);
+    if (application) return { kind: "application", application };
+    return { kind: "none" };
+  },
 }));
 
 // child_process.spawn — capture args and drive a fake process.
@@ -88,6 +98,20 @@ describe("resolveDokployCommandTarget", () => {
     const { target, errorMessage } = await resolveDokployCommandTarget("p1");
     expect(target).toBeNull();
     expect(errorMessage).toMatch(/could not locate/i);
+  });
+
+  it("refuses for a compose project rather than guessing a service", async () => {
+    // A compose stack runs N containers, named `<appName>-<service>-N`, so
+    // "the container for this project" has no single answer. Picking one would
+    // run the user's command somewhere arbitrary.
+    mockGetServer.mockResolvedValue(READY_SERVER);
+    mockGetCompose.mockResolvedValue({ dokployComposeId: "dcomp-1", appName: "compose-abc" } as never);
+
+    const { target, errorMessage } = await resolveDokployCommandTarget("p1");
+
+    expect(target).toBeNull();
+    expect(errorMessage).toMatch(/not available for Docker Compose/i);
+    mockGetCompose.mockResolvedValue(null as never);
   });
 });
 

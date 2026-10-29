@@ -25,7 +25,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getServer, getApplication } from "./mappings.js";
+import { getServer, getProjectResource } from "./mappings.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 /** Default per-command timeout — matches the Commands panel's 2-minute limit. */
@@ -74,7 +74,22 @@ export async function resolveDokployCommandTarget(
     };
   }
 
-  const app = await getApplication(projectId);
+  const resource = await getProjectResource(projectId);
+
+  // A compose stack runs N containers, so "the container for this project" has
+  // no single answer: its containers are named `<appName>-<service>-N` and
+  // running a command means naming the service first. The command API has no
+  // way to express that yet, so refuse clearly rather than guessing a service.
+  if (resource.kind === "compose") {
+    return {
+      target: null,
+      errorMessage:
+        "Running commands is not available for Docker Compose deployments, because the stack runs several containers. " +
+        "Use a command in the service's own compose definition instead.",
+    };
+  }
+
+  const app = resource.kind === "application" ? resource.application : null;
   if (!app?.appName) {
     return {
       target: null,

@@ -716,6 +716,30 @@ export type Database = {
         Relationships: [];
       };
 
+      /** Docker Compose stacks (see migration 0079). */
+      dokploy_composes: {
+        Row: {
+          id: string;
+          project_id: string;
+          dokploy_compose_id: string;
+          dokploy_server_id: string | null;
+          /** Compose containers are named `<app_name>-<service>-N`. */
+          app_name: string | null;
+          /** Compose file path inside the repo; not assumed to be at the root. */
+          compose_path: string;
+          /** The service a domain routes to, and its container port. */
+          entry_service: string | null;
+          entry_port: number | null;
+          /** Service names as Dokploy parsed them (`compose.loadServices`). */
+          service_names: string[] | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["dokploy_composes"]["Row"]> &
+          Pick<Database["public"]["Tables"]["dokploy_composes"]["Row"], "project_id" | "dokploy_compose_id">;
+        Update: Partial<Database["public"]["Tables"]["dokploy_composes"]["Row"]>;
+        Relationships: [];
+      };
       dokploy_databases: {
         Row: {
           id: string;

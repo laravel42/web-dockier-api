@@ -2,8 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── Mocks ─────────────────────────────────────────────────────────
 const mockGetApplication = vi.fn();
+const mockGetCompose = vi.fn(async () => null as unknown);
 vi.mock("../../deploy/domain/dokploy/mappings.js", () => ({
   getApplication: (...a: unknown[]) => mockGetApplication(...a),
+  // Mirrors the real resolver (compose first), so the application cases below
+  // keep driving this through mockGetApplication and the compose cases only
+  // have to set mockGetCompose.
+  getProjectResource: async (projectId: string) => {
+    const compose = await mockGetCompose();
+    if (compose) return { kind: "compose", compose };
+    const application = await mockGetApplication(projectId);
+    if (application) return { kind: "application", application };
+    return { kind: "none" };
+  },
 }));
 
 const mockClient = {
@@ -76,6 +87,16 @@ describe("isDokployProject", () => {
     expect(await isDokployProject("p1")).toBe(false);
   });
 
+  it("true for a COMPOSE project, even though rules cannot be applied to one", async () => {
+    // Deliberate: returning false would route a compose project to the legacy
+    // nginx/SSM applier, which would try to rewrite an nginx config over SSM
+    // on a server running Traefik. The refusal belongs in
+    // applyNetworkRulesDokploy (below), not in the strategy choice.
+    mockGetCompose.mockResolvedValue({ dokployComposeId: "dcomp-1" } as never);
+    expect(await isDokployProject("p1")).toBe(true);
+    mockGetCompose.mockResolvedValue(null as never);
+  });
+
   it("false (never throws) when the mapping lookup errors", async () => {
     mockGetApplication.mockRejectedValueOnce(new Error("db"));
     await expect(isDokployProject("p1")).resolves.toBe(false);
@@ -91,6 +112,26 @@ describe("applyNetworkRulesDokploy", () => {
     mockListSecurityRulesWithSecrets.mockResolvedValue([]);
   });
   afterEach(() => vi.clearAllMocks());
+
+  it("refuses for a compose project, explaining the Traefik-label workaround", async () => {
+    // Dokploy's `security` and `redirects` tables reference
+    // applications.applicationId and carry no compose id, so there is no call
+    // to make. Reported rather than silently skipped: a user who sets a Basic
+    // Auth password, sees it saved, and gets a wide-open site has a security
+    // surprise.
+    mockGetCompose.mockResolvedValue({ dokployComposeId: "dcomp-1" } as never);
+
+    const result = await applyNetworkRulesDokploy({ tenantId: "t1", projectId: "p1" });
+
+    expect(result.success).toBe(true);
+    expect(result.message).toMatch(/not available for Docker Compose/i);
+    expect(result.message).toMatch(/Traefik middleware labels/i);
+    // Nothing was read or reconciled.
+    expect(mockListSecurityRulesWithSecrets).not.toHaveBeenCalled();
+    expect(mockClient.listAppMiddlewares).not.toHaveBeenCalled();
+    expect(mockClient.createSecurity).not.toHaveBeenCalled();
+    mockGetCompose.mockResolvedValue(null as never);
+  });
 
   it("no-ops (soft success) when the project has no Dokploy application yet", async () => {
     mockGetApplication.mockResolvedValue(null);

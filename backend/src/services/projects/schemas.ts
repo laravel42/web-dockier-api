@@ -15,6 +15,25 @@ export const projectSettingsSchema = z.object({
   pushToDeploy: z.boolean().optional(),
   healthCheckEnabled: z.boolean().optional(),
   healthCheckUrl: z.string().url().max(500).optional(),
+  /**
+   * Docker Compose deploy configuration.
+   *
+   * The USER'S CHOICES live here, not in dokploy_composes: they must survive a
+   * redeploy, a rollback and a teardown, and be editable from project settings
+   * without running a deploy. Same class of value as `rootDirectory` above.
+   * The Dokploy resource ids are reconcilable state and live in the mapping
+   * table instead.
+   *
+   * `entryService` is the service a domain routes to and `entryPort` the
+   * container port it listens on. Both are optional because the analyzer
+   * resolves a default for most repos, and a wrong guess here is a silent Bad
+   * Gateway — so the deploy asks rather than inventing one.
+   */
+  compose: z.object({
+    path: z.string().max(500),
+    entryService: z.string().max(200).optional(),
+    entryPort: z.number().int().min(1).max(65535).optional(),
+  }).optional(),
 }).passthrough();
 
 export const infraStateSchema = z.enum(["none", "live", "torn_down"]);

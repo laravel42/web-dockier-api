@@ -21,7 +21,7 @@
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { createDokployClient } from "../../deploy/domain/dokploy/client.js";
-import { getApplication } from "../../deploy/domain/dokploy/mappings.js";
+import { getProjectResource } from "../../deploy/domain/dokploy/mappings.js";
 import { listRedirectRules, listSecurityRulesWithSecrets } from "./network.js";
 import type { RedirectRuleResponse } from "./mappers.js";
 
@@ -33,13 +33,23 @@ export interface ApplyResult {
 }
 
 /**
- * Whether a project is deployed via Dokploy (has an application mapping).
- * Used by applyNetworkRules to pick the strategy.
+ * Whether a project is deployed via Dokploy. Used by applyNetworkRules to pick
+ * the strategy.
+ *
+ * True for a COMPOSE project too, even though this applier cannot apply rules
+ * to one (see applyNetworkRulesDokploy). That is deliberate: returning false
+ * would route a compose project to the legacy nginx/SSM applier, which would
+ * try to rewrite an nginx config over AWS SSM on a server that runs neither —
+ * a confusing failure instead of a clear explanation.
  */
 export async function isDokployProject(projectId: string): Promise<boolean> {
   try {
-    const app = await getApplication(projectId);
-    return Boolean(app?.dokployApplicationId);
+    const resource = await getProjectResource(projectId);
+    // A row whose id is empty is a corrupt mapping, not a deployment — keep
+    // treating it as "not a Dokploy project", as this check always has.
+    if (resource.kind === "compose") return Boolean(resource.compose.dokployComposeId);
+    if (resource.kind === "application") return Boolean(resource.application.dokployApplicationId);
+    return false;
   } catch {
     return false;
   }
@@ -109,7 +119,25 @@ export async function applyNetworkRulesDokploy(params: {
   const { tenantId, projectId } = params;
 
   try {
-    const app = await getApplication(projectId);
+    // Dokploy has no API for this on a compose stack. Its `security` and
+    // `redirects` tables both reference `applications.applicationId` and carry
+    // no compose id, and `security.create` / `redirects.create` accept only an
+    // applicationId — so there is no call to make, on any Dokploy version.
+    //
+    // Reported explicitly rather than silently skipped: a user who sets a Basic
+    // Auth password, sees it saved, and gets a wide-open site has a security
+    // surprise. The message names the workaround Dokploy itself documents.
+    const resource = await getProjectResource(projectId);
+    if (resource.kind === "compose") {
+      return {
+        success: true,
+        message:
+          "Basic Auth and redirect rules are not available for Docker Compose deployments. " +
+          "Add Traefik middleware labels to the service in your compose file instead.",
+      };
+    }
+
+    const app = resource.kind === "application" ? resource.application : null;
     if (!app?.dokployApplicationId) {
       return { success: true, message: "No Dokploy application yet. Rules will be applied on next deployment." };
     }
