@@ -145,6 +145,108 @@ export interface DokployDeployment {
   finishedAt: string | null;
 }
 
+// ─── Compose ───────────────────────────────────────────────────────
+//
+// A Dokploy Compose is a resource kind of its own, parallel to an application:
+// it clones the repo and runs a compose file, so N containers come from ONE
+// Dokploy resource. It deliberately has no build type — each service builds
+// from its own `build:` or runs its own `image:`, and there is no
+// `compose.saveBuildType` procedure.
+//
+// The git source is NOT set through a `saveXProvider` call as it is for
+// applications; compose carries its git fields on the row, so `compose.update`
+// writes them.
+
+/**
+ * Params for `compose.create`.
+ *
+ * Verified against the live API: only `name` and `environmentId` are actually
+ * required (the published schema marks `description` required, but this
+ * instance accepts its absence — we send it regardless).
+ *
+ * `serverId` is optional in the schema but required in practice: `compose.create`
+ * rejects with UNAUTHORIZED "You need to use a server to create a compose" when
+ * the instance is cloud or has `remoteServersOnly` set.
+ *
+ * `composePath` is NOT accepted here — it takes its column default
+ * (`./docker-compose.yml`) and must be set with `compose.update`.
+ */
+export interface CreateComposeParams {
+  name: string;
+  environmentId: string;
+  description?: string;
+  appName?: string;
+  serverId?: string;
+  composeType?: "docker-compose" | "stack";
+  /** Raw YAML, only for `sourceType: "raw"`. */
+  composeFile?: string;
+  sourceType?: "git" | "github" | "gitlab" | "bitbucket" | "gitea" | "raw";
+}
+
+/**
+ * Params for `compose.update` — the only way to set the git source and the
+ * compose path. Accepts any compose column except `serverId`, which is fixed at
+ * create time.
+ *
+ * Dockier always uses `sourceType: "git"` with a token-authenticated clone URL,
+ * for the same reason the application path does: Dokploy's native provider
+ * families are keyed on a GitHub App / GitLab OAuth app registered inside
+ * Dokploy, which Dockier does not have.
+ */
+export interface UpdateComposeParams {
+  composeId: string;
+  sourceType?: "git" | "github" | "gitlab" | "bitbucket" | "gitea" | "raw";
+  customGitUrl?: string;
+  customGitBranch?: string;
+  customGitSSHKeyId?: string;
+  /** Path to the compose file in the repo. Not assumed to be at the root. */
+  composePath?: string;
+  composeFile?: string;
+  command?: string;
+  /** Writes a `.env` beside the compose file from the stored env. */
+  createEnvFile?: boolean;
+  enableSubmodules?: boolean;
+  watchPaths?: string[];
+}
+
+export interface DokployCompose {
+  composeId: string;
+  name: string;
+  appName: string;
+  description: string | null;
+  environmentId: string;
+  serverId: string | null;
+  composeStatus: "idle" | "running" | "done" | "error";
+  sourceType: string;
+  composeType: string;
+  composePath: string;
+  customGitUrl: string | null;
+  customGitBranch: string | null;
+  env: string | null;
+  createdAt: string;
+}
+
+/**
+ * Params for `compose.saveEnvironment`.
+ *
+ * Compose env is the ONLY env source for a compose deploy: Dokploy does not
+ * read `env_file`, so the project's variables have to arrive here. `env` is
+ * required by the schema.
+ */
+export interface SaveComposeEnvironmentParams {
+  composeId: string;
+  env: string;
+  createEnvFile?: boolean;
+}
+
+export interface DeployComposeParams {
+  composeId: string;
+  title?: string;
+  description?: string;
+  /** Discards the stack's volumes before redeploying. Never set by Dockier. */
+  freshVolumes?: boolean;
+}
+
 export type DokployBuildType =
   | "dockerfile"
   | "nixpacks"
@@ -176,9 +278,26 @@ export interface SaveEnvironmentParams {
   createEnvFile?: boolean;
 }
 
+/**
+ * Params for `domain.create`.
+ *
+ * A domain attaches to EITHER an application or one named service inside a
+ * compose stack, never both — `domains` carries a nullable `applicationId` and
+ * a nullable `composeId`, selected by `domainType`. Verified against the live
+ * API: a compose domain comes back with `applicationId: null`.
+ *
+ * `port` is the CONTAINER port Traefik forwards to. Dokploy writes it straight
+ * into the injected `traefik.http.services.*.loadbalancer.server.port` label,
+ * so a wrong value is a Bad Gateway with no other symptom.
+ */
 export interface CreateDomainParams {
   host: string;
-  applicationId: string;
+  /** Required for `domainType: "application"`. */
+  applicationId?: string;
+  /** Required for `domainType: "compose"`, together with `serviceName`. */
+  composeId?: string;
+  /** Which service inside the compose stack the domain routes to. */
+  serviceName?: string;
   port: number;
   https: boolean;
   domainType: "application" | "compose";
@@ -198,6 +317,8 @@ export interface UpdateDomainParams {
   domainType: "application" | "compose";
   certificateType: "none" | "letsencrypt";
   path?: string;
+  /** Preserved when reconciling a compose domain, or Traefik loses its target. */
+  serviceName?: string;
 }
 
 export interface DokployDomain {
@@ -207,6 +328,11 @@ export interface DokployDomain {
   https: boolean;
   path: string | null;
   applicationId: string | null;
+  /** Set instead of applicationId when the domain belongs to a compose stack. */
+  composeId?: string | null;
+  /** The compose service the domain routes to; null for an application domain. */
+  serviceName?: string | null;
+  domainType?: "application" | "compose" | "preview" | string;
   /** "none" for the auto sslip.io domain, "letsencrypt" for user domains we register. */
   certificateType?: "none" | "letsencrypt" | string;
 }

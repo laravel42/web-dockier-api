@@ -39,6 +39,11 @@ import type {
   AIFixResult,
   CreateSSHKeyParams,
   DokploySSHKey,
+  CreateComposeParams,
+  UpdateComposeParams,
+  DokployCompose,
+  SaveComposeEnvironmentParams,
+  DeployComposeParams,
 } from "./types.js";
 import { DokployError } from "./types.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
@@ -266,6 +271,123 @@ export class DokployClient {
 
   async saveEnvironment(params: SaveEnvironmentParams): Promise<void> {
     await this.mutation<unknown>("application.saveEnvironment", params);
+  }
+
+  // ─── Compose ───────────────────────────────────────────────────
+  //
+  // Verified end to end against a live instance: create → update (git source +
+  // compose path) → loadServices → delete. Note the split, which differs from
+  // applications: there is no `compose.saveGitProvider` family and no build
+  // type. `compose.update` writes the git fields, and `composePath` can ONLY be
+  // set there — `compose.create` ignores it and keeps the column default.
+
+  async createCompose(params: CreateComposeParams): Promise<DokployCompose> {
+    return this.mutation<DokployCompose>("compose.create", params);
+  }
+
+  async getCompose(composeId: string): Promise<DokployCompose> {
+    return this.query<DokployCompose>("compose.one", { composeId });
+  }
+
+  async updateCompose(params: UpdateComposeParams): Promise<void> {
+    await this.mutation<unknown>("compose.update", params);
+  }
+
+  async saveComposeEnvironment(params: SaveComposeEnvironmentParams): Promise<void> {
+    await this.mutation<unknown>("compose.saveEnvironment", params);
+  }
+
+  /**
+   * The service names Dokploy itself parsed out of the compose file.
+   *
+   * This is the authoritative list — it comes from the file after Dokploy has
+   * cloned the repo and applied its own interpolation, so it is what the deploy
+   * will actually run. Dockier's own parse drives the wizard (it has to work
+   * before any compose resource exists); a disagreement between the two is
+   * worth logging.
+   *
+   * `type: "fetch"` makes it CLONE the repo first, so this is a query with a
+   * real side effect and a much longer runtime than any other read — measured
+   * at ~5s for a 35MB repo, but a large repo on a slow link can exceed the
+   * client's default 30s timeout. Callers should pass a wider one.
+   *
+   * Throws (404 NOT_FOUND "Services not found") when the file declares no
+   * services.
+   */
+  async loadComposeServices(composeId: string, type: "fetch" | "cache" = "fetch"): Promise<string[]> {
+    const rows = await this.query<string[]>("compose.loadServices", { composeId, type });
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  /**
+   * The compose file AFTER Dokploy merges in the Traefik labels for every
+   * registered domain. The single best diagnostic for a compose deploy that
+   * builds but serves nothing — it shows the router, the entrypoint and the
+   * `loadbalancer.server.port` Traefik will actually use.
+   */
+  async getConvertedCompose(composeId: string): Promise<string> {
+    return this.query<string>("compose.getConvertedCompose", { composeId });
+  }
+
+  async deployCompose(params: DeployComposeParams): Promise<void> {
+    await this.mutation<unknown>("compose.deploy", params);
+  }
+
+  async redeployCompose(composeId: string, title?: string): Promise<void> {
+    await this.mutation<unknown>("compose.redeploy", { composeId, title });
+  }
+
+  async cancelComposeDeployment(composeId: string): Promise<void> {
+    await this.mutation<unknown>("compose.cancelDeployment", { composeId });
+  }
+
+  /**
+   * Delete a compose stack. `deleteVolumes` defaults to false in Dokploy, which
+   * would leave the stack's named volumes behind after a teardown — so teardown
+   * must pass true explicitly.
+   */
+  async deleteCompose(composeId: string, deleteVolumes = false): Promise<void> {
+    await this.mutation<unknown>("compose.delete", { composeId, deleteVolumes });
+  }
+
+  /**
+   * A compose stack's deployment records. Mirrors {@link listDeployments} but
+   * hits `deployment.allByCompose` — `deployment.all` takes an applicationId
+   * and would reject a composeId. Best-effort: [] on any error.
+   */
+  async listComposeDeployments(composeId: string): Promise<DokployDeployment[]> {
+    try {
+      const rows = await this.query<DokployDeployment[]>("deployment.allByCompose", { composeId });
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Domains registered against a compose stack (any of its services). */
+  async listComposeDomains(composeId: string): Promise<DokployDomain[]> {
+    try {
+      const rows = await this.query<DokployDomain[]>("domain.byComposeId", { composeId });
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Whether a compose stack still exists. Mirrors {@link applicationExists}:
+   * `compose.one` 404s ("Compose not found") once it is gone, so a throw reads
+   * as "no longer there". Used to detect a stale mapping before reusing its id,
+   * and by teardown to VERIFY a delete took effect.
+   */
+  async composeExists(composeId: string): Promise<boolean> {
+    if (!composeId) return false;
+    try {
+      const compose = await this.getCompose(composeId);
+      return Boolean(compose?.composeId);
+    } catch {
+      return false;
+    }
   }
 
   // ─── Domains ───────────────────────────────────────────────────
