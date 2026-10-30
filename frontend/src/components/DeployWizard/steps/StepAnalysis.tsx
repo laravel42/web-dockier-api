@@ -20,6 +20,34 @@ const SERVICE_DISPLAY_NAMES: Record<string, string> = {
   broadcasting: "WebSocket / Broadcasting",
 };
 
+/**
+ * What the compose file means for this deploy, in one sentence.
+ *
+ * Says what WILL happen rather than inviting the user in unconditionally. A
+ * stack whose public service cannot be reached deploys fine but gets no URL,
+ * and promising "deploy the whole stack together" to someone who is about to
+ * get no domain is the kind of half-truth that costs an afternoon.
+ */
+function composeSummary(compose: NonNullable<RepoAnalysis["compose"]>): string {
+  const count = compose.services.filter((s) => !s.buildOnly).length;
+  const services = `${count} ${count === 1 ? "service" : "services"}`;
+  const ownDb = compose.declaresDatabase ? ", including its own database" : "";
+  const routable = compose.services.some((s) => !s.buildOnly && s.routable);
+
+  if (!routable) {
+    return (
+      `It declares ${services}${ownDb}. You can deploy it with "Docker Compose" in the next step, ` +
+      `but nothing can be routed to it yet, so it will run without a public URL.`
+    );
+  }
+
+  const entry = compose.entryService
+    ? ` The domain would route to "${compose.entryService}"${compose.entryPort ? ` on port ${compose.entryPort}` : ""}.`
+    : " You will choose which service gets the domain.";
+
+  return `It declares ${services}${ownDb}. Choose "Docker Compose" in the next step to deploy the whole stack together.${entry}`;
+}
+
 export default function StepAnalysis({ state, analysis, analysisLoading, analysisError, detectionHints, onChange, onDockerfileChoice }: {
   state: WizardState;
   analysis: RepoAnalysis | null;
@@ -60,6 +88,13 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
   const autoConfiguredServices = analysis.detectedServices.filter(
     (svc) => AUTO_CONFIGURED_SERVICES.has(svc.type)
   );
+
+  // A compose file this repo could actually be deployed from. Several
+  // statements on this page are only true of a single-container deploy, so they
+  // are qualified when this is set.
+  const deployableCompose = analysis.compose && analysis.compose.problems.length === 0
+    ? analysis.compose
+    : null;
 
   // Build deployment requirements from aiAnalysis flags + auto-configured services
   const deployRequirements: Array<{ icon: ComponentType<SVGProps<SVGSVGElement>>; label: string }> = [];
@@ -131,13 +166,11 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
             Fix the compose file and re-run the analysis, or deploy a single service instead.
           </Alert>
         ) : (
-          <Alert variant="info">
+          <Alert variant={analysis.compose.warnings.length > 0 ? "warning" : "info"}>
             <span className="font-semibold">
               Docker Compose file found ({analysis.compose.path}).
             </span>{" "}
-            It declares {analysis.compose.services.filter((s) => !s.buildOnly).length} services
-            {analysis.compose.declaresDatabase ? ", including its own database" : ""}. Choose
-            &ldquo;Docker Compose&rdquo; in the next step to deploy the whole stack together.
+            {composeSummary(analysis.compose)}
             {analysis.compose.warnings.length > 0 && ` ${analysis.compose.warnings.join(" ")}`}
           </Alert>
         )
@@ -156,8 +189,12 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
             <div className="flex items-start gap-2 min-w-0">
               <DockerfileIcon className="size-4 text-primary-500 mt-0.5 shrink-0" />
               <div className="text-xs text-text-secondary">
-                <span className="font-semibold text-text">Dockerfile detected.</span>{" "}
-                Choose how your image is built.
+                <span className="font-semibold text-text">
+                  {deployableCompose ? "Dockerfile detected (single-service deploys only)." : "Dockerfile detected."}
+                </span>{" "}
+                {deployableCompose
+                  ? "Choose how your image is built. A Docker Compose deploy ignores this — each service builds from its own build entry."
+                  : "Choose how your image is built."}
               </div>
             </div>
             <div className="flex rounded-md overflow-hidden border border-border shrink-0">
@@ -250,7 +287,16 @@ export default function StepAnalysis({ state, analysis, analysisLoading, analysi
 
       {provisionableServices.length === 0 && deployRequirements.length === 0 && (
         <div className="rounded-lg bg-secondary-50 p-4 text-center">
-          <p className="text-sm text-text-muted">No additional services detected. Your app will be deployed as a standalone container.</p>
+          <p className="text-sm text-text-muted">
+            {/* "standalone container" is flatly untrue when the repo ships a
+                compose file: that stack runs several containers and brings its
+                own backing services, which is why nothing was detected to
+                provision. Stating it unconditionally contradicted the compose
+                message directly above it. */}
+            {deployableCompose
+              ? "No services need provisioning — the compose file above declares everything this stack runs."
+              : "No additional services detected. Your app will be deployed as a standalone container."}
+          </p>
         </div>
       )}
 

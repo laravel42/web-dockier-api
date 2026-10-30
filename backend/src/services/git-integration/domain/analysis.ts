@@ -242,10 +242,33 @@ export function parseDbEngineFromEnvExample(configFiles: Record<string, string>)
   return undefined;
 }
 
+/**
+ * Whether the repo has a Dockerfile a deploy could actually build from.
+ *
+ * ONLY the repo ROOT counts. Dokploy's `dockerfile` build type is configured
+ * with `dockerfile: "./Dockerfile"` and context `./` (see `configure-app`), so
+ * a Dockerfile anywhere else cannot be used by that path.
+ *
+ * This was `files.some(f => /Dockerfile/i.test(f))` — ANY path *containing*
+ * "Dockerfile". A monorepo of containerised plugins reported `hasDocker: true`
+ * from 96 `plugins/<name>/Dockerfile` entries with none at the root, so the
+ * wizard offered "Use my Dockerfile" for a file that does not exist. The deploy
+ * pipeline was unaffected (`resolve-runtime` checks `files.exists("Dockerfile")`
+ * and its verdict wins over `event.hasDocker`), so the damage was confined to
+ * the UI — but it presented a choice that could not be honoured.
+ *
+ * Exact match, not a suffix: `Dockerfile.prod` and `my.Dockerfile` are not the
+ * file the build type points at either. Case-sensitive, because Docker itself
+ * is on a case-sensitive filesystem and `dockerfile` would not be found.
+ */
+export function hasRootDockerfile(files: string[]): boolean {
+  return files.some((file) => file.replace(/^\.\//, "") === "Dockerfile");
+}
+
 export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef): Promise<RepoAnalysisResult> {
   const files = await getRepoFileTree(connection, ref);
   const techStack = detectTechStack(files);
-  const hasDocker = files.some((file) => /Dockerfile/i.test(file));
+  const hasDocker = hasRootDockerfile(files);
   const hasCi = files.some((file) => /\.github\/workflows\/|\.gitlab-ci\.yml|Jenkinsfile|\.circleci/i.test(file));
 
   const configFiles: Record<string, string> = {};

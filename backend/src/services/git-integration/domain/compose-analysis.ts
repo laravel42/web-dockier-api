@@ -15,6 +15,7 @@
 import {
   parseCompose,
   requiredVariables,
+  DOKPLOY_NETWORK,
   type ComposeService,
   type ParsedCompose,
 } from "../../../lib/compose/parse.js";
@@ -125,9 +126,17 @@ export async function analyzeComposeRepo(
         // A routable entry service is what makes the domain work at all, so an
         // unroutable one is called out here rather than discovered at deploy
         // time when the URL Bad Gateways.
-        ...(entry && !isRoutable(entry)
+        //
+        // Suppressed when parseCompose already reported that NOTHING is on the
+        // network: both warnings would then describe the same single fact, and
+        // the parse one already names the fix. Only worth saying when some
+        // OTHER service is on the network and the chosen one is not — which is
+        // a genuinely different problem, and the user's to resolve by choosing
+        // differently.
+        ...(entry && !isRoutable(entry) && someServiceIsRoutable(parsed)
           ? [
-              `Service "${entry.name}" is not on the "dokploy-network" network, so no domain can be routed to it.`,
+              `Service "${entry.name}" is not on the "${DOKPLOY_NETWORK}" network, so no domain can be routed to it. ` +
+              `Choose a service that is, or add the network to this one.`,
             ]
           : []),
       ],
@@ -141,6 +150,11 @@ export async function analyzeComposeRepo(
     );
     return null;
   }
+}
+
+/** Whether ANY runnable service is attached to Dokploy's network. */
+function someServiceIsRoutable(parsed: ParsedCompose): boolean {
+  return parsed.services.some((s) => !s.buildOnly && isRoutable(s));
 }
 
 /**
