@@ -1,11 +1,12 @@
 import type { DeployWizardProps } from "./types";
-import { STEPS, PROVIDER_REGIONS } from "./constants";
+import { STEP, STEPS, PROVIDER_REGIONS } from "./constants";
 import { useDeployWizard } from "./useDeployWizard";
 import Modal from "../Modal";
 import Button from "../ui/Button";
 import Stepper from "./steps/Stepper";
 import StepProvider from "./steps/StepProvider";
 import StepAnalysis from "./steps/StepAnalysis";
+import StepTarget from "./steps/StepTarget";
 import StepEnvironment from "./steps/StepEnvironment";
 import StepDeploy from "./steps/StepDeploy";
 import RocketIcon from "../icons/outlined/RocketIcon";
@@ -26,13 +27,13 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     <Modal
       open={open}
       onClose={() => { if (!isDeploying) onClose(); }}
-      title={step === 3 ? "Deploying…" : <span className="inline-flex items-center gap-1.5">Deploy —<StepIcon className="size-4" />{STEPS[step].label}</span>}
+      title={step === STEP.DEPLOY ? "Deploying…" : <span className="inline-flex items-center gap-1.5">Deploy —<StepIcon className="size-4" />{STEPS[step].label}</span>}
       size="xl"
     >
       <Stepper current={step} steps={STEPS} />
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {step === 0 && (
+        {step === STEP.PROVIDER && (
           <StepProvider
             state={state}
             providers={providers}
@@ -44,7 +45,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             }))}
           />
         )}
-        {step === 1 && (
+        {step === STEP.ANALYSIS && (
           <StepAnalysis
             state={state}
             analysis={analysis}
@@ -62,29 +63,34 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             }}
           />
         )}
-        {step === 2 && (
-          <StepEnvironment
+        {step === STEP.TARGET && (
+          <StepTarget
             state={state}
-            templateId={project.sourceType === "template" ? project.template : undefined}
             analysis={analysis}
-            onChange={(env, plan) => setState(prev => ({ ...prev, environment: env, selectedPlan: plan }))}
-            onRegionChange={(region) => setState(prev => ({ ...prev, tofuRegion: region }))}
             onStrategyChange={(strategy) => setState(prev => ({ ...prev, deployStrategy: strategy }))}
             onComposeChange={(compose) => setState(prev => ({ ...prev, compose }))}
           />
         )}
-        {step === 3 && <StepDeploy state={state} />}
+        {step === STEP.PLAN && (
+          <StepEnvironment
+            state={state}
+            templateId={project.sourceType === "template" ? project.template : undefined}
+            onChange={(env, plan) => setState(prev => ({ ...prev, environment: env, selectedPlan: plan }))}
+            onRegionChange={(region) => setState(prev => ({ ...prev, tofuRegion: region }))}
+          />
+        )}
+        {step === STEP.DEPLOY && <StepDeploy state={state} />}
       </div>
 
       {/* Errors */}
-      {deployError && step === 3 && (
+      {deployError && step === STEP.DEPLOY && (
         <div className="mt-3 rounded-lg bg-danger-500/10 border border-danger-500/20 px-3 py-2 text-sm text-danger-500">{deployError}</div>
       )}
 
       {/* Navigation */}
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
         <div>
-          {step > 0 && step < 4 && !isDeploying && (
+          {step > STEP.PROVIDER && step <= STEP.DEPLOY && !isDeploying && (
             <Button
               variant="outline"
               size="lg"
@@ -107,12 +113,12 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               {cancellingDeploy ? "Cancelling…" : "Cancel Deploy"}
             </button>
           )}
-          {step === 3 && isFinished && (
+          {step === STEP.DEPLOY && isFinished && (
             <Button variant="outline" size="lg" onClick={onClose}>
               Close
             </Button>
           )}
-          {step === 3 && state.deployStatus === "failed" && (
+          {step === STEP.DEPLOY && state.deployStatus === "failed" && (
             <Button
               variant="primary"
               size="lg"
@@ -122,7 +128,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               Retry
             </Button>
           )}
-          {step < 2 && !isDeploying && (
+          {step < STEP.PLAN && !isDeploying && (
             <Button
               variant="primary"
               size="lg"
@@ -133,7 +139,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               <ArrowRightIcon className="size-4" />
             </Button>
           )}
-          {step === 2 && !isDeploying && (
+          {step === STEP.PLAN && !isDeploying && (
             <Button
               variant="primary"
               size="lg"

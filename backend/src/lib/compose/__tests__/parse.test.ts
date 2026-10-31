@@ -250,6 +250,104 @@ describe("parseCompose — ports", () => {
   });
 });
 
+describe("parseCompose — host ports Traefik already owns", () => {
+  /**
+   * The failure this exists to prevent, observed on a real deploy: a stack
+   * pulled Postgres and Redis, built four application images, then died with
+   * "Bind for :::80 failed: port is already allocated" because its web service
+   * published host port 80 — which Dokploy's Traefik owns on every server it
+   * manages. Fifteen minutes to learn a one-line compose problem.
+   */
+  const withPorts = (portsYaml: string) =>
+    parseCompose(`services:\n  web:\n    image: nginx\n    ports:\n${portsYaml}`, "");
+
+  it("reports a service binding host port 80", () => {
+    const parsed = withPorts('      - "80:80"\n');
+    expect(parsed.problems).toHaveLength(1);
+    expect(parsed.problems[0]).toContain('"web"');
+    expect(parsed.problems[0]).toContain("80");
+    expect(parsed.problems[0]).toContain(DOKPLOY_NETWORK);
+  });
+
+  it("reports host port 443", () => {
+    expect(withPorts('      - "443:8443"\n').problems[0]).toContain("443");
+  });
+
+  it("reports both when a service binds 80 and 443", () => {
+    const parsed = withPorts('      - "80:80"\n      - "443:443"\n');
+    expect(parsed.problems).toHaveLength(1);
+    expect(parsed.problems[0]).toMatch(/80 and 443/);
+  });
+
+  it("reads the host port from the ip:host:container form", () => {
+    expect(withPorts('      - "0.0.0.0:80:3000"\n').problems).toHaveLength(1);
+  });
+
+  it("reads the host port from the long form", () => {
+    expect(
+      withPorts("      - target: 3000\n        published: 80\n").problems,
+    ).toHaveLength(1);
+  });
+
+  it("does NOT report a bare container port", () => {
+    // `ports: - "80"` publishes container 80 to an arbitrary free host port,
+    // so it cannot collide. Warning here would flag correct files.
+    const parsed = withPorts('      - "80"\n');
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.services[0].publishedPorts).toEqual([]);
+    expect(parsed.services[0].ports).toEqual([80]);
+  });
+
+  it("does not report an unreserved host port", () => {
+    // 8080 on the host is the user's business; only Traefik's ports collide.
+    expect(withPorts('      - "8080:80"\n').problems).toEqual([]);
+  });
+
+  it("does not report a CONTAINER port of 80 behind another host port", () => {
+    // The overwhelmingly common correct shape, and the one a naive "does this
+    // file mention 80" check would reject.
+    const parsed = withPorts('      - "8080:80"\n');
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.services[0].ports).toEqual([80]);
+    expect(parsed.services[0].publishedPorts).toEqual([8080]);
+  });
+
+  it("names every offending service", () => {
+    const parsed = parseCompose(
+      `services:
+  web:
+    image: nginx
+    ports: ["80:80"]
+  proxy:
+    image: caddy
+    ports: ["443:443"]
+  api:
+    image: api
+    ports: ["3000"]
+`,
+      "",
+    );
+    expect(parsed.problems).toHaveLength(2);
+    expect(parsed.problems.join(" ")).toContain('"web"');
+    expect(parsed.problems.join(" ")).toContain('"proxy"');
+    expect(parsed.problems.join(" ")).not.toContain('"api"');
+  });
+
+  it("reads the first port of a published range", () => {
+    expect(withPorts('      - "80-82:80-82"\n').problems).toHaveLength(1);
+  });
+});
+
+describe("parseCompose — berry publishes no host ports", () => {
+  it("reports no port problems for a Traefik-routed stack", () => {
+    // berry routes entirely through dokploy-network and Traefik labels, which
+    // is the shape that works. Guards against the check firing on correct files.
+    const parsed = parseCompose(berryYaml, BERRY_DIR, BERRY_TREE);
+    expect(parsed.problems).toEqual([]);
+    for (const svc of parsed.services) expect(svc.publishedPorts).toEqual([]);
+  });
+});
+
 describe("scanVariables — the three interpolation forms", () => {
   it("classifies required, defaulted and bare references", () => {
     const vars = scanVariables("a: ${REQ:?must be set}\nb: ${OPT:-fallback}\nc: ${PLAIN}\nd: $SHORT\n");

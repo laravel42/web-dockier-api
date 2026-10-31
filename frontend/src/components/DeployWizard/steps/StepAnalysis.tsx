@@ -29,23 +29,38 @@ const SERVICE_DISPLAY_NAMES: Record<string, string> = {
  * get no domain is the kind of half-truth that costs an afternoon.
  */
 function composeSummary(compose: NonNullable<RepoAnalysis["compose"]>): string {
-  const count = compose.services.filter((s) => !s.buildOnly).length;
+  const count = compose.services.filter((s) => s.startsByDefault).length;
   const services = `${count} ${count === 1 ? "service" : "services"}`;
   const ownDb = compose.declaresDatabase ? ", including its own database" : "";
-  const routable = compose.services.some((s) => !s.buildOnly && s.routable);
+  const routable = compose.services.some((s) => s.startsByDefault && s.routable);
+
+  // The step is named, not called "the next step": the stepper above labels it
+  // "Plan", and a reader on the Analysis step has no way to know that the
+  // strategy cards live there.
+  const where = `pick "Docker Compose" on the Plan step`;
 
   if (!routable) {
     return (
-      `It declares ${services}${ownDb}. You can deploy it with "Docker Compose" in the next step, ` +
-      `but nothing can be routed to it yet, so it will run without a public URL.`
+      `It declares ${services}${ownDb}. To deploy it as one stack, ${where} — but no service is ` +
+      `attached to Dokploy's network yet, so the stack would run without a public address.`
     );
   }
 
-  const entry = compose.entryService
-    ? ` The domain would route to "${compose.entryService}"${compose.entryPort ? ` on port ${compose.entryPort}` : ""}.`
-    : " You will choose which service gets the domain.";
+  if (!compose.entryService) {
+    return (
+      `It declares ${services}${ownDb}. To deploy it as one stack, ${where}; ` +
+      `you then choose which service your domain points at.`
+    );
+  }
 
-  return `It declares ${services}${ownDb}. Choose "Docker Compose" in the next step to deploy the whole stack together.${entry}`;
+  const port = compose.entryPort
+    ? `, on port ${compose.entryPort}`
+    : " — you will need to supply the port it listens on";
+
+  return (
+    `It declares ${services}${ownDb}. To deploy it as one stack, ${where}. ` +
+    `Your domain will point at the "${compose.entryService}" service${port}.`
+  );
 }
 
 export default function StepAnalysis({ state, analysis, analysisLoading, analysisError, detectionHints, onChange, onDockerfileChoice }: {

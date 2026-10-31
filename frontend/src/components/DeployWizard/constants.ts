@@ -1,11 +1,31 @@
-import { CloudIcon, SearchIcon, ClipboardListIcon, RocketIcon } from "lucide-react";
+import { CloudIcon, SearchIcon, ClipboardListIcon, LayersIcon, RocketIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
 export type StepDef = { label: string; icon: ComponentType<SVGProps<SVGSVGElement>> };
 
+/**
+ * Named step indices.
+ *
+ * The wizard's navigation, titles, button states and per-step validation all
+ * key off the step number, in a dozen places across DeployWizard.tsx and
+ * useDeployWizard.ts. Those were literals, so inserting a step meant finding
+ * and shifting every one of them correctly — the kind of edit that silently
+ * leaves one behind. Naming them makes an insertion a change to this list.
+ */
+export const STEP = {
+  PROVIDER: 0,
+  ANALYSIS: 1,
+  /** What KIND of deploy: server, static site, or the repo's compose stack. */
+  TARGET: 2,
+  /** How big and where: environment, region, instance size. */
+  PLAN: 3,
+  DEPLOY: 4,
+} as const;
+
 export const STEPS: StepDef[] = [
   { label: "Provider", icon: CloudIcon },
   { label: "Analysis", icon: SearchIcon },
+  { label: "Target", icon: LayersIcon },
   { label: "Plan", icon: ClipboardListIcon },
   { label: "Deploy", icon: RocketIcon },
 ];

@@ -118,6 +118,14 @@ export interface ComposeServiceSummary {
   routable: boolean;
   /** Exists only to build an image; never runs, never a domain target. */
   buildOnly: boolean;
+  /** Behind a `profiles:` gate, so a plain `docker compose up` skips it. */
+  profiled: boolean;
+  /**
+   * Whether this service actually runs on a deploy. Prefer this over checking
+   * `buildOnly` — a profiled service does not run either, and filtering on one
+   * condition silently counts and offers containers that never start.
+   */
+  startsByDefault: boolean;
   image?: string;
   /** Recognised database/cache engine, when it is one. */
   engine?: string;

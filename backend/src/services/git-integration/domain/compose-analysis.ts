@@ -15,6 +15,7 @@
 import {
   parseCompose,
   requiredVariables,
+  runnableServices,
   DOKPLOY_NETWORK,
   type ComposeService,
   type ParsedCompose,
@@ -35,6 +36,20 @@ export interface ComposeServiceSummary {
   routable: boolean;
   /** Exists only to build an image; never runs. */
   buildOnly: boolean;
+  /**
+   * Behind a `profiles:` gate, so a plain `docker compose up` does not start
+   * it. Dokploy runs the plain form.
+   */
+  profiled: boolean;
+  /**
+   * Whether this service actually runs on a deploy — neither build-only nor
+   * profiled.
+   *
+   * Computed here rather than left to each consumer: "will this run" is two
+   * conditions now and every call site that remembers only one is a bug. The
+   * UI counts and picks from this field alone.
+   */
+  startsByDefault: boolean;
   /** The image it runs, when it does not build one. */
   image?: string;
   /** Recognised database/cache engine, when it is one. */
@@ -154,7 +169,7 @@ export async function analyzeComposeRepo(
 
 /** Whether ANY runnable service is attached to Dokploy's network. */
 function someServiceIsRoutable(parsed: ParsedCompose): boolean {
-  return parsed.services.some((s) => !s.buildOnly && isRoutable(s));
+  return runnableServices(parsed).some((s) => isRoutable(s));
 }
 
 /**
@@ -181,6 +196,8 @@ async function summarise(
       ),
       routable: isRoutable(service),
       buildOnly: service.buildOnly,
+      profiled: service.profiles.length > 0,
+      startsByDefault: !service.buildOnly && service.profiles.length === 0,
       image: service.image,
       engine: engineByService.get(service.name),
     })),

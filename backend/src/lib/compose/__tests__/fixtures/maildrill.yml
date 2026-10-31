@@ -1,0 +1,91 @@
+# Reduced from a real stack (laravel42/web-maildrill-astro). Keeps only the
+# parts that exercised the parser: a YAML anchor used as a `build:` alias, a
+# one-shot migrate service, a DESTRUCTIVE seeder behind `profiles:`, three APIs
+# publishing their own host ports, and a web service binding host port 80 —
+# which is what made the real deploy fail after everything had been built.
+name: maildrill
+
+x-app-build: &app-build
+  context: .
+  args:
+    API_BASE_URL: http://product-api:3001
+
+x-backend-env: &backend-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://maildrill:maildrill@postgres:5432/maildrill
+  APP_URL: ${PUBLIC_SITE_URL:-http://localhost}
+
+services:
+  postgres:
+    image: postgres:18.1-alpine
+    environment:
+      POSTGRES_PASSWORD: maildrill
+    volumes:
+      - pg18:/var/lib/postgresql
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+
+  migrate:
+    image: maildrill-app
+    build: *app-build
+    command: ['pnpm', '--dir', 'workers', 'db:migrate']
+    environment:
+      <<: *backend-env
+    restart: 'no'
+
+  seed:
+    image: maildrill-app
+    build: *app-build
+    profiles: ['seed']
+    command: ['pnpm', '--dir', 'workers', 'db:seed']
+    environment:
+      <<: *backend-env
+      NODE_ENV: development
+    restart: 'no'
+
+  product-api:
+    image: maildrill-app
+    build: *app-build
+    environment:
+      <<: *backend-env
+    ports:
+      - '3001:3001'
+
+  messaging-api:
+    image: maildrill-app
+    build: *app-build
+    environment:
+      <<: *backend-env
+    ports:
+      - '3002:3002'
+
+  email-builder-api:
+    image: maildrill-app
+    build: *app-build
+    environment:
+      <<: *backend-env
+    ports:
+      - '${EB_HOST_PORT:-3003}:3003'
+
+  workers:
+    image: maildrill-app
+    build: *app-build
+    environment:
+      <<: *backend-env
+
+  web:
+    image: maildrill-app
+    build: *app-build
+    environment:
+      NODE_ENV: production
+      PORT: '4321'
+      AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
+    ports:
+      - '80:4321'
+
+volumes:
+  pg18:
+  redisdata:

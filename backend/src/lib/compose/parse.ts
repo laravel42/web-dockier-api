@@ -38,6 +38,17 @@ export interface ComposeService {
    * Gateways every request, so it is covered by its own tests.
    */
   ports: number[];
+  /**
+   * HOST ports the service explicitly binds, i.e. the LEFT side of
+   * "8080:3000". Empty for `ports: - "3000"`, which publishes to an arbitrary
+   * free host port and cannot collide.
+   *
+   * Tracked because a Dokploy server already runs Traefik on 80 and 443, so a
+   * compose file binding either fails at container start with
+   * "Bind for :::80 failed: port is already allocated" — after the whole stack
+   * has been pulled and built.
+   */
+  publishedPorts: number[];
   /** Ports from `expose:` (container-only, never published to the host). */
   exposed: number[];
   /** Networks the service joins. Absent `networks:` means the default one, not ours. */
@@ -53,6 +64,19 @@ export interface ComposeService {
    * Never a domain target, never counted as part of the running stack.
    */
   buildOnly: boolean;
+  /**
+   * `profiles:` the service belongs to.
+   *
+   * A service with any profile is NOT started by a plain `docker compose up` —
+   * only by `up --profile <name>`. Dokploy runs the plain form, so a profiled
+   * service never runs: counting it inflates the service list, and offering it
+   * as a domain target points Traefik at a container that will not exist.
+   *
+   * This is not hypothetical. A real stack guards a destructive database
+   * seeder behind `profiles: ['seed']` precisely so it cannot ride along with
+   * a normal `up`.
+   */
+  profiles: string[];
 }
 
 /** How a `${VAR}` reference behaves when the variable is unset. */
@@ -82,6 +106,15 @@ export interface ParsedCompose {
 
 /** The external network Dokploy's Traefik routes through. */
 export const DOKPLOY_NETWORK = "dokploy-network";
+
+/**
+ * Host ports Dokploy's Traefik already binds on every server it manages.
+ *
+ * A compose file publishing either cannot start: Docker reports
+ * "Bind for :::80 failed: port is already allocated". Nothing in the stack is
+ * at fault — the port simply is not available on this kind of host.
+ */
+const TRAEFIK_PORTS = new Set([80, 443]);
 
 /**
  * Parse a compose file.
@@ -151,6 +184,22 @@ export function parseCompose(
     }
   }
 
+  // A Dokploy server runs Traefik on 80 and 443. A compose file that binds
+  // either gets "Bind for :::80 failed: port is already allocated" at container
+  // start — AFTER every image has been pulled and built, which is the most
+  // expensive possible moment to find out. This is a PROBLEM, not a warning:
+  // the deploy cannot succeed, and the fix is a one-line compose change.
+  for (const svc of services) {
+    const reserved = svc.publishedPorts.filter((port) => TRAEFIK_PORTS.has(port));
+    if (reserved.length === 0) continue;
+    problems.push(
+      `Service "${svc.name}" publishes host port ${reserved.join(" and ")}, which Dokploy's reverse proxy ` +
+      `already uses. Remove the host side of the mapping (use "${reserved[0] === 443 ? 443 : 80}" instead of ` +
+      `"${reserved[0]}:${reserved[0]}") and attach the service to the "${DOKPLOY_NETWORK}" network — the proxy ` +
+      `routes your domain to it without a host port.`,
+    );
+  }
+
   const externalNetworks = Object.entries(asRecord(root?.networks) ?? {})
     .filter(([, cfg]) => asRecord(cfg)?.external === true)
     .map(([name]) => name);
@@ -159,7 +208,7 @@ export function parseCompose(
   // We warn rather than block: an internal-only stack is a legitimate thing to
   // deploy, and rewriting the user's file would make Dokploy's own
   // getConvertedCompose useless as a diagnostic.
-  const runnable = services.filter((s) => !s.buildOnly);
+  const runnable = services.filter((s) => !s.buildOnly && s.profiles.length === 0);
   if (runnable.length > 0 && !runnable.some((s) => s.networks.includes(DOKPLOY_NETWORK))) {
     warnings.push(
       `No service joins the "${DOKPLOY_NETWORK}" network, so Traefik cannot route a domain to this stack. ` +
@@ -188,13 +237,28 @@ function parseService(name: string, raw: Record<string, unknown>, composeDir: st
     image: typeof raw.image === "string" ? raw.image : undefined,
     build: parseBuild(raw.build, composeDir),
     ports: parsePorts(raw.ports),
+    publishedPorts: parsePublishedPorts(raw.ports),
     exposed: toPortList(raw.expose),
     networks: parseNetworks(raw.networks),
     labels,
     traefikPort: traefikServicePort(labels),
     hasTraefikRouter: labels.some((l) => /^traefik\.http\.routers\..+\.rule=/.test(l)),
+    profiles: Array.isArray(raw.profiles)
+      ? raw.profiles.filter((p): p is string => typeof p === "string")
+      : [],
     buildOnly: isBuildOnly(raw),
   };
+}
+
+/**
+ * Services a plain `docker compose up` actually starts.
+ *
+ * Excludes build-only pseudo-services and anything behind a `profiles:` gate.
+ * This is the set that matters for counting the stack and for choosing a
+ * domain target — Dokploy runs `up` without `--profile`.
+ */
+export function runnableServices(parsed: ParsedCompose): ComposeService[] {
+  return parsed.services.filter((s) => !s.buildOnly && s.profiles.length === 0);
 }
 
 /**
@@ -297,6 +361,45 @@ function parsePorts(raw: unknown): number[] {
     // A range ("3000-3002") publishes several; the first is what a single
     // Traefik route can target.
     const port = toPort(last.split("-")[0]);
+    if (port !== undefined) out.push(port);
+  }
+
+  return out;
+}
+
+/**
+ * HOST ports a service explicitly binds — the left side of "8080:3000".
+ *
+ *   "8080:3000"            → 8080
+ *   "127.0.0.1:8080:3000"  → 8080   (middle segment)
+ *   "3000"                 → none   (arbitrary free host port, cannot collide)
+ *   {published: 8080, …}   → 8080   (long form)
+ *   "8000-8002:3000-3002"  → 8000   (first of the range)
+ *
+ * The distinction matters: only an EXPLICIT host port can collide with
+ * Traefik. Treating a bare "3000" as a host binding would warn on files that
+ * are perfectly fine.
+ */
+function parsePublishedPorts(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  const out: number[] = [];
+
+  for (const entry of raw) {
+    const obj = asRecord(entry);
+    if (obj) {
+      const published = toPort(String(obj.published ?? "").split("-")[0]);
+      if (published !== undefined) out.push(published);
+      continue;
+    }
+    // A bare number publishes the CONTAINER port to an arbitrary host port.
+    if (typeof entry !== "string") continue;
+
+    const segments = entry.split("/")[0].split(":");
+    // One segment is the bare container-port form — no host binding.
+    if (segments.length < 2) continue;
+    // Two segments: host:container. Three: ip:host:container.
+    const hostSegment = segments[segments.length - 2];
+    const port = toPort(hostSegment.split("-")[0]);
     if (port !== undefined) out.push(port);
   }
 

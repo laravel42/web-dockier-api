@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { deployApi } from "@/services/api";
 import type { WizardState, RepoAnalysis, Provider } from "./types";
-import { INITIAL_WIZARD_STATE, getDefaultProviderSelection } from "./constants";
+import { INITIAL_WIZARD_STATE, STEP, getDefaultProviderSelection } from "./constants";
 import { getPlans } from "./plans";
 import { detectServiceModes } from "./envDetection";
 import { isServerOnly } from "./serverOnly";
@@ -61,6 +61,8 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
   const prevOpenRef = useRef(false);
   const configLoadedRef = useRef(false);
   const analysisSyncedKeyRef = useRef<string | null>(null);
+  /** Compose path already used to pre-select the Docker Compose target. */
+  const composeDefaultedForRef = useRef<string | null>(null);
   const cleanupStandardDeployRef = useRef(cleanupStandardDeploy);
   cleanupStandardDeployRef.current = cleanupStandardDeploy;
 
@@ -74,13 +76,14 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     if (justClosed) {
       configLoadedRef.current = false;
       analysisSyncedKeyRef.current = null;
+      composeDefaultedForRef.current = null;
       cleanupStandardDeployRef.current();
       return;
     }
 
     if (!justOpened) return;
 
-    setStep(0);
+    setStep(STEP.PROVIDER);
     setDeployError("");
     configLoadedRef.current = false;
     analysisSyncedKeyRef.current = null;
@@ -157,6 +160,26 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     setState((prev) => (prev.deployStrategy === "static" ? { ...prev, deployStrategy: "vps" } : prev));
   }, [open, analysis]);
 
+  // ─── Default to Docker Compose when the repo ships one ───────────
+  //
+  // A repository with a compose file has already stated how it expects to run,
+  // and that is a stronger signal than any single-container inference — so it
+  // becomes the pre-selected target rather than an option to discover.
+  //
+  // Applied ONCE per analysed compose file, tracked by path: without the ref
+  // this effect would re-assert "compose" on every analysis-identity change
+  // and silently undo a user who deliberately switched to Server. The ref is
+  // cleared when the wizard closes (see the reset block above), so reopening
+  // offers the default again.
+  useEffect(() => {
+    if (!open || !analysis) return;
+    const compose = analysis.compose;
+    if (!compose || compose.problems.length > 0) return;
+    if (composeDefaultedForRef.current === compose.path) return;
+    composeDefaultedForRef.current = compose.path;
+    setState((prev) => ({ ...prev, deployStrategy: "compose" }));
+  }, [open, analysis]);
+
   // ─── Reset a stale "compose" selection ───────────────────────────
   //
   // Same class of bug as the static reset above: the Compose card is only
@@ -215,21 +238,26 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
 
   const canNext = (): boolean => {
     switch (step) {
-      case 0: return !!state.selectedProvider && !!state.selectedProviderId;
-      case 1: return !analysisLoading;
-      case 2: return state.selectedPlan >= 0;
+      case STEP.PROVIDER: return !!state.selectedProvider && !!state.selectedProviderId;
+      case STEP.ANALYSIS: return !analysisLoading;
+      // A compose deploy needs a public service and its port before it can
+      // attach a domain. Both are optional — a stack can legitimately run with
+      // no public address — so this does not block, it is only a reminder that
+      // the target is fully configured.
+      case STEP.TARGET: return true;
+      case STEP.PLAN: return state.selectedPlan >= 0;
       default: return false;
     }
   };
 
   const handleNext = async () => {
-    if (step === 2) {
+    if (step === STEP.PLAN) {
       // Plan → Deploy: start deploying immediately
-      setStep(3);
+      setStep(STEP.DEPLOY);
       startDeploy();
       return;
     }
-    if (step === 0) {
+    if (step === STEP.PROVIDER) {
       // After provider selection, detect service modes from analysis
       const serviceTypes = analysis?.detectedServices?.map(s => s.type) || [];
       if (serviceTypes.length > 0) {
@@ -246,15 +274,15 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
           return { ...prev, servicesModes: newModes, envDetectionHints: newHints };
         });
       }
-      setStep(1);
+      setStep(STEP.ANALYSIS);
       return;
     }
-    setStep(prev => Math.min(prev + 1, 3));
+    setStep(prev => Math.min(prev + 1, STEP.DEPLOY));
   };
 
   const handleBack = () => {
-    if (step === 3) return; // can't go back from deploy
-    setStep(prev => Math.max(prev - 1, 0));
+    if (step === STEP.DEPLOY) return; // can't go back from deploy
+    setStep(prev => Math.max(prev - 1, STEP.PROVIDER));
   };
 
   // ─── Cancel Deployment ─────────────────────────────────────────────

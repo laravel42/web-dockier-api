@@ -13,7 +13,7 @@
  * `EXPOSE` value in.
  */
 
-import { DOKPLOY_NETWORK, type ComposeService, type ParsedCompose } from "./parse.js";
+import { DOKPLOY_NETWORK, runnableServices, type ComposeService, type ParsedCompose } from "./parse.js";
 
 /** Service names that conventionally front a stack, lowest-priority fallback. */
 const FRONTEND_NAMES = ["web", "app", "frontend", "nginx", "caddy", "server", "www"];
@@ -36,7 +36,10 @@ const FRONTEND_NAMES = ["web", "app", "frontend", "nginx", "caddy", "server", "w
  * tier yields exactly one obvious answer, which means "ask the user".
  */
 export function pickEntryService(parsed: ParsedCompose): ComposeService | undefined {
-  const candidates = parsed.services.filter((s) => !s.buildOnly);
+  // Only services a plain `docker compose up` starts: a profiled service never
+  // runs under Dokploy, so routing a domain to it points Traefik at a
+  // container that will not exist.
+  const candidates = runnableServices(parsed);
   if (candidates.length === 0) return undefined;
 
   const onDokployNetwork = candidates.filter((s) => s.networks.includes(DOKPLOY_NETWORK));

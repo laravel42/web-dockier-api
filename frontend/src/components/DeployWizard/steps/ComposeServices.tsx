@@ -41,8 +41,13 @@ export default function ComposeServices({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compose.path]);
 
-  /** Services the user can actually route a domain to. */
-  const routable = compose.services.filter((s) => !s.buildOnly);
+  /**
+   * Services the user can actually route a domain to: the ones a plain
+   * `docker compose up` starts. Excludes build-only images and anything behind
+   * a `profiles:` gate — Dokploy never passes `--profile`, so a profiled
+   * service would be a domain pointed at a container that never exists.
+   */
+  const routable = compose.services.filter((s) => s.startsByDefault);
 
   return (
     <div className="flex flex-col gap-4">
