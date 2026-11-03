@@ -133,6 +133,7 @@ One nuance in the reported status: when the VM is terminated but a Dokploy-side 
 | GCE create fails on zone | Region has no `-b` zone and zone listing failed; check the account's zone availability. |
 | Compose deploy stops before anything is created, naming variables | The compose file marks them `${VAR:?…}`, which makes `docker compose` abort. Set them in the project's environment variables. |
 | Compose deploy succeeds but there is no URL | No public service or no container port is configured, or the chosen service is not on `dokploy-network`. No domain is attached rather than one pointed at a guessed port. |
+| Compose URL returns a plain-text `404 page not found` | That 404 is Traefik's, not the app's. The entry service's containers are running without Dokploy's Traefik labels, so no router matches the host. Redeploy the stack: the labels are written into the compose file at deploy time from the domains that exist then. |
 | Compose stack deploys but the domain returns Bad Gateway | The configured container port is not where that service listens. Dokploy writes it into the service's Traefik `loadbalancer.server.port` label verbatim; `compose.getConvertedCompose` shows the merged file. |
 | Compose teardown leaves the server behind | The stack delete did not take effect, so `server.remove` was skipped. Re-run the teardown — only the resources that failed are still tracked. |
 | Orphaned VM after delete | Teardown returned `partial` — check logs and remove the instance manually. |

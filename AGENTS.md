@@ -61,6 +61,7 @@ Cross-cutting behaviour configured on the Fastify factory in `backend/src/app.ts
 - **`trustProxy: 1`** — numeric on purpose. It trusts only the LAST hop of `X-Forwarded-For`, so a client cannot spoof its address by prepending entries (which `true` would allow). `1` is Railway's single proxy hop; raise it only if another proxy layer is added. Without it `request.ip` is the proxy's address for every caller and the IP-keyed `rateLimit()` in `shared/http/rate-limit.ts` collapses into one global bucket. Covered by tests that inject `x-forwarded-for`.
 - **Log redaction** — `shared/http/log-redaction.ts` provides `LOG_REDACT_PATHS` and `redactedReqSerializer`, wired into BOTH the Fastify request logger (`app.ts`) and the standalone worker logger (`shared/logger.ts`). Credential headers are censored and the `?token=` query param is masked, because the scan WebSocket route takes its JWT in the query string (browsers cannot set headers on a `WebSocket`) and Fastify logs full request URLs. Any new logger must reuse both exports.
 - **Security response headers** — an `onSend` hook in `shared/http/openapi.ts` sets `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and HSTS. Deliberately a hook rather than `@fastify/helmet`: four static headers do not justify the dependency. The `/docs` subtree is excluded so swagger-ui's own `staticCSP` applies, and an existing header is never clobbered. No CSP — this is a JSON API and a wrong policy would break the docs UI.
+- **Timeouts — there is no handler deadline.** `requestTimeout: 60_000` is Node's: it bounds how long the client has to send the COMPLETE request, not how long the handler may run. The `handlerTimeout` values on individual routes are **inert** — Fastify has no such route option and nothing here implements one, so a slow route runs to completion however long it takes. The consequence lands on the client: a long synchronous endpoint needs a generous timeout in `frontend/src/services/`, and the caller must treat its own timeout as "still running", not as a failure. The project teardown button did the opposite and reported a failed teardown for infrastructure that had in fact been deleted, inviting a retry against resources that were already gone (`pages/ProjectDetail/hooks/useInfraTeardown.ts` now handles `ApiError.isTimeout` explicitly).
 - **Request ids** — `requestIdHeader: "x-request-id"` with a `randomUUID()` fallback, so a trace started by the frontend or a load balancer survives the backend boundary. Fastify's default per-process counter restarted on every deploy and collided across split service instances. `request.id` flows into pg-boss as `correlationId` (see `shared/database/queue.ts`), so worker logs join up with the originating request.
 - **Health vs readiness** — `GET /healthz` is liveness and is a static literal; existing platform probes depend on its exact payload, so do not change it. `GET /readyz` is readiness and reports `isQueueReady()` (200 `ready` / 503 `degraded`), because `run-server.ts` tolerates a failed queue start by design and serves traffic anyway — a state `/healthz` cannot express. `/readyz` is intentionally NOT wired to a platform probe: failing closed would pull traffic from an instance that is still serving HTTP correctly.
 - **Job retries** — `createWorker` in `shared/database/queue.ts` sets `retryBackoff` with a 30s base delay. pg-boss defaults `retryDelay` to 0, which fired every attempt within seconds of the first and was useless against the failures that dominate here (rate-limited provider APIs, briefly-down dependencies). Exhausted jobs land in a dead-letter queue: `createWorker` defaults `deadLetter: true`, registering `<queueName>-dead` and pointing the queue at it with `updateQueue` (pg-boss's `createQueue` silently ignores a changed `deadLetter` on an existing queue). `cert-poll` opts out — its cron re-derives pending work every minute, so a failed sweep carries no state. There is deliberately no consumer on the dead-letter queues: a worker there would re-run work that already failed every attempt. Inspect with `select id, created_on, data from pgboss.job where name = '<queue>-dead'`; replay by re-sending that `data` to the original queue.
@@ -110,6 +111,16 @@ why — never a 3000 default. Resolution chain, first hit wins (`lib/compose/ent
 (the CONTAINER side of `8080:3000`) → `expose:` → the service's own Traefik loadbalancer label →
 `EXPOSE` in the service's build Dockerfile → ask the user.
 
+**The domain is registered BEFORE the deploy is triggered** (`stages/deploy-compose.ts`), the
+opposite of the application path, and this ordering is the feature. Compose routing is docker
+LABELS, which Dokploy bakes into the compose file it writes at `compose.deploy` time from the
+domains that exist then; a domain created afterwards is in the database and in
+`compose.getConvertedCompose` but not on the running containers, so Traefik has no router and the
+new URL answers its own plain-text `404 page not found`. The application path is right to resolve
+its URL afterwards — Dokploy writes application routing into a standalone Traefik dynamic-config
+file that takes effect without redeploying, and compose has no such file. A 404 with
+`Content-Type: text/plain` and 19 bytes is Traefik's, never the app's.
+
 **Entry-service choice is not a ports heuristic.** The reference repo publishes no ports at all.
 Order: on `dokploy-network` AND declaring no Traefik router of its own (a service that routes
 itself is already reachable and is not the front door) → on `dokploy-network` → has a published
@@ -151,10 +162,11 @@ nothing for a stack and would leave every host claimed by a deleted resource.
   `<appName>-<service>-N`; running a command means naming a service first, which the API does not
   express yet.
 
-**Status: no compose deploy has been run end to end.** The Dokploy API calls are verified against a
-live instance (create → update → `loadServices` → `domain.create` → delete, all confirmed), and
-`lib/compose/*` is tested against a real compose file checked in as a fixture. The pipeline itself
-has not been exercised against a real repository.
+**Status: one compose deploy has been run end to end** (2026-11-03, `laravel42/amedeusapp`, a
+single-service stack). The stack built, started and reported healthy; the URL served Traefik's 404
+because the domain was registered after the deploy, which is the ordering fixed above. Everything
+up to and including `compose.deploy` is now exercised against a real repository. Still unverified
+on a real repo: a multi-service stack, teardown, and the post-fix routing itself.
 
 ### Custom domains for static deployments
 

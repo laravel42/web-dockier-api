@@ -12,6 +12,8 @@
  *
  *  - The domain attaches to a NAMED service, so a stack with no resolved entry
  *    service or port gets no domain rather than a guessed one.
+ *  - The domain is registered BEFORE the deploy is triggered, because compose
+ *    routing is docker labels written into the compose file at deploy time.
  *  - There is no retry-with-AI loop. Dokploy exposes no AI fix procedure for
  *    either resource kind (verified against the live instance), and a compose
  *    build failure is almost always a bad build context or a missing variable —
@@ -61,6 +63,20 @@ export async function stageDeployCompose(params: {
     (await client.listComposeDeployments(composeId)).map((d) => d.deploymentId),
   );
 
+  // BEFORE the deploy, not after. A compose stack's Traefik configuration is
+  // docker LABELS, and Dokploy bakes them into the compose file it writes at
+  // `compose.deploy` time from the domains that exist then. A domain registered
+  // afterwards is in the database and in `compose.getConvertedCompose`, but not
+  // on the running containers — Traefik sees no router and every request to the
+  // brand-new URL answers Traefik's own plain-text "404 page not found".
+  //
+  // The application path resolves its URL after the deploy and is right to:
+  // Dokploy writes application routing into a standalone Traefik dynamic-config
+  // file, which takes effect without redeploying. Compose has no such file.
+  const appUrl = await resolveComposeUrl({
+    composeId, appName, serverId, entryService, entryPort, client, log,
+  });
+
   await log(`${MARKER} Triggering compose deployment...`);
   await client.deployCompose({ composeId, title: "Dockier deploy" });
 
@@ -77,9 +93,6 @@ export async function stageDeployCompose(params: {
     const current = deployments.find((d) => !priorIds.has(d.deploymentId)) ?? deployments[0];
 
     if (current?.status === "done") {
-      const appUrl = await resolveComposeUrl({
-        composeId, appName, serverId, entryService, entryPort, client, log,
-      });
       await log(`${MARKER} ✓ Deployment successful! URL: ${appUrl || "(no public service)"}`);
       return { status: "done", appUrl };
     }
@@ -113,7 +126,9 @@ export async function stageDeployCompose(params: {
  * `loadbalancer.server.port` label, so a wrong one produces a URL that Bad
  * Gateways forever, which is worse than no URL at all.
  *
- * Never throws: the deploy already succeeded.
+ * Runs BEFORE `compose.deploy`, so the labels exist on the containers this
+ * deploy starts (see the call site). Never throws: a stack that deploys without
+ * a URL is recoverable, one that does not deploy at all is not.
  */
 async function resolveComposeUrl(params: {
   composeId: string;
@@ -189,10 +204,10 @@ async function resolveComposeUrl(params: {
     await log(`${MARKER} Assigned domain: ${created.host} → ${entryService}:${entryPort}`);
     return toUrl(created.host, created.https);
   } catch (err) {
-    // Domain setup is best-effort — the deploy already succeeded. Logged
-    // rather than swallowed silently, because "no URL" otherwise looks like a
-    // configuration choice.
-    await log(`${MARKER} Could not attach a domain (the deployment itself succeeded): ${getErrMsg(err)}`);
+    // Domain setup is best-effort: the stack itself is worth deploying without
+    // a public URL. Logged rather than swallowed silently, because "no URL"
+    // otherwise looks like a configuration choice.
+    await log(`${MARKER} Could not attach a domain (continuing with the deployment): ${getErrMsg(err)}`);
     return "";
   }
 }

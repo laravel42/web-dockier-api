@@ -29,11 +29,19 @@ export const projectsApi = {
   /**
    * Tear down all cloud infrastructure for a project (keeps the project +
    * deployment history). Reversible: a subsequent deploy recreates resources.
+   *
+   * Runs synchronously on the backend and takes minutes, not seconds: it deletes
+   * the Dokploy resource, verifies the delete took effect, removes the server and
+   * terminates the cloud VM — or runs `pulumi destroy` / a CloudFormation stack
+   * delete on the native path. The shared 30s default aborted the request while
+   * the backend went on to finish, so the UI reported a failure for work that
+   * had actually succeeded. The ceiling is generous rather than absent so a
+   * genuinely wedged request still ends.
    */
   teardownInfrastructure: (projectId: string) =>
     request<{
       status: "torn_down" | "partial" | "nothing_to_tear_down";
       message: string;
       perStack: Array<{ stackName: string; success: boolean; message: string; errors: string[] }>;
-    }>(`/projects/${projectId}/infrastructure/teardown`, { method: "POST" }),
+    }>(`/projects/${projectId}/infrastructure/teardown`, { method: "POST", timeout: 10 * 60_000 }),
 };

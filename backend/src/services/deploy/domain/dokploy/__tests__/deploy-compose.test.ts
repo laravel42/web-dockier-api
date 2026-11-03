@@ -97,6 +97,18 @@ describe("stageDeployCompose — success", () => {
     expect(client.createDomain.mock.calls[0][0]).not.toHaveProperty("applicationId");
   });
 
+  it("registers the domain BEFORE triggering the deploy", async () => {
+    // The whole reason the first deploy of a stack used to serve Traefik's
+    // "404 page not found": compose routing is docker labels, and Dokploy bakes
+    // them into the compose file at deploy time from the domains existing then.
+    // A domain created afterwards never reaches the running containers.
+    const client = createClient();
+    await run(client);
+
+    expect(client.createDomain.mock.invocationCallOrder[0])
+      .toBeLessThan(client.deployCompose.mock.invocationCallOrder[0]);
+  });
+
   it("follows the NEW deployment, not a stale error record from a previous run", async () => {
     // The reason this stage snapshots ids before triggering: an older failed
     // record would otherwise be read as this run failing immediately.
@@ -202,7 +214,6 @@ describe("stageDeployCompose — cancellation", () => {
     const result = await run(client, { isCancelled: async () => true });
 
     expect(result).toEqual({ status: "cancelled", appUrl: "" });
-    expect(client.createDomain).not.toHaveBeenCalled();
   });
 });
 

@@ -74,9 +74,18 @@ export async function buildApp(service: ServiceName) {
     // Global connection timeout (30s). Limits how long the server waits for
     // the full HTTP request headers to arrive after a socket is opened.
     connectionTimeout: 30_000,
-    // Global request timeout (60s). Limits the total time a request can take
-    // from when it's received to when the response must be sent. Individual
-    // routes override with handlerTimeout for specific operations.
+    // Global request timeout (60s). Node's `requestTimeout` bounds how long the
+    // client has to send the COMPLETE request (headers + body) — it is not a
+    // deadline on the handler, and nothing here imposes one. A slow route runs
+    // to completion however long it takes, so a client that gives up early sees
+    // a failure for work the server went on to finish (this bit the project
+    // teardown button). Long operations therefore need a generous CLIENT
+    // timeout, and the client must treat its own timeout as "still running"
+    // rather than as a failure.
+    //
+    // The `handlerTimeout` values on individual routes are inert: Fastify has
+    // no such route option and nothing in this codebase implements one. Do not
+    // add a route expecting them to bound anything.
     requestTimeout: 60_000,
     // Numeric form on purpose: it trusts only the LAST N hops of
     // X-Forwarded-For, so a client cannot spoof its address by prepending

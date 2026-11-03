@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { projectsApi } from "@/services/projects";
+import { ApiError } from "@/services/api-error";
 import { useToast } from "@/context/useToast";
 import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 
@@ -25,7 +26,27 @@ export function useInfraTeardown(
     close: closeTeardownModal,
   } = useConfirmableAction(
     async () => {
-      const res = await projectsApi.teardownInfrastructure(projectId);
+      let res: Awaited<ReturnType<typeof projectsApi.teardownInfrastructure>>;
+      try {
+        res = await projectsApi.teardownInfrastructure(projectId);
+      } catch (err) {
+        // A client-side timeout does NOT cancel the teardown: the request is
+        // one HTTP call into a long synchronous backend operation, so the
+        // deletes carry on and usually complete. Reporting "failed to tear
+        // down" here is wrong and dangerous — it invites the user to retry
+        // against resources that are already gone. Re-fetch instead, so the
+        // page shows whatever state the backend reached.
+        if (err instanceof ApiError && err.isTimeout) {
+          toast.info(
+            "Teardown is taking longer than expected and is still running in the background. " +
+            "Reload in a few minutes to see the result.",
+          );
+          await onTeardownComplete?.();
+          return;
+        }
+        throw err;
+      }
+
       if (res.status === "torn_down") {
         setInfraState("torn_down");
         toast.success(res.message);
