@@ -15,6 +15,9 @@ interface Props {
   active?: boolean;
 }
 
+/** Re-evaluation cadence for the time-based creep, well under the bar's 500ms transition. */
+const TICK_MS = 250;
+
 export default function ScanProgressPanel({ progress, active = true }: Props) {
   const scanningStartedAt = useRef<number | null>(null);
   const maxPctRef = useRef(0);
@@ -32,7 +35,6 @@ export default function ScanProgressPanel({ progress, active = true }: Props) {
   }, [progress.phase]);
 
   useEffect(() => {
-    let frame = 0;
     const tick = () => {
       const elapsed =
         progress.phase === "scanning" && scanningStartedAt.current != null
@@ -52,14 +54,15 @@ export default function ScanProgressPanel({ progress, active = true }: Props) {
 
       const rawDetail = progressDetailLine(progress);
       setDetail(rawDetail ? displayFindingPath(rawDetail) : null);
-
-      if (active && progress.phase !== "done") {
-        frame = window.requestAnimationFrame(tick);
-      }
     };
 
-    frame = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(frame);
+    tick();
+    // Only the time-based creep needs a clock, and the bar has a 500ms CSS
+    // transition — a per-frame loop re-ran this (and two setStates) 60×/second
+    // for the whole scan to no visible effect.
+    if (!active || progress.phase === "done") return;
+    const timer = window.setInterval(tick, TICK_MS);
+    return () => window.clearInterval(timer);
   }, [progress, active]);
 
   const step = progressStepLabel(progress);

@@ -81,6 +81,12 @@ export default function ScanProjectTable({
         const latest = sorted[0];
         const latestCompleted = sorted.find((s) => s.status === "completed");
         const summary = latestCompleted?.summary;
+        // The row opens `latest`, which may still be running — say so rather
+        // than passing an older scan's count off as this one's.
+        const findingsTitle =
+          latestCompleted && latestCompleted.id !== latest.id
+            ? `From the last completed scan (${formatCardDateTime(getSortTimestamp(latestCompleted, "updated"))})`
+            : undefined;
 
         return (
           <tr key={projectId} onClick={() => onSelectScan(latest.id)} className={tableRowCls}>
@@ -101,7 +107,7 @@ export default function ScanProjectTable({
               )}
             </td>
             <td className={tableCellMutedCls}>{sorted.length}</td>
-            <td className={`${tableCellMutedCls} tabular-nums`}>
+            <td className={`${tableCellMutedCls} tabular-nums`} title={findingsTitle}>
               {summary != null ? scanSecurityFindingCount(summary) : "—"}
             </td>
             <td>

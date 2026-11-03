@@ -7,6 +7,7 @@ import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
 import EmptyState from "@/components/ui/EmptyState";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
+import { clickableProps } from "@/utils/a11y";
 
 interface Props {
   scans: Scan[];
@@ -115,18 +116,7 @@ export default function RecentScans({
         ) : (
           /* No rule directly under a day heading — the heading is the divider. */
           <li key={row.key} className={rows[i - 1]?.type === "scan" ? "border-t border-border/40" : ""}>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => open(row.scan.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  open(row.scan.id);
-                }
-              }}
-              className={rowCls}
-            >
+            <div {...clickableProps(() => open(row.scan.id))} className={rowCls}>
               <span
                 className={`size-2 shrink-0 rounded-full ${
                   row.scan.status === "completed"

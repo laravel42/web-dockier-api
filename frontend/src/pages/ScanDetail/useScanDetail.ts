@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 const FINDINGS_PAGE_SIZE = 40;
+/** Cap on concurrent repo file reads — a full findings page is 40 distinct files,
+ *  and firing those at once is what gets the git provider to rate-limit us. */
+const MAX_PARALLEL_FILE_FETCHES = 6;
 import { useParams, useNavigate } from "react-router-dom";
 import { codeAnalysisApi, projectsApi, gitApi } from "@/services/api";
-import { getErrorMessage } from "@/utils/errors";
+import { getErrorMessage, isApiError } from "@/utils/errors";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import { loadScanTools, scanToolFlags } from "@/utils/scanTools";
 import { useScanLiveState, useScanProgress } from "@/context/ScanProgressContext";
 import type { Scan, Finding, Project, ScanProgress, ScanSummary, SecurityFindingCounts } from "@/types";
 import { displayFindingPath } from "@/pages/ScanDetail/utils/scanPaths";
@@ -29,7 +33,6 @@ export function useScanDetail() {
   const [scan, setScan] = useState<Scan | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
-  const [findingsTotal, setFindingsTotal] = useState(0);
   const [findingCounts, setFindingCounts] = useState<SecurityFindingCounts | null>(null);
   const [hasMoreFindings, setHasMoreFindings] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -46,14 +49,22 @@ export function useScanDetail() {
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const fetchingFiles = useRef(new Set<string>());
   const missingFiles = useRef(new Set<string>());
+  /** Files whose fetch failed for a reason other than 404 (rate limit, network,
+   *  revoked token). The finding stays in the list — only its preview is lost —
+   *  and we do not retry, so the capped queue cannot spin. */
+  const previewUnavailable = useRef(new Set<string>());
+  /** Bumped when a file fetch settles, so the capped queue advances even when
+   *  the attempt changed no other state. */
+  const [fileFetchTick, setFileFetchTick] = useState(0);
   const findingsFetchOffsetRef = useRef(0);
 
   const [runScanError, setRunScanError] = useState("");
   const [runScanStarting, setRunScanStarting] = useState(false);
   const terminalHandledRef = useRef<string | null>(null);
-  const missingFilesStorageKeyRef = useRef<string>("");
   const scanRef = useRef(scan);
   scanRef.current = scan;
+  const findingsRef = useRef(findings);
+  findingsRef.current = findings;
 
   const scanMatchesUrl = !scan || !scanId || scan.id === scanId;
   const scanRunning =
@@ -131,7 +142,6 @@ export function useScanDetail() {
     } else {
       setFindingsLoading(true);
       setFindings([]);
-      setFindingsTotal(0);
       setFindingCounts(null);
       setHasMoreFindings(false);
     }
@@ -144,11 +154,11 @@ export function useScanDetail() {
         offset,
       });
       if (requestId !== findingsRequestIdRef.current) return;
-      setFindings((prev) => {
-        const deduped = dedupeFindings(append ? [...prev, ...res.findings] : res.findings);
-        setFindingsTotal(res.hasMore ? res.total : deduped.length);
-        return deduped;
-      });
+      // Computed outside the updater: a state updater must stay pure, and React
+      // may invoke it twice (StrictMode) or replay it while rendering.
+      const deduped = dedupeFindings(append ? [...findingsRef.current, ...res.findings] : res.findings);
+      findingsRef.current = deduped;
+      setFindings(deduped);
       findingsFetchOffsetRef.current = offset + res.findings.length;
       setFindingCounts(res.counts);
       setHasMoreFindings(res.hasMore);
@@ -184,7 +194,9 @@ export function useScanDetail() {
     } catch {
       /* ignore */
     } finally {
-      setAllScansLoading(false);
+      // A silent refresh never raised the flag, so it must not lower one that a
+      // visible load is still holding.
+      if (!options?.silent) setAllScansLoading(false);
     }
   }, []);
 
@@ -194,30 +206,14 @@ export function useScanDetail() {
     setFindingsError("");
     terminalHandledRef.current = null;
     setFindings([]);
-    setFindingsTotal(0);
     setFindingCounts(null);
     setHasMoreFindings(false);
     findingsFetchOffsetRef.current = 0;
     fetchingFiles.current.clear();
     missingFiles.current.clear();
+    previewUnavailable.current.clear();
     setFileContents({});
   }, [scanId]);
-
-  useEffect(() => {
-    if (!project) return;
-    const parsed = parseOwnerRepo(project.repository);
-    if (!parsed) return;
-    const key = `scan-missing-files:${project.connectionId}:${parsed.owner}/${parsed.repo}:${project.branch || "main"}`;
-    missingFilesStorageKeyRef.current = key;
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as string[];
-      missingFiles.current = new Set(saved);
-    } catch {
-      missingFiles.current = new Set();
-    }
-  }, [project]);
 
   useEffect(() => {
     if (!scanId) return;
@@ -263,6 +259,7 @@ export function useScanDetail() {
       projectsApi.get(routeProjectId)
         .then(async (p) => {
           setProject(p);
+          setAllScansLoading(true);
           try {
             const res = await codeAnalysisApi.listScans(routeProjectId);
             setAllScans(res.scans);
@@ -378,9 +375,15 @@ export function useScanDetail() {
     const parsed = parseOwnerRepo(project.repository);
     if (!parsed) return;
     const uniqueFiles = [...new Set(findings.map((f) => displayFindingPath(f.filePath)))];
-    const toFetch = uniqueFiles.filter(
-      (fp) => !fileContents[fp] && !fetchingFiles.current.has(fp) && !missingFiles.current.has(fp.toLowerCase()),
-    );
+    const toFetch = uniqueFiles
+      .filter(
+        (fp) =>
+          !fileContents[fp]
+          && !fetchingFiles.current.has(fp)
+          && !missingFiles.current.has(fp.toLowerCase())
+          && !previewUnavailable.current.has(fp),
+      )
+      .slice(0, Math.max(0, MAX_PARALLEL_FILE_FETCHES - fetchingFiles.current.size));
     if (toFetch.length === 0) return;
     toFetch.forEach((fp) => {
       fetchingFiles.current.add(fp);
@@ -388,31 +391,26 @@ export function useScanDetail() {
         .then((res) => {
           setFileContents((prev) => ({ ...prev, [fp]: res.content }));
         })
-        .catch(() => {
-          // Missing files (404) are expected for stale findings; avoid retry loops
-          // and remove those findings from the current list entirely.
-          const normalized = fp.toLowerCase();
-          missingFiles.current.add(normalized);
-          if (missingFilesStorageKeyRef.current) {
-            try {
-              localStorage.setItem(
-                missingFilesStorageKeyRef.current,
-                JSON.stringify(Array.from(missingFiles.current)),
-              );
-            } catch {
-              // ignore persistence errors
-            }
+        .catch((err: unknown) => {
+          // A 404 means the file is genuinely gone at this ref, so the finding is
+          // stale and comes out of the list. Anything else (rate limit, network,
+          // expired token) says nothing about the finding — never drop a real
+          // result because the preview fetch failed.
+          if (isApiError(err) && err.status === 404) {
+            missingFiles.current.add(fp.toLowerCase());
+            setFindings((prev) =>
+              prev.filter((finding) => displayFindingPath(finding.filePath) !== fp),
+            );
+            return;
           }
-          setFindings((prev) =>
-            prev.filter((finding) => displayFindingPath(finding.filePath) !== fp),
-          );
-          setFindingsTotal((prev) => Math.max(0, prev - 1));
+          previewUnavailable.current.add(fp);
         })
         .finally(() => {
           fetchingFiles.current.delete(fp);
+          setFileFetchTick((t) => t + 1);
         });
     });
-  }, [findings, project, fileContents]);
+  }, [findings, project, fileContents, fileFetchTick]);
 
   const handleSeverityFilter = (severity: string) => {
     setProviderFilter("");
@@ -443,21 +441,7 @@ export function useScanDetail() {
       }
       setScan(runningScan);
 
-      const started = await codeAnalysisApi.runScan(newScan.id, (() => {
-        try {
-          const t = JSON.parse(localStorage.getItem("scan_tools") || "{}");
-          return {
-            enableSemgrep: false,
-            enableBearer: t.bearer !== false,
-            enableSonarqube: t.bearer !== false,
-            enableCustomRules: t.customRules !== false,
-            enableCodeql: t.codeql !== false,
-            enableSensitiveData: false,
-          };
-        } catch {
-          return {};
-        }
-      })());
+      const started = await codeAnalysisApi.runScan(newScan.id, scanToolFlags(loadScanTools()));
       const confirmed: Scan = {
         ...runningScan,
         status: started.status === "pending" ? "pending" : "running",
@@ -493,7 +477,6 @@ export function useScanDetail() {
     scan,
     project,
     findings,
-    findingsTotal,
     findingCounts,
     hasMoreFindings,
     loadMoreFindings,

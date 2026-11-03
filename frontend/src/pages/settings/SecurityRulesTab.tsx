@@ -19,6 +19,8 @@ import {
   BearerSettingsPanel, CodeQLSettingsPanel,
 } from "./sections/EngineSettingsPanels";
 import { severityDotCls } from "./sections/shared";
+// Shared with the scan page so Settings and the scan it starts cannot disagree.
+import { loadScanTools, saveScanTools } from "@/utils/scanTools";
 
 // ─── Types ───
 
@@ -37,27 +39,7 @@ const toolKeyForSource: Record<string, string> = {
   custom: "customRules",
 };
 
-const DEFAULT_SCAN_TOOLS = {
-  semgrep: false,
-  bearer: true,
-  customRules: true,
-  codeql: true,
-} as const;
 
-function loadScanTools(): Record<string, boolean> {
-  const savedTools = localStorage.getItem("scan_tools");
-  if (savedTools) {
-    try {
-      const parsed = JSON.parse(savedTools) as Record<string, boolean>;
-      if (parsed.sonarqube !== undefined && parsed.bearer === undefined) {
-        parsed.bearer = parsed.sonarqube;
-        delete parsed.sonarqube;
-      }
-      return { ...DEFAULT_SCAN_TOOLS, ...parsed, semgrep: false };
-    } catch { /* ignore */ }
-  }
-  return { ...DEFAULT_SCAN_TOOLS };
-}
 
 const extIconMap: Record<string, string> = {
   ".php": "php", ".blade.php": "php", ".js": "javascript", ".ts": "typescript",
@@ -79,7 +61,7 @@ export default function SecurityRulesTab() {
   const toggleTool = (key: string) => {
     setScanTools(prev => {
       const next = { ...prev, [key]: !prev[key] };
-      localStorage.setItem("scan_tools", JSON.stringify(next));
+      saveScanTools(next);
       setToolMessage("Saved");
       setTimeout(() => setToolMessage(""), 1500);
       return next;

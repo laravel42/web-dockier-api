@@ -33,6 +33,11 @@ export function useSecurityScans() {
     (acc[s.projectId] ||= []).push(s);
     return acc;
   }, {});
+  // Sort here, once: the project ordering below and the cards/table all treat
+  // index 0 as the newest scan, and nothing guarantees the API's order.
+  for (const list of Object.values(grouped)) {
+    list.sort((a, b) => compareByTime(a, b, "updated"));
+  }
 
   const { badges: projectLangs, loadingIds: projectBadgeLoading } = useProjectBadges(Object.values(projects));
 

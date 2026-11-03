@@ -3,8 +3,6 @@ import type { ProviderSeverityCounts, Scan, SecurityFindingCounts } from "@/type
 export function resolveFilteredCounts(
   findingCounts: SecurityFindingCounts | null,
   providerFilter: string,
-  severityFilter: string,
-  findingsTotal: number,
   fallback: ProviderSeverityCounts,
 ): ProviderSeverityCounts {
   if (!findingCounts) return fallback;
@@ -20,15 +18,10 @@ export function resolveFilteredCounts(
     base = findingCounts.byProvider[providerFilter];
   }
 
-  if (severityFilter) {
-    return {
-      total: findingsTotal,
-      errors: severityFilter === "error" ? findingsTotal : base.errors,
-      warnings: severityFilter === "warning" ? findingsTotal : base.warnings,
-      infos: severityFilter === "info" ? findingsTotal : base.infos,
-    };
-  }
-
+  // A severity filter deliberately does NOT rewrite these numbers: the cards are
+  // the filter control, so every bucket has to keep showing its own full count
+  // (and stay clickable). The previous version substituted the number of
+  // findings loaded so far, which understated any bucket past the first page.
   if (providerFilter) {
     return base;
   }

@@ -18,7 +18,6 @@ import type { KeyboardEvent } from "react";
 
 interface Props {
   findings: Finding[];
-  findingsTotal: number;
   findingCounts: SecurityFindingCounts | null;
   findingsLoading: boolean;
   findingsLoadingMore: boolean;

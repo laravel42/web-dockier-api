@@ -14,6 +14,7 @@ import Spinner from "@/components/Spinner";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { ShieldCheckIcon } from "lucide-react";
 import { scanFindingSeverityDotClass } from "@/utils/scanSummary";
+import { clickableProps } from "@/utils/a11y";
 
 interface Props {
   scanId: string | undefined;
@@ -81,15 +82,7 @@ export default function ScanSidebar({
                 return (
                   <div
                     key={s.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelectScan(s.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        onSelectScan(s.id);
-                      }
-                    }}
+                    {...clickableProps(() => onSelectScan(s.id))}
                     className={`${sidebarHistoryItemCls(isActive)} w-full px-2.5 py-2 text-left`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">

@@ -7,7 +7,6 @@ interface Props {
   severityFilter: string;
   providerFilter: string;
   findingCounts: SecurityFindingCounts | null;
-  findingsTotal: number;
   onFilterChange: (severity: string) => void;
   scanRunning?: boolean;
   progress?: ScanProgress | null;
@@ -50,7 +49,6 @@ export default function SummaryCards({
   severityFilter,
   providerFilter,
   findingCounts,
-  findingsTotal,
   onFilterChange,
   scanRunning = false,
   progress = null,
@@ -64,8 +62,6 @@ export default function SummaryCards({
   const counts = resolveFilteredCounts(
     findingCounts,
     providerFilter,
-    severityFilter,
-    findingsTotal,
     {
       total: summary.totalFindings,
       errors: summary.errors,

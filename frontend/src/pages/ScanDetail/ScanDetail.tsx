@@ -115,7 +115,6 @@ export default function ScanDetail() {
             severityFilter={core.severityFilter}
             providerFilter={core.providerFilter}
             findingCounts={core.findingCounts}
-            findingsTotal={core.findingsTotal}
             onFilterChange={core.handleSeverityFilter}
             scanRunning={core.scanRunning}
             progress={core.scanProgress}
@@ -129,7 +128,6 @@ export default function ScanDetail() {
 
         <FindingsList
           findings={core.findings}
-          findingsTotal={core.findingsTotal}
           findingCounts={core.findingCounts}
           findingsLoading={core.findingsLoading}
           findingsLoadingMore={core.findingsLoadingMore}

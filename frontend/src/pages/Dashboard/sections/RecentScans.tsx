@@ -5,6 +5,7 @@ import { formatCardDateTime } from "@/utils/formatCardDate";
 import SeverityBadge from "@/components/SeverityBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
+import { clickableProps } from "@/utils/a11y";
 
 interface Props {
   scans: Scan[];
@@ -41,18 +42,7 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
                   : "bg-primary-500";
             return (
               <li key={s.id}>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onViewScan(s.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onViewScan(s.id);
-                    }
-                  }}
-                  className={dashboardActivityRowCls}
-                >
+                <div {...clickableProps(() => onViewScan(s.id))} className={dashboardActivityRowCls}>
                   <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
                   <div className="min-w-0 flex-1">
                     <p className={`${typeCardTitle} truncate`}>{proj?.name || s.repo}</p>
