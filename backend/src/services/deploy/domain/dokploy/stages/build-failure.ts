@@ -10,7 +10,7 @@
 import type { RuntimeHint } from "./trigger-deploy.js";
 
 export interface BuildFailureDiagnosis {
-  kind: "oom" | "platform-adapter" | "missing-start" | "generic";
+  kind: "oom" | "pnpm-workspace" | "platform-adapter" | "missing-start" | "generic";
   /** The build step that died (e.g. "npm run build"), when the text names it. */
   step?: string;
 }
@@ -32,6 +32,22 @@ const OOM_PATTERNS = [
 ];
 
 /**
+ * pnpm rejecting a `pnpm-workspace.yaml` that declares no `packages` field.
+ *
+ * Deterministic on purpose, because the model tier gets this one wrong in a way
+ * that actively misleads: it reads "packages field" and sends the user to
+ * package.json, which has no such field and never did. The field lives in
+ * pnpm-workspace.yaml, and it only became optional in pnpm 10.5 — so the real
+ * cause is a version split inside the repo (a workspace file written for pnpm
+ * 10+ against a lockfileVersion that pins railpack to pnpm 9), which no log
+ * tail reveals.
+ */
+const PNPM_WORKSPACE_PATTERNS = [
+  /packages field missing or empty/i,
+  /ERR_PNPM_INVALID_WORKSPACE_CONFIGURATION/,
+];
+
+/**
  * A railpack plan that resolved its own Deploy command disproves the
  * missing-start-command diagnosis. Only fires when such text happens to reach
  * us — it is a suppression signal, not a guarantee.
@@ -46,6 +62,10 @@ export function classifyBuildFailure(text: string, hint?: RuntimeHint): BuildFai
 
   if (OOM_PATTERNS.some((re) => re.test(text))) {
     return { kind: "oom", step: failedStep };
+  }
+
+  if (PNPM_WORKSPACE_PATTERNS.some((re) => re.test(text))) {
+    return { kind: "pnpm-workspace", step: failedStep };
   }
 
   if (hint?.platformAdapter) {

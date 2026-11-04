@@ -63,3 +63,41 @@ describe("classifyBuildFailure", () => {
     expect(diagnosis.kind).toBe("oom");
   });
 });
+
+// Real railpack output from a Laravel repo whose pnpm-workspace.yaml declares
+// no `packages` field while its pnpm-lock.yaml pins pnpm 9. Trimmed.
+const pnpmWorkspaceLog = `
+#30 pnpm add -g node-gyp
+#30 DONE 5.1s
+
+#31 pnpm install --frozen-lockfile --prefer-offline
+#31 0.810  ERROR  packages field missing or empty
+#31 0.812 For help, run: pnpm help install
+#31 ERROR: process "pnpm install --frozen-lockfile --prefer-offline" did not complete successfully: exit code: 1
+❌ Railpack build failed
+`;
+
+describe("classifyBuildFailure — pnpm workspace manifest", () => {
+  it("names the failing install step", () => {
+    const diagnosis = classifyBuildFailure(pnpmWorkspaceLog, nuxtHint);
+    expect(diagnosis.kind).toBe("pnpm-workspace");
+    expect(diagnosis.step).toBe("pnpm install --frozen-lockfile --prefer-offline");
+  });
+
+  it("outranks the repo-shape heuristics, so it never reads as a missing start command", () => {
+    // nuxtHint declares no start script, which is what used to win here.
+    expect(classifyBuildFailure(pnpmWorkspaceLog, nuxtHint).kind).not.toBe("missing-start");
+    expect(classifyBuildFailure(pnpmWorkspaceLog, { ...nuxtHint, platformAdapter: true }).kind).toBe(
+      "pnpm-workspace",
+    );
+  });
+
+  it("recognises pnpm's error code spelling as well as its message", () => {
+    const text = "ERR_PNPM_INVALID_WORKSPACE_CONFIGURATION  Expected object but found array";
+    expect(classifyBuildFailure(text, nuxtHint).kind).toBe("pnpm-workspace");
+  });
+
+  it("yields to out-of-memory evidence, which is the more immediate cause", () => {
+    expect(classifyBuildFailure(`${pnpmWorkspaceLog}\n${oomLog}`, nuxtHint).kind).toBe("oom");
+  });
+});

@@ -289,6 +289,26 @@ async function reportBuildFailure(
     );
   }
 
+  // Named explicitly because the generic model tier reliably misreads it: it
+  // sees "packages field" and points the user at package.json, which has no
+  // such field, so they edit the wrong file and get the same failure twice.
+  if (diagnosis.kind === "pnpm-workspace") {
+    const step = diagnosis.step ?? "the install step";
+    await log(
+      `[stage:deploy] The install step ("${step}") failed because this repository's pnpm-workspace.yaml ` +
+      "declares no \"packages\" field. That field is optional only from pnpm 10.5 onwards, and the repo's " +
+      "pnpm-lock.yaml selects an older pnpm, which rejects the file. Note this is pnpm-workspace.yaml, " +
+      "NOT package.json — package.json has no \"packages\" field. Fix it in the repository one of three " +
+      "ways: delete pnpm-workspace.yaml if the project is not a monorepo, or add `packages: [\".\"]` to it, " +
+      "or regenerate pnpm-lock.yaml with pnpm 10 so the newer pnpm is used.",
+    );
+    return (
+      `The install step ("${step}") failed because pnpm-workspace.yaml declares no "packages" field${onCommit}. ` +
+      'In the repository, delete pnpm-workspace.yaml if this is not a monorepo, add `packages: ["."]` to it, ' +
+      "or regenerate pnpm-lock.yaml with pnpm 10. (The field belongs to pnpm-workspace.yaml, not package.json.)"
+    );
+  }
+
   // Framework-aware guidance for the most common self-inflicted case: a
   // server app (Railpack Node) with no start command. When the repo declares
   // no `start` script AND we couldn't derive one, Railpack builds the app but

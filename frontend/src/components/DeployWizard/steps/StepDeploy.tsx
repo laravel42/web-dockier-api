@@ -123,13 +123,15 @@ export default function StepDeploy({ state }: { state: WizardState }) {
         </div>
       </div>
 
-      {/* AI retry info */}
+      {/* Build-failure diagnosis (no fix is applied — see deployStages.ts) */}
       {retries.length > 0 && (
         <div className="rounded-lg bg-warning-surface border border-warning-line p-3 space-y-2">
-          <p className="text-xs font-semibold text-warning-ink uppercase tracking-wide">AI Recovery</p>
+          <p className="text-xs font-semibold text-warning-ink uppercase tracking-wide">Build Failure Diagnosis</p>
           {retries.map((retry, i) => (
             <div key={i} className="flex items-start gap-2 text-xs text-text-secondary">
-              <span className="shrink-0 text-warning-ink font-medium">Attempt {retry.attempt + 1}:</span>
+              {/* `attempt` is already 1-based from parseStages; incrementing it
+                  again showed "Attempt 2" for the first of two attempts. */}
+              <span className="shrink-0 text-warning-ink font-medium">Attempt {retry.attempt}:</span>
               <span>{retry.fixDescription || "Analyzing deployment failure..."}</span>
             </div>
           ))}
