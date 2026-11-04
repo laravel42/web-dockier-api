@@ -308,11 +308,12 @@ async function listGitLabRepos(
     if (associations.status === 403) {
       throw new ProviderApiError(
         `GitLab denied repository listing: ${extractProviderDetail(membership.body)} ` +
-          `Repository listing is a user-scoped operation: in your token's permissions, enable ` +
-          `"Project: Read" under the User boundary — this is a separate grant from the ` +
-          `"Project: Read" in the Group and project section, which only allows reading ` +
-          `individual projects. (Alternatively, "Personal Access Token: Read" under the User ` +
-          `boundary also enables discovery.)`,
+          `Repository listing is a user-scoped operation (GET /projects), so the grant must come ` +
+          `from the User boundary, not the Group and project one. Edit the token and under ` +
+          `"Add resource permissions" switch from the "Group and project" tab to the "User" tab, ` +
+          `then select the "Project" resource and check "Read". The "Project: Read" you already ` +
+          `granted on the "Group and project" tab only allows reading individual projects by id. ` +
+          `(On the same "User" tab, "Personal Access Token: Read" also enables discovery.)`,
         "forbidden",
       );
     }

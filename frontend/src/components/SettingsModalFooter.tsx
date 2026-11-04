@@ -25,6 +25,9 @@ export default function SettingsModalFooter({
     >
       {onDelete ? (
         <Button
+          // Most callers render this footer inside a <form>; without an explicit
+          // type the browser treats it as a submit button and saves instead of deleting.
+          type="button"
           variant="outline-danger"
           size="sm"
           onClick={onDelete}
