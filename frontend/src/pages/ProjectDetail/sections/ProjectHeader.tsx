@@ -162,8 +162,21 @@ export default function ProjectHeader({
             </Button>
           )}
           {canDeploy && (
-            <Button variant="primary" className="min-w-24.5 border border-primary-foreground/20" onClick={onDeploy} iconLeft={<RocketIcon className="size-4" />}>
-              Deploy
+            /*
+              Disabled while a deploy runs: the wizard can now be closed
+              mid-deploy, so this button is reachable again, and a second deploy
+              of the same project races the first over one Dokploy resource. The
+              label carries the reason — a disabled button suppresses pointer
+              events, so a title tooltip would never show.
+            */
+            <Button
+              variant="primary"
+              className="min-w-24.5 border border-primary-foreground/20"
+              onClick={onDeploy}
+              disabled={liveDeploy}
+              iconLeft={<RocketIcon className="size-4" />}
+            >
+              {liveDeploy ? "Deploying…" : "Deploy"}
             </Button>
           )}
         </div>

@@ -320,7 +320,12 @@ export default function ProjectDetail() {
 
       <DeployWizard
         open={showDeployWizard}
-        onClose={() => setShowDeployWizard(false)}
+        onClose={() => {
+          setShowDeployWizard(false);
+          // Closing mid-deploy stops the wizard's poll, so the new deployment
+          // has to be pulled in once for this page's live poll to pick it up.
+          void fetchLastDeploy();
+        }}
         project={project}
         analysis={analysis}
         analysisLoading={analysisLoading}

@@ -21,6 +21,8 @@ interface Props {
   loading: boolean;
   fallbackCommitHash?: string;
   canLaunchDeploy?: boolean;
+  /** A deploy for this project is running right now. */
+  liveDeploy?: boolean;
   onNewDeploy?: () => void;
   onSelect: (id: string) => void;
 }
@@ -32,6 +34,7 @@ export default function DeployHistory({
   loading,
   fallbackCommitHash,
   canLaunchDeploy = false,
+  liveDeploy = false,
   onNewDeploy,
   onSelect,
 }: Props) {
@@ -44,13 +47,17 @@ export default function DeployHistory({
         <div className={`${cardCls} overflow-hidden`}>
           {canDeploy && (
             <div className="p-2 border-b border-border/40">
+              {/* Disabled while one is running — a second deploy of the same
+                  project races the first over one Dokploy resource. The label
+                  carries the reason: a disabled button has no pointer events,
+                  so a title tooltip would never show. */}
               <Button
                 onClick={onNewDeploy}
-                disabled={permissionsLoading}
+                disabled={permissionsLoading || liveDeploy}
                 iconLeft={<RocketIcon className="size-3.5" />}
                 className="w-full"
               >
-                New deploy
+                {liveDeploy ? "Deploy running…" : "New deploy"}
               </Button>
             </div>
           )}

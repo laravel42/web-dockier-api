@@ -193,6 +193,14 @@ export function useDeployDetail() {
   const prov = deploy ? providers.find(p => p.id === deploy.providerId) : undefined;
   const provKey = prov?.provider || "";
   const canLaunchDeploy = Boolean(project?.connectionId || project?.sourceType === "template");
+  /**
+   * A deploy for this project is in flight. `deploy` is checked as well as the
+   * history: it loads first and is polled every 2s, while `allDeploys` only
+   * refreshes when a status changes, so the history alone leaves a window in
+   * which the New deploy button is wrongly enabled.
+   */
+  const hasLiveDeploy = (deploy ? IN_PROGRESS_STATUSES.has(deploy.status) : false)
+    || allDeploys.some((d) => IN_PROGRESS_STATUSES.has(d.status));
 
   return {
     deployId, navigate,
@@ -203,7 +211,7 @@ export function useDeployDetail() {
     redeploying,
     prov, provKey,
     showDeployWizard, setShowDeployWizard,
-    openDeployWizard, canLaunchDeploy,
+    openDeployWizard, canLaunchDeploy, hasLiveDeploy,
     analysis, analysisLoading, analysisError,
     handleDeployComplete,
     handleCancel,

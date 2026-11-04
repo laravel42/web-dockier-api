@@ -18,15 +18,18 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
     deployError,
     canNext, handleNext, handleBack,
     startDeploy, cancelDeploy, cancellingDeploy,
-    isDeploying, isFinished,
+    isDeploying,
   } = useDeployWizard({ open, project, analysis, analysisLoading, providers, onDeployComplete });
 
   const StepIcon = STEPS[step].icon;
 
   return (
+    // Closing mid-deploy is allowed: the pipeline is a pg-boss job, so closing
+    // only stops the status poll and never cancels. StepDeploy links to
+    // /deploy/:id so the run stays followable once the wizard is gone.
     <Modal
       open={open}
-      onClose={() => { if (!isDeploying) onClose(); }}
+      onClose={onClose}
       title={step === STEP.DEPLOY ? "Deploying…" : <span className="inline-flex items-center gap-1.5">Deploy —<StepIcon className="size-4" />{STEPS[step].label}</span>}
       size="xl"
     >
@@ -79,7 +82,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
             onRegionChange={(region) => setState(prev => ({ ...prev, tofuRegion: region }))}
           />
         )}
-        {step === STEP.DEPLOY && <StepDeploy state={state} />}
+        {step === STEP.DEPLOY && <StepDeploy state={state} onClose={onClose} />}
       </div>
 
       {/* Errors */}
@@ -113,7 +116,7 @@ export default function DeployWizard({ open, onClose, project, analysis, analysi
               {cancellingDeploy ? "Cancelling…" : "Cancel Deploy"}
             </button>
           )}
-          {step === STEP.DEPLOY && isFinished && (
+          {step === STEP.DEPLOY && (
             <Button variant="outline" size="lg" onClick={onClose}>
               Close
             </Button>

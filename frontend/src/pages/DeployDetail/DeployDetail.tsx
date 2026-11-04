@@ -21,7 +21,7 @@ export default function DeployDetail() {
     redeploying,
     provKey,
     showDeployWizard, setShowDeployWizard,
-    openDeployWizard, canLaunchDeploy,
+    openDeployWizard, canLaunchDeploy, hasLiveDeploy,
     analysis, analysisLoading, analysisError,
     handleDeployComplete,
     handleCancel,
@@ -103,6 +103,7 @@ export default function DeployDetail() {
         loading={allDeploysLoading}
         fallbackCommitHash={project?.lastCommitHash}
         canLaunchDeploy={canLaunchDeploy}
+        liveDeploy={hasLiveDeploy}
         onNewDeploy={openDeployWizard}
         onSelect={(id) => navigate(`/deploy/${id}`)}
       />

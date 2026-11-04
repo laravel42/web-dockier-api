@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef } from "react";
+import { Link } from "react-router-dom";
 import type { WizardState } from "../types";
-import { CheckIcon, XIcon, ExternalLinkIcon } from "lucide-react";
+import { CheckIcon, XIcon, ExternalLinkIcon, ArrowRightIcon } from "lucide-react";
 import Spinner from "@/components/Spinner";
 import { parseStages, type StageStatus } from "./deployStages";
 
 // ─── Component ─────────────────────────────────────────────────────
 
-export default function StepDeploy({ state }: { state: WizardState }) {
+export default function StepDeploy({ state, onClose }: { state: WizardState; onClose: () => void }) {
   const logsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +49,21 @@ export default function StepDeploy({ state }: { state: WizardState }) {
           {state.deployStatus || "waiting"}
         </span>
         {isRunning && <Spinner className="size-3.5" />}
+        {/* The deploy runs server-side, so closing the wizard does not stop it.
+            This is the way back to it — the detail page reads the same
+            persisted log. onClose because on the deploy detail page the route
+            change alone does not unmount the wizard, so the modal would cover
+            the page it just opened. */}
+        {state.deploymentId && (
+          <Link
+            to={`/deploy/${state.deploymentId}`}
+            onClick={onClose}
+            className="ml-auto inline-flex items-center gap-1 text-xs text-primary-500 hover:text-primary-700 transition-colors"
+          >
+            {isRunning ? "Keep watching on the deploy page" : "View full deploy log"}
+            <ArrowRightIcon className="size-3.5" />
+          </Link>
+        )}
       </div>
 
       {/* Failure reason banner */}
