@@ -73,6 +73,12 @@ interface Props {
   deploysPanel?: ReactNode;
   /** Bumps after an in-session deploy; drives the transient DNS banner. */
   domainRefreshKey?: number;
+  /**
+   * False until the deploy fetch settles. The Runtime cluster's visibility is
+   * derived from `recentDeploys`, so until this is true an empty array means
+   * "not known yet", not "never shipped" — and the tab must not be pruned.
+   */
+  deploysLoaded?: boolean;
 }
 
 /**
@@ -150,6 +156,15 @@ function isMainTabVisible(
         return isOwner || has("project:manage");
       }
       return false;
+  }
+}
+
+function readSessionJson<T>(key: string): T | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -737,6 +752,7 @@ export default function ProjectDescription({
   securityPanel,
   deploysPanel,
   domainRefreshKey,
+  deploysLoaded = false,
 }: Props) {
   // The tab strip is a sidebar at md+ and a horizontal scroller below it, so the
   // announced orientation has to track the breakpoint. The keyboard handler
@@ -802,11 +818,16 @@ export default function ProjectDescription({
     el?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [activeMainTabSafe]);
 
+  // Rewriting the URL is only safe once the inputs that decide visibility have
+  // arrived. While the deploys were still loading this replaced a deep link to
+  // any Runtime tab (?tab=domains) with ?tab=overview — and `replace: true`
+  // left no history entry to go back to.
   useEffect(() => {
-    if (!permissionsLoading && !visibleMainTabs.some((t) => t.key === activeMainTab)) {
+    if (permissionsLoading || !deploysLoaded) return;
+    if (!visibleMainTabs.some((t) => t.key === activeMainTab)) {
       setActiveMainTab(visibleMainTabs[0]?.key ?? "overview", true);
     }
-  }, [activeMainTab, visibleMainTabs, permissionsLoading, setActiveMainTab]);
+  }, [activeMainTab, visibleMainTabs, permissionsLoading, deploysLoaded, setActiveMainTab]);
 
   const cacheKey = projectId ? `sensitive:${projectId}` : null;
 
@@ -862,39 +883,45 @@ export default function ProjectDescription({
     activeMainTabSafe === "overview" && !overviewExpanded;
   const clipOverview = overviewCollapsed && overviewOverflows;
 
-  const [uploadedSensitiveData, setUploadedSensitiveData] = useState<SensitiveField[] | null>(() => {
-    if (!cacheKey) return null;
-    try {
-      const raw = sessionStorage.getItem(cacheKey);
-      return raw ? JSON.parse(raw) : null;
-    } catch { /* ignore */ }
-    return null;
-  });
+  const [uploadedSensitiveData, setUploadedSensitiveData] = useState<SensitiveField[] | null>(
+    () => (cacheKey ? readSessionJson<SensitiveField[]>(cacheKey) : null),
+  );
 
-  const [aiSensitiveResult, setAiSensitiveResult] = useState<AiSensitiveResult | null>(() => {
-    if (!cacheKey) return null;
-    try {
-      const raw = sessionStorage.getItem(`${cacheKey}:ai`);
-      return raw ? JSON.parse(raw) : null;
-    } catch { /* ignore */ }
-    return null;
-  });
+  const [aiSensitiveResult, setAiSensitiveResult] = useState<AiSensitiveResult | null>(
+    () => (cacheKey ? readSessionJson<AiSensitiveResult>(`${cacheKey}:ai`) : null),
+  );
 
-  // Load from DB cache if not in sessionStorage
+  // This component survives a navigation from one project to another (see the
+  // overview reset above), and these two held whatever the PREVIOUS project
+  // found — so project B showed A's tables, A's columns and A's tab badge.
+  // Re-read from the cache whose key actually matches the project on screen.
+  const syncedCacheKeyRef = useRef(cacheKey);
   useEffect(() => {
+    if (syncedCacheKeyRef.current === cacheKey) return;
+    syncedCacheKeyRef.current = cacheKey;
+    setUploadedSensitiveData(cacheKey ? readSessionJson<SensitiveField[]>(cacheKey) : null);
+    setAiSensitiveResult(cacheKey ? readSessionJson<AiSensitiveResult>(`${cacheKey}:ai`) : null);
+  }, [cacheKey]);
+
+  // Fall back to the server-side cache, but only once the tab is actually open:
+  // this posts to an AI route (empty schema, projectId only — the backend
+  // answers from its cache), and it used to run on every project page load for
+  // a tab most visits never open.
+  useEffect(() => {
+    if (activeMainTabSafe !== "sensitiveData") return;
     if (aiSensitiveResult || !projectId) return;
-    // Send empty schema with projectId — backend returns DB cache if exists
+    let current = true;
     gitApi.analyzeSensitiveData("", projectId)
       .then((res) => {
-        if (res.tables && res.tables.length > 0) {
-          setAiSensitiveResult(res);
-          if (cacheKey) {
-            try { sessionStorage.setItem(`${cacheKey}:ai`, JSON.stringify(res)); } catch { /* quota */ }
-          }
+        if (!current || !res.tables?.length) return;
+        setAiSensitiveResult(res);
+        if (cacheKey) {
+          try { sessionStorage.setItem(`${cacheKey}:ai`, JSON.stringify(res)); } catch { /* quota */ }
         }
       })
       .catch(() => { /* no cache, that's fine */ });
-  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { current = false; };
+  }, [activeMainTabSafe, aiSensitiveResult, projectId, cacheKey]);
 
   const handleSensitiveParsed = (data: SensitiveField[]) => {
     setUploadedSensitiveData(data);

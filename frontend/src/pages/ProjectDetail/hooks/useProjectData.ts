@@ -1,12 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { projectsApi, gitApi } from "@/services/api";
-import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import { projectsApi } from "@/services/api";
 import { getErrorMessage } from "@/utils/errors";
-import type { Project, RepoStats } from "@/types";
+import type { Project } from "@/types";
 
 /**
- * Core project data: fetch, loading, error, name update, delete, pull, branch switch.
+ * Core project data: fetch, loading, error, name update.
  *
  * This hook owns `project` state and exposes it to sibling hooks via its return value.
  */
@@ -18,23 +17,12 @@ export function useProjectData() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  // Header actions
-  const [showDelete, setShowDelete] = useState(false);
-  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const projectRef = useRef(project);
+  projectRef.current = project;
 
   // Inline name edit
   const [nameSaving, setNameSaving] = useState(false);
   const [nameError, setNameError] = useState("");
-
-  // Pull from origin
-  const [pullLog, setPullLog] = useState<string[] | null>(null);
-  const [pullLoading, setPullLoading] = useState(false);
-
-  // Branch selector
-  const [branchList, setBranchList] = useState<string[]>([]);
-  const [branchLoading, setBranchLoading] = useState(false);
-  const [branchSearch, setBranchSearch] = useState("");
 
   // Fetch project (reused for initial load and post-deploy refresh).
   // Resolves with the fetched project so callers (e.g. the post-deploy poll in
@@ -47,10 +35,17 @@ export function useProjectData() {
     return projectsApi.get(projectId)
       .then((p) => {
         setProject(p);
+        setError("");
         return p;
       })
       .catch((err: unknown) => {
-        setError(getErrorMessage(err, "Failed to load project"));
+        // Only a load the page is waiting on may raise the page-level error:
+        // ProjectDetail renders PageError whenever `error` is set, so letting a
+        // background refresh (the post-deploy poll runs five of them) set it
+        // replaced a working project page with "Failed to load project".
+        if (opts?.showLoading || !projectRef.current) {
+          setError(getErrorMessage(err, "Failed to load project"));
+        }
         return null;
       })
       .finally(() => setLoading(false));
@@ -85,71 +80,6 @@ export function useProjectData() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!projectId || !project) return;
-    const parsed = parseOwnerRepo(project.repository);
-    if (parsed) {
-      const repoKey = `${parsed.owner}/${parsed.repo}`;
-      gitApi.invalidateStackCache(repoKey).catch(() => {});
-      gitApi.invalidateStatsCache(repoKey).catch(() => {});
-      gitApi.invalidateAnalysisCache(repoKey).catch(() => {});
-    }
-    await projectsApi.delete(projectId);
-    navigate("/projects");
-  };
-
-  const handlePullOrigin = async (stats: RepoStats | null) => {
-    if (!project) return;
-    const parsed = parseOwnerRepo(project.repository);
-    if (!parsed) return;
-    setPullLoading(true);
-    setPullLog(["$ git pull origin " + (project.branch || "main"), "Connecting to remote…"]);
-    try {
-      const res = await gitApi.pullOrigin(project.connectionId, parsed.owner, parsed.repo, project.branch || "main", stats?.lastCommitHash);
-      setPullLog(res.log);
-      const repoKey = `${parsed.owner}/${parsed.repo}`;
-      gitApi.invalidateStackCache(repoKey, project.branch || "main")
-        .then(() => gitApi.getStackAnalysis(project.connectionId, parsed.owner, parsed.repo, project.branch || undefined, project.id))
-        .catch(() => {});
-      gitApi.invalidateStatsCache(repoKey, project.branch || "main").catch(() => {});
-    } catch (err: unknown) {
-      setPullLog((prev) => [...(prev || []), `error: ${(err as Error).message || "Pull failed"}`]);
-    } finally {
-      setPullLoading(false);
-    }
-  };
-
-  const loadBranches = async () => {
-    if (!project) return;
-    setBranchSearch("");
-    setBranchLoading(true);
-    try {
-      const parsed = parseOwnerRepo(project.repository);
-      if (parsed) {
-        const res = await gitApi.listBranches(project.connectionId, parsed.owner, parsed.repo);
-        setBranchList(res.branches);
-      }
-    } catch {
-      setBranchList([]);
-    } finally {
-      setBranchLoading(false);
-    }
-  };
-
-  const handleSwitchBranch = async (branch: string) => {
-    if (!project || !projectId) return;
-    const parsed = parseOwnerRepo(project.repository);
-    if (parsed) {
-      const repoKey = `${parsed.owner}/${parsed.repo}`;
-      gitApi.invalidateStackCache(repoKey)
-        .then(() => gitApi.getStackAnalysis(project.connectionId, parsed.owner, parsed.repo, branch, project.id))
-        .catch(() => {});
-      gitApi.invalidateStatsCache(repoKey).catch(() => {});
-    }
-    await projectsApi.update(projectId, { branch });
-    navigate(0);
-  };
-
   return {
     projectId,
     project,
@@ -159,26 +89,8 @@ export function useProjectData() {
     error,
     navigate,
     openDeployFromNav,
-    // Header
-    showDelete,
-    setShowDelete,
-    headerMenuOpen,
-    setHeaderMenuOpen,
-    handleDelete,
-    handlePullOrigin,
     handleUpdateName,
     nameSaving,
     nameError,
-    // Branch
-    loadBranches,
-    branchList,
-    branchLoading,
-    branchSearch,
-    setBranchSearch,
-    handleSwitchBranch,
-    // Pull log
-    pullLog,
-    setPullLog,
-    pullLoading,
   };
 }

@@ -5,11 +5,15 @@
  * public shape consumed by ProjectDetail.tsx and its child sections.
  *
  * Each sub-hook owns a single concern:
- *   - useProjectData: core project fetch, CRUD, branch, pull
+ *   - useProjectData: core project fetch, name edit
  *   - useRepoStats: stats + tech badges
  *   - useRepoActivity: commits, issues, PRs
- *   - useProjectAnalysis: AI analysis + cache + refresh
+ *   - useProjectAnalysis: AI analysis + cache
  *   - useProjectDeploys: providers, recent deploys/scans, wizard visibility
+ *
+ * Returns only what the page renders. Anything added here that no consumer
+ * reads is dead on arrival — the branch switcher and pull-from-origin flows
+ * sat here unreachable for exactly that reason.
  */
 
 import { useEffect } from "react";
@@ -36,9 +40,6 @@ export function useProjectDetail() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openDeployFromNav]);
 
-  // Wrap handlePullOrigin to pass stats (avoids stale closure in the sub-hook)
-  const handlePullOrigin = () => data.handlePullOrigin(stats);
-
   return {
     // Core project data
     project: data.project,
@@ -48,12 +49,6 @@ export function useProjectDetail() {
     error: data.error,
     navigate,
     // Header
-    showDelete: data.showDelete,
-    setShowDelete: data.setShowDelete,
-    headerMenuOpen: data.headerMenuOpen,
-    setHeaderMenuOpen: data.setHeaderMenuOpen,
-    handleDelete: data.handleDelete,
-    handlePullOrigin,
     handleUpdateName: data.handleUpdateName,
     nameSaving: data.nameSaving,
     nameError: data.nameError,
@@ -65,7 +60,6 @@ export function useProjectDetail() {
     analysisLoading: analysisHook.analysisLoading,
     analysisError: analysisHook.analysisError,
     fetchLastDeploy: deploys.fetchLastDeploy,
-    refreshAnalysis: analysisHook.refreshAnalysis,
     // Stats
     stats,
     statsLoading,
@@ -85,25 +79,13 @@ export function useProjectDetail() {
     pullRequests: activity.pullRequests,
     pullRequestsLoading: activity.pullRequestsLoading,
     pullRequestsError: activity.pullRequestsError,
-    // Branch selector
-    loadBranches: data.loadBranches,
-    branchList: data.branchList,
-    branchLoading: data.branchLoading,
-    branchSearch: data.branchSearch,
-    setBranchSearch: data.setBranchSearch,
-    handleSwitchBranch: data.handleSwitchBranch,
-    // Pull log
-    pullLog: data.pullLog,
-    setPullLog: data.setPullLog,
-    pullLoading: data.pullLoading,
-    // Recent deploys
+    // Recent deploys and scans
     recentDeploys: deploys.recentDeploys,
     recentScans: deploys.recentScans,
     deploysError: deploys.deploysError,
     scansError: deploys.scansError,
     fetchScans: deploys.fetchScans,
     hasLiveDeploy: deploys.hasLiveDeploy,
-    hasLiveScan: deploys.hasLiveScan,
     deploysLoaded: deploys.deploysLoaded,
     scansLoaded: deploys.scansLoaded,
   };

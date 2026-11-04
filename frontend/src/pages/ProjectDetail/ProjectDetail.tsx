@@ -10,7 +10,6 @@ import RecentDeploys from "./sections/RecentDeploys";
 import { DeployInfraStatus } from "./sections/ProjectPostureLine";
 import RecentScans from "./sections/RecentScans";
 import ProjectDescription from "./sections/ProjectDescription";
-import PullLogModal from "./modals/PullLogModal";
 import IssueDetailModal from "./modals/IssueDetailModal";
 import PRDetailModal from "./modals/PRDetailModal";
 import FixPreviewModal from "./modals/FixPreviewModal";
@@ -38,11 +37,10 @@ export default function ProjectDetail() {
     recentCommits, commitsLoading, commitsError,
     openIssues, setOpenIssues, issuesLoading, issuesError,
     pullRequests, pullRequestsLoading, pullRequestsError,
-    pullLog, setPullLog, pullLoading,
     recentDeploys,
     recentScans,
     deploysError, scansError, fetchScans, hasLiveDeploy,
-    deploysLoaded,
+    deploysLoaded, scansLoaded,
   } = useProjectDetail();
 
   // Bumped after a successful deploy to re-fetch the primary custom domain
@@ -273,6 +271,7 @@ export default function ProjectDetail() {
         onProjectUpdate={setProject}
         onInfraRefresh={() => { void refetchProject(); }}
         domainRefreshKey={domainRefreshKey}
+        deploysLoaded={deploysLoaded}
         activityPanel={
           <div className="flex flex-col gap-6">
             <RecentCommits commits={recentCommits} commitsLoading={commitsLoading} commitsError={commitsError} />
@@ -301,6 +300,7 @@ export default function ProjectDetail() {
             navigate={navigate}
             fallbackCommitHash={stats?.lastCommitHash}
             error={deploysError}
+            loaded={deploysLoaded}
             onRetry={fetchLastDeploy}
             onDeploy={() => setShowDeployWizard(true)}
           />
@@ -312,6 +312,7 @@ export default function ProjectDetail() {
             projectId={project.id}
             fallbackCommitHash={stats?.lastCommitHash}
             error={scansError}
+            loaded={scansLoaded}
             onRetry={fetchScans}
           />
         }
@@ -327,8 +328,6 @@ export default function ProjectDetail() {
         providers={allProviders}
         onDeployComplete={handleDeployComplete}
       />
-
-      <PullLogModal pullLog={pullLog} pullLoading={pullLoading} onClose={() => setPullLog(null)} />
 
       <FixPreviewModal
         open={fixPlan !== null}

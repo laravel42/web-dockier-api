@@ -8,6 +8,8 @@ import ProviderBadge from "@/components/ProviderBadge";
 import EmptyState from "@/components/ui/EmptyState";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
+import TabSpinner from "@/components/ui/TabSpinner";
+import { clickableProps } from "@/utils/a11y";
 
 interface Props {
   deploys: DeployInfo[];
@@ -16,6 +18,8 @@ interface Props {
   fallbackCommitHash?: string;
   /** Non-empty when the fetch failed — never conflated with "no deploys". */
   error?: string;
+  /** False until the first response settles, so "loading" is not shown as "never deployed". */
+  loaded?: boolean;
   onRetry?: () => void;
   /** Opens the deploy wizard from the empty state. */
   onDeploy?: () => void;
@@ -55,6 +59,7 @@ export default function RecentDeploys({
   navigate,
   fallbackCommitHash,
   error,
+  loaded = true,
   onRetry,
   onDeploy,
 }: Props) {
@@ -77,6 +82,19 @@ export default function RecentDeploys({
           description={error}
           action={onRetry ? { label: "Retry", onClick: onRetry } : undefined}
         />
+      </div>
+    );
+  }
+
+  // An unfinished fetch is not an empty history either.
+  if (!loaded && !deploys.length) {
+    return (
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <TabPanelHeader
+          title="Deployments"
+          description="Deploy history and status for this project."
+        />
+        <TabSpinner label="Loading deploy history…" />
       </div>
     );
   }
@@ -132,18 +150,7 @@ export default function RecentDeploys({
         return (
           /* No rule directly under a day heading — the heading is the divider. */
           <li key={row.key} className={rows[i - 1]?.type === "deploy" ? "border-t border-border/40" : ""}>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => open(row.deploy.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  open(row.deploy.id);
-                }
-              }}
-              className={rowCls}
-            >
+            <div {...clickableProps(() => open(row.deploy.id))} className={rowCls}>
               <span className={`size-2 shrink-0 rounded-full ${statusDot(row.deploy.status)}`} />
               <div className="min-w-0 flex-1 overflow-hidden">
                 <BranchCommitLabel

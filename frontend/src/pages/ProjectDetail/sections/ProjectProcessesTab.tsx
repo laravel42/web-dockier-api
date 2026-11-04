@@ -420,7 +420,8 @@ function CreateProcessModal({
   const [backoff, setBackoff] = useState(editProcess?.backoff ?? 0);
   const [sleep, setSleep] = useState(editProcess?.sleep ?? 3);
   const [rest, setRest] = useState(editProcess?.rest ?? 0);
-  const [timeout, setTimeout] = useState(editProcess?.timeout ?? 60);
+  // Not `setTimeout`: that shadows the global inside this whole component.
+  const [timeoutSeconds, setTimeoutSeconds] = useState(editProcess?.timeout ?? 60);
   const [tries, setTries] = useState(editProcess?.tries ?? 1);
   const [memory, setMemory] = useState(editProcess?.memory ?? 128);
   const [env, setEnv] = useState(editProcess?.env || "");
@@ -443,7 +444,7 @@ function CreateProcessModal({
       if (backoff > 0) parts.push(`--backoff=${backoff}`);
       if (sleep !== 3) parts.push(`--sleep=${sleep}`);
       if (rest > 0) parts.push(`--rest=${rest}`);
-      if (timeout !== 60) parts.push(`--timeout=${timeout}`);
+      if (timeoutSeconds !== 60) parts.push(`--timeout=${timeoutSeconds}`);
       if (tries !== 1) parts.push(`--tries=${tries}`);
       if (memory !== 128) parts.push(`--memory=${memory}`);
       if (env) parts.push(`--env=${env}`);
@@ -453,19 +454,19 @@ function CreateProcessModal({
     if (runtime === "node") {
       let cmd = `node ${connection || "worker.js"}`;
       if (queue) cmd += ` --queue=${queue}`;
-      if (timeout !== 60) cmd += ` --timeout=${timeout}`;
+      if (timeoutSeconds !== 60) cmd += ` --timeout=${timeoutSeconds}`;
       return cmd;
     }
     if (runtime === "python") {
       let cmd = `python ${connection || "worker.py"}`;
       if (queue) cmd += ` --queue=${queue}`;
-      if (timeout !== 60) cmd += ` --timeout=${timeout}`;
+      if (timeoutSeconds !== 60) cmd += ` --timeout=${timeoutSeconds}`;
       return cmd;
     }
     if (runtime === "go") {
       let cmd = connection || "./worker";
       if (queue) cmd += ` --queue=${queue}`;
-      if (timeout !== 60) cmd += ` --timeout=${timeout}`;
+      if (timeoutSeconds !== 60) cmd += ` --timeout=${timeoutSeconds}`;
       return cmd;
     }
     return command || "worker";
@@ -487,7 +488,7 @@ function CreateProcessModal({
         backoff,
         sleep,
         rest,
-        timeout,
+        timeout: timeoutSeconds,
         tries,
         memory,
         env: env.trim() || undefined,
@@ -564,7 +565,7 @@ function CreateProcessModal({
             </FieldRow>
 
             <FieldRow htmlFor={`${fid}-timeout`} label="Timeout">
-              <UnitInput id={`${fid}-timeout`} unit="seconds" value={timeout} onChange={setTimeout} min={0} />
+              <UnitInput id={`${fid}-timeout`} unit="seconds" value={timeoutSeconds} onChange={setTimeoutSeconds} min={0} />
             </FieldRow>
             <FieldRow htmlFor={`${fid}-tries`} label="Tries">
               <UnitInput id={`${fid}-tries`} unit="tries" value={tries} onChange={setTries} min={0} />

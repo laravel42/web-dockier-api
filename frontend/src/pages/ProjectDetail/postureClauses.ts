@@ -46,6 +46,12 @@ export function deployClause(
   return { tab: "deployments", text: `Deploy ${latest.status} · started ${when}`, tone: "neutral" };
 }
 
+/**
+ * Not currently rendered: the findings clause lost its slot when deploy+infra
+ * moved into the `DeployInfraStatus` chip. Kept because it is the tested record
+ * of the IA decision (never report safety from an error or an unfinished fetch)
+ * and the surface it belongs to is still expected back.
+ */
 export function findingsClause(
   scans: readonly Scan[],
   error: string,

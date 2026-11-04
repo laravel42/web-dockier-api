@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { gitApi } from "@/services/api";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
-import { clearProjectBadgeCache } from "@/utils/projectBadgeCache";
 import { SessionCache } from "@/pages/ProjectDetail/utils/sessionCache";
 import { getErrorMessage } from "@/utils/errors";
 import type { Project } from "@/types";
@@ -67,44 +66,5 @@ export function useProjectAnalysis(project: Project | null) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id, project?.connectionId, project?.repository, project?.branch, project?.sourceType, project?.template]);
 
-  const refreshAnalysis = async () => {
-    if (!project) return;
-    const parsed = parseOwnerRepo(project.repository);
-    if (!parsed) return;
-    const repoKey = `${parsed.owner}/${parsed.repo}`;
-    const cacheKey = `${repoKey}:${project.branch || "main"}`;
-    // Clear all caches
-    analysisCache.remove(cacheKey);
-    clearProjectBadgeCache(project.id);
-    await Promise.all([
-      gitApi.invalidateAnalysisCache(repoKey, project.branch || "main").catch(() => {}),
-      gitApi.invalidateStackCache(repoKey, project.branch || "main").catch(() => {}),
-      gitApi.invalidateStatsCache(repoKey, project.branch || "main").catch(() => {}),
-    ]);
-    // Re-run analysis with merge strategy
-    setAnalysisLoading(true);
-    setAnalysisError("");
-    gitApi.analyzeRepo(project.connectionId, parsed.owner, parsed.repo, project.branch || undefined, "openai", project.id)
-      .then((res) => {
-        setAnalysis((prev) => {
-          const merged: RepoAnalysis = prev
-            ? {
-                ...prev,
-                ...res,
-                aiAnalysis: res.aiAnalysis ?? prev.aiAnalysis,
-                dependencies: res.dependencies ?? prev.dependencies,
-              }
-            : res;
-          analysisCache.set(cacheKey, merged);
-          return merged;
-        });
-      })
-      .catch((err: unknown) => setAnalysisError((err as Error).message || "Failed to analyze repo"))
-      .finally(() => setAnalysisLoading(false));
-    // Re-run stack analysis in background
-    gitApi.getStackAnalysis(project.connectionId, parsed.owner, parsed.repo, project.branch || undefined, project.id)
-      .catch(() => {});
-  };
-
-  return { analysis, analysisLoading, analysisError, refreshAnalysis };
+  return { analysis, analysisLoading, analysisError };
 }

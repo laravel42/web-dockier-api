@@ -12,16 +12,17 @@ const TERMINAL_SCAN = new Set(["completed", "failed"]);
 /**
  * How often to re-read a job the user is actively watching.
  *
- * Deliberately the same 4s the scan progress controller already uses
- * (`scanProgressState.ts`), because this is the same kind of observation: a
- * long-running server job whose phases are minutes apart, watched by someone who
- * wants to know when it lands. The Commands tab polls at 3s, but that is a
- * different problem — a command returns in seconds and the user is staring at a
- * terminal waiting for output.
- *
- * Reusing the existing number rather than inventing a third one is the point.
+ * Slower than its two neighbours on purpose: the scan progress controller polls
+ * at 2s (`scanProgressState.POLL_INTERVAL_MS`) and the Commands tab at 3s, but
+ * both watch something that changes by the second — scan progress streams per
+ * file, and a command returns while the user stares at a terminal. A deploy's
+ * phases are minutes apart, so a 4s re-read of two list endpoints is already
+ * finer-grained than the thing it observes.
  */
 const WATCH_INTERVAL_MS = 4_000;
+
+/** Rows the deploy and scan panels show. Also the deploy page size. */
+const RECENT_ROW_COUNT = 5;
 
 const isDeployLive = (d: DeployInfo) => !TERMINAL_DEPLOY.has(d.status);
 const isScanLive = (s: Scan) => !TERMINAL_SCAN.has(s.status);
@@ -62,12 +63,15 @@ export function useProjectDeploys(project: Project | null, projectId: string | u
 
   const fetchLastDeploy = useCallback(() => {
     if (!projectIdForDeploys) return;
-    return deployApi.listDeployments()
+    // Scoped server-side. Unfiltered, this endpoint returns the TENANT's newest
+    // 20 deployments (`paginationQuerySchema` defaults to limit 20), so filtering
+    // client-side made a busy tenant's older project look like it had never
+    // shipped — which also hides the whole Runtime cluster from the nav.
+    return deployApi.listDeployments({ projectId: projectIdForDeploys, limit: RECENT_ROW_COUNT })
       .then((res) => {
-        const match = res.deployments
-          .filter((d: DeployInfo) => d.projectId === projectIdForDeploys)
+        const match = [...res.deployments]
           .sort((a, b) => parseApiTimestamp(b.createdAt).getTime() - parseApiTimestamp(a.createdAt).getTime());
-        setRecentDeploys(match.slice(0, 5));
+        setRecentDeploys(match);
         setDeploysError("");
       })
       .catch((err: unknown) => setDeploysError(getErrorMessage(err)))
@@ -78,7 +82,7 @@ export function useProjectDeploys(project: Project | null, projectId: string | u
     if (!projectId) return;
     return codeAnalysisApi.listScans(projectId)
       .then((res) => {
-        setRecentScans(res.scans.slice(0, 5));
+        setRecentScans(res.scans.slice(0, RECENT_ROW_COUNT));
         setScansError("");
       })
       .catch((err: unknown) => setScansError(getErrorMessage(err)))

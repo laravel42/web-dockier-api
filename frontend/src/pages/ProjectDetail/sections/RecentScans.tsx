@@ -7,6 +7,7 @@ import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
 import EmptyState from "@/components/ui/EmptyState";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
+import TabSpinner from "@/components/ui/TabSpinner";
 import { clickableProps } from "@/utils/a11y";
 
 interface Props {
@@ -18,6 +19,8 @@ interface Props {
   fallbackCommitHash?: string;
   /** Non-empty when the fetch failed — never conflated with "no scans". */
   error?: string;
+  /** False until the first response settles, so "loading" is not shown as "never scanned". */
+  loaded?: boolean;
   onRetry?: () => void;
 }
 
@@ -48,6 +51,7 @@ export default function RecentScans({
   projectId,
   fallbackCommitHash,
   error,
+  loaded = true,
   onRetry,
 }: Props) {
 
@@ -64,6 +68,19 @@ export default function RecentScans({
           description={error}
           action={onRetry ? { label: "Retry", onClick: onRetry } : undefined}
         />
+      </div>
+    );
+  }
+
+  // An unfinished fetch is not an empty history either.
+  if (!loaded && !scans.length) {
+    return (
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <TabPanelHeader
+          title="Security"
+          description="Review scan history and findings for this project."
+        />
+        <TabSpinner label="Loading scan history…" />
       </div>
     );
   }
