@@ -176,7 +176,14 @@ export interface WorkerOptions {
 }
 
 export interface EnqueueResult {
-  /** Whether the job was persisted to the queue (true) or ran in-process as fallback (false) */
+  /**
+   * Whether the job was persisted to the queue.
+   *
+   * False covers two different outcomes, both of which mean "do not wait on a
+   * worker for this": the queue was unavailable and the handler ran in-process
+   * instead, or the queue itself rejected the job (see the `send` result check
+   * in `enqueue`), in which case nothing ran.
+   */
   queued: boolean;
 }
 
@@ -301,14 +308,28 @@ export function createWorker<T>(
     }
 
     if (isQueueReady() && boss) {
-      await boss.send(queueName, input as unknown as Record<string, unknown>, {
+      const jobId = await boss.send(queueName, input as unknown as Record<string, unknown>, {
         retryLimit,
         retryDelay: retryDelaySeconds,
         retryBackoff,
         expireInSeconds,
         ...(singletonKey ? { singletonKey } : {}),
       });
-      logger.info(`[${queueName}] Enqueued job${singletonKey ? ` (key: ${singletonKey})` : ""}`);
+      // send resolves null instead of throwing when the queue's policy refuses
+      // the job — a singletonKey collision on any policy except `standard`.
+      // Returning queued: true for a job that was never persisted leaves the
+      // caller's row marked in-flight with no worker that will ever pick it up,
+      // and the only symptom is a timeout minutes later with an unrelated
+      // message. Not retried in-process on purpose: a refusal means an
+      // equivalent job is already queued or active, so running it here is the
+      // duplicate work the key exists to prevent.
+      if (!jobId) {
+        logger.error(
+          `[${queueName}] Job refused by the queue policy, nothing was enqueued${singletonKey ? ` (key: ${singletonKey})` : ""}`,
+        );
+        return { queued: false };
+      }
+      logger.info(`[${queueName}] Enqueued job ${jobId}${singletonKey ? ` (key: ${singletonKey})` : ""}`);
       return { queued: true };
     }
 

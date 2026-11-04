@@ -190,10 +190,6 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
   const scan = unwrapQuery(data, error, CodeAnalysisError, { notFoundMsg: "Scan not found" });
   assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
 
-  if (scan.status === "running") {
-    throw new CodeAnalysisError("A scan is already running for this record. Wait for it to finish or start a new scan.", "bad_request");
-  }
-
   const initialProgress = {
     phase: "cloning" as const,
     scanner: "cloning" as const,
@@ -207,6 +203,14 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
     progress: initialProgress,
   };
 
+  // This UPDATE is the lock, not a preceding status read: two concurrent runs
+  // both read the same non-running row and both pass any check made before the
+  // write, then both enqueue. Two subprocesses then clone the same repo and
+  // both reach persistFindings(), which DELETEs by scan_id before inserting —
+  // interleaved, that loses or duplicates findings. `neq` makes the transition
+  // the serialization point, so the loser gets 0 rows back and bails out.
+  // The queue cannot do this: `security-scan` is created without a policy, so
+  // it is `standard`, where pg-boss ignores singletonKey for deduplication.
   const { data: updated, error: updateError } = await supabaseAdmin
     .from("scans")
     .update({
@@ -215,13 +219,20 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
       updated_at: nowIso(),
     })
     .eq("id", scanId)
+    .neq("status", "running")
     .select()
-    .single();
+    .maybeSingle();
   throwOnError(updateError, CodeAnalysisError, { internalMsg: "Failed to update scan status" });
+  if (!updated) {
+    throw new CodeAnalysisError(
+      "A scan is already running for this record. Wait for it to finish or start a new scan.",
+      "bad_request",
+    );
+  }
 
   await enqueueScan({ scanId, tenantId, options, correlationId });
 
   await persistScanProgress(scanId, initialProgress);
 
-  return rowToScan(updated ?? scan);
+  return rowToScan(updated);
 }

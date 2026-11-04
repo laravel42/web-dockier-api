@@ -101,6 +101,37 @@ describe("queue start retry", () => {
 });
 
 /**
+ * pg-boss resolves `send` with null rather than throwing when the queue's
+ * policy refuses the job. Reporting that as queued leaves the caller's row
+ * marked in-flight with no worker that will ever pick it up.
+ */
+describe("a refused send", () => {
+  it("reports it was not queued, and does not run the handler instead", async () => {
+    start.mockResolvedValue(undefined);
+    send.mockResolvedValueOnce(null as unknown as string);
+    const { createWorker } = await import("../queue.js");
+
+    const handler = vi.fn(async () => {});
+    const worker = createWorker<{ id: string }>("test-queue", handler);
+
+    expect(await worker.enqueue({ id: "1" }, "key-1")).toEqual({ queued: false });
+    // A refusal means an equivalent job is already queued or active, so the
+    // in-process fallback would be the duplicate the key exists to prevent.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("still reports a real job id as queued", async () => {
+    start.mockResolvedValue(undefined);
+    const { createWorker } = await import("../queue.js");
+
+    const worker = createWorker<{ id: string }>("test-queue", vi.fn(async () => {}));
+
+    expect(await worker.enqueue({ id: "1" }, "key-1")).toEqual({ queued: true });
+  });
+});
+
+/**
  * An exhausted job used to be logged and dropped. The dead letter wiring is
  * what keeps its payload, so these pin the two things that silently undo it:
  * forgetting updateQueue (createQueue is ON CONFLICT DO NOTHING, so an existing
