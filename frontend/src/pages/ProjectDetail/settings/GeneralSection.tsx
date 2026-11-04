@@ -38,7 +38,7 @@ export default function GeneralSection({ project, analysis, canManage, onProject
   const {
     showDeleteModal, confirmName, setConfirmName, deleting,
     handleDelete, openDeleteModal, closeDeleteModal,
-  } = useProjectDelete(project.id, project.name);
+  } = useProjectDelete(project.id, project.name, project.repository);
 
   const {
     infraState, showTeardownModal, tearingDown,
