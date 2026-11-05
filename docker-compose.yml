@@ -1,0 +1,87 @@
+# Local SonarQube for security scans. Reachable at http://localhost:9100
+#
+#   docker compose up -d --wait      start and block until SonarQube is healthy
+#   docker compose down              stop, keeping the volumes
+#   docker compose down -v           stop and discard the analysis history
+#
+# This file covers ONLY SonarQube and its database. The backend and frontend
+# still run with `pnpm backend:dev` and `pnpm dev`; nothing here replaces them.
+# SonarQube is a stateful service rather than a library — it carries its own
+# Postgres and an embedded Elasticsearch — so a container is the only sane way
+# to run it. The app itself just needs SONARQUBE_URL to point here.
+#
+# NOT the app's database. Supabase holds the product's data; SonarQube gets its
+# own Postgres because it manages its own schema and would otherwise be a second
+# writer in the application database.
+
+services:
+  sonarqube-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: sonar
+      # Local-only: this container publishes no port, so the password never
+      # leaves the compose network. Override it if you expose the service.
+      POSTGRES_PASSWORD: ${SONARQUBE_DB_PASSWORD:-sonar}
+      POSTGRES_DB: sonar
+    volumes:
+      - sonarqube_db:/var/lib/postgresql/data
+    healthcheck:
+      # SonarQube fails its own bootstrap against a Postgres that is still
+      # starting, so it waits on this rather than on the container existing.
+      test: ["CMD-SHELL", "pg_isready -U sonar -d sonar"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  sonarqube:
+    # Pinned, like the semgrep version in backend/Dockerfile: `community` is a
+    # moving tag, and an unpinned analyser means a rule set that changes under
+    # you and findings that appear with no change to the code being scanned.
+    image: sonarqube:26.10.0.133078-community
+    depends_on:
+      sonarqube-db:
+        condition: service_healthy
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONARQUBE_DB_PASSWORD:-sonar}
+      # The bundled Elasticsearch refuses to start unless the HOST allows
+      # mmap, and a container cannot raise vm.max_map_count itself. Turning
+      # mmap off trades some search performance for starting at all on Docker
+      # Desktop, where that sysctl is inside a VM you do not control.
+      SONAR_SEARCH_JAVAADDITIONALOPTS: -Dnode.store.allow_mmap=false
+    ports:
+      # 9100 on the host, NOT 9000. php-fpm's default port is 9000 and it binds
+      # 127.0.0.1, so on any machine running PHP locally — which this project
+      # targets, see the Laravel custom rules — Docker gets only the IPv6
+      # wildcard and IPv4 loopback still reaches php-fpm. The scanner then talks
+      # FastCGI at an HTTP server and dies on "header parser received no bytes",
+      # which names neither the port nor php-fpm. Override if 9100 is taken too.
+      - "${SONARQUBE_PORT:-9100}:9000"
+    volumes:
+      # Keep these: without them an image upgrade discards the analysis history
+      # and every quality profile edit.
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_extensions:/opt/sonarqube/extensions
+    healthcheck:
+      # /api/system/status reports UP only once the web server AND the compute
+      # engine are ready. A plain port check passes a minute too early, while
+      # the server still answers 503 to the scanner.
+      test:
+        - CMD-SHELL
+        - >-
+          curl -sf http://localhost:9000/api/system/status
+          | grep -q '"status":"UP"'
+      interval: 15s
+      timeout: 10s
+      # First boot migrates the schema and builds the search indices; that is
+      # minutes, not seconds, hence the long start_period.
+      retries: 20
+      start_period: 180s
+
+volumes:
+  sonarqube_db:
+  sonarqube_data:
+  sonarqube_logs:
+  sonarqube_extensions:

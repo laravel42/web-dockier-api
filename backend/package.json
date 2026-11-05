@@ -16,6 +16,7 @@
     "smoke:ai-review": "tsx src/scripts/ai-review-smoke.ts",
     "preflight:dokploy": "tsx src/scripts/dokploy-preflight.ts",
     "audit:engine-data": "tsx src/scripts/audit-engine-data.ts",
+    "smoke:sonar": "tsx src/scripts/sonar-smoke.ts",
     "migrations:manifest": "tsx src/scripts/generate-migration-manifest.ts",
     "start:gateway": "SERVICE_NAME=gateway tsx src/server.ts"
   },

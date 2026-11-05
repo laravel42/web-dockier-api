@@ -7,9 +7,34 @@ FROM node:22-bookworm-slim AS base
 # arrives on its own. Keep in step with the root package.json postinstall.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    python3 python3-pip git ca-certificates curl \
+    python3 python3-pip git ca-certificates curl unzip \
   && pip3 install semgrep==1.160.0 --break-system-packages \
   && rm -rf /var/lib/apt/lists/*
+
+# sonar-scanner, for the same reason semgrep is here: runSonarScanner() shells
+# out to this binary, and findSonarScanner() returns null without it — so the
+# SonarQube branch logs "binary not found, skipping" and reports zero findings.
+# Silently, as a passing scan. The engine would then work only on a developer
+# machine that happens to have it installed.
+#
+# Pinned for the same reason as semgrep. The CLI embeds its own JRE, so this
+# needs no Java in the image. TARGETARCH is set by buildkit; the two values map
+# onto SonarSource's artifact names, which differ from Docker's.
+ARG TARGETARCH
+ARG SONAR_SCANNER_VERSION=8.3.1.16491
+RUN set -eu; \
+  case "${TARGETARCH:-amd64}" in \
+    amd64) sonar_arch=linux-x64 ;; \
+    arm64) sonar_arch=linux-aarch64 ;; \
+    *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+  esac; \
+  curl -fsSL -o /tmp/sonar-scanner.zip \
+    "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-${sonar_arch}.zip"; \
+  unzip -q /tmp/sonar-scanner.zip -d /opt; \
+  mv "/opt/sonar-scanner-${SONAR_SCANNER_VERSION}-${sonar_arch}" /opt/sonar-scanner; \
+  rm /tmp/sonar-scanner.zip; \
+  ln -s /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/sonar-scanner; \
+  sonar-scanner --version
 
 WORKDIR /app
 
