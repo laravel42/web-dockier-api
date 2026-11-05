@@ -7,6 +7,7 @@ import { sonarExclusionGlobs } from "./scan-skip-dirs.js";
 import { logger } from "../../../shared/logger.js";
 import { DomainError } from "../../../shared/supabase/errors.js";
 import { env } from "../../../shared/config.js";
+import { getErrMsg } from "../../../shared/utils/error-message.js";
 
 export interface SonarConfig {
   baseUrl: string;
@@ -296,7 +297,28 @@ export interface RunSonarScannerDeps {
   readReportTask?: (repoDir: string) => string | null;
   waitForAnalysis?: (taskId: string) => Promise<void>;
   fetchIssues?: (projectKey: string) => Promise<SonarApiIssue[]>;
+  deleteProject?: (projectKey: string) => Promise<void>;
   log?: (message: string) => void;
+}
+
+/**
+ * Delete a per-scan scratch project from the SonarQube server.
+ *
+ * Every scan analyses under a fresh `scan-<id>` key, so without this the server
+ * accumulates one project per scan forever, each carrying its own analysis
+ * history and search indices. Community Build has no line-of-code limit, so
+ * nothing bills for it — it just grows, and the project list stops being usable.
+ *
+ * The findings themselves are already persisted in Dockier's `findings` table
+ * by the time this runs, and the SonarQube UI is not a surface this product
+ * sends people to (PRODUCT.md: "One pane, no context-switching"), so there is
+ * nothing to keep server-side.
+ */
+export async function deleteSonarProject(
+  projectKey: string,
+  fetchFn: FetchFn = fetch,
+): Promise<void> {
+  await sonarFetch("/api/projects/delete", { project: projectKey }, "POST", fetchFn);
 }
 
 export async function runSonarScanner(
@@ -332,80 +354,95 @@ export async function runSonarScanner(
   ].join("\n");
   writeFileSync(join(repoDir, "sonar-project.properties"), props);
 
-  const execScanner =
-    deps.execScanner ??
-    ((bin: string, dir: string) => {
-      execFileSync(bin, [`-Dsonar.projectBaseDir=${dir}`], {
-        cwd: dir,
-        timeout: 300_000,
-        stdio: "pipe",
-        env: { ...process.env },
-      });
-    });
-
+  // From here on the scanner may already have created the project on the
+  // server, so every exit path has to clean it up — including the ones that
+  // give up early, which is exactly when a stale project would be left
+  // behind unnoticed.
   try {
-    execScanner(scannerBin, repoDir);
-  } catch (err) {
-    const execErr = err as { stderr?: Buffer; message?: string };
-    const stderr = execErr.stderr?.toString() ?? "";
-    log(`Scanner failed: ${stderr || execErr.message || String(err)}`);
-  }
-
-  const readReportTask =
-    deps.readReportTask ??
-    ((dir: string) => {
-      const reportTaskPath = join(dir, ".scannerwork", "report-task.txt");
-      if (!existsSync(reportTaskPath)) return null;
-      return readFileSync(reportTaskPath, "utf-8");
-    });
-
-  const reportContent = readReportTask(repoDir);
-  if (!reportContent) {
-    log("No report-task.txt found, scanner may have failed");
-    return [];
-  }
-
-  const ceTaskIdMatch = reportContent.match(/ceTaskId=(.+)/);
-  if (!ceTaskIdMatch) {
-    log("Could not find ceTaskId in report-task.txt");
-    return [];
-  }
-
-  const waitForAnalysis = deps.waitForAnalysis ?? ((taskId: string) => waitForSonarAnalysis(taskId));
-  log(`Waiting for analysis task ${ceTaskIdMatch[1]}...`);
-  await waitForAnalysis(ceTaskIdMatch[1].trim());
-
-  const fetchIssues =
-    deps.fetchIssues ??
-    (async (key: string) => {
-      const issues: SonarApiIssue[] = [];
-      let page = 1;
-      const pageSize = 500;
-
-      while (true) {
-        const data = await sonarFetch("/api/issues/search", {
-          componentKeys: key,
-          resolved: "false",
-          ps: String(pageSize),
-          p: String(page),
+    const execScanner =
+      deps.execScanner ??
+      ((bin: string, dir: string) => {
+        execFileSync(bin, [`-Dsonar.projectBaseDir=${dir}`], {
+          cwd: dir,
+          timeout: 300_000,
+          stdio: "pipe",
+          env: { ...process.env },
         });
-        const pageIssues = (data.issues as SonarApiIssue[] | undefined) ?? [];
-        issues.push(...pageIssues);
+      });
 
-        const paging = data.paging as Record<string, unknown> | undefined;
-        const total = Number(paging?.total ?? 0);
-        if (page * pageSize >= total) break;
-        page++;
-      }
+    try {
+      execScanner(scannerBin, repoDir);
+    } catch (err) {
+      const execErr = err as { stderr?: Buffer; message?: string };
+      const stderr = execErr.stderr?.toString() ?? "";
+      log(`Scanner failed: ${stderr || execErr.message || String(err)}`);
+    }
 
-      return issues;
-    });
+    const readReportTask =
+      deps.readReportTask ??
+      ((dir: string) => {
+        const reportTaskPath = join(dir, ".scannerwork", "report-task.txt");
+        if (!existsSync(reportTaskPath)) return null;
+        return readFileSync(reportTaskPath, "utf-8");
+      });
 
-  log("Fetching issues...");
-  const issues = await fetchIssues(projectKey);
-  const findings = parseSonarIssues(issues, projectKey);
-  log(`Found ${findings.length} issue(s)`);
-  return findings;
+    const reportContent = readReportTask(repoDir);
+    if (!reportContent) {
+      log("No report-task.txt found, scanner may have failed");
+      return [];
+    }
+
+    const ceTaskIdMatch = reportContent.match(/ceTaskId=(.+)/);
+    if (!ceTaskIdMatch) {
+      log("Could not find ceTaskId in report-task.txt");
+      return [];
+    }
+
+    const waitForAnalysis = deps.waitForAnalysis ?? ((taskId: string) => waitForSonarAnalysis(taskId));
+    log(`Waiting for analysis task ${ceTaskIdMatch[1]}...`);
+    await waitForAnalysis(ceTaskIdMatch[1].trim());
+
+    const fetchIssues =
+      deps.fetchIssues ??
+      (async (key: string) => {
+        const issues: SonarApiIssue[] = [];
+        let page = 1;
+        const pageSize = 500;
+
+        while (true) {
+          const data = await sonarFetch("/api/issues/search", {
+            componentKeys: key,
+            resolved: "false",
+            ps: String(pageSize),
+            p: String(page),
+          });
+          const pageIssues = (data.issues as SonarApiIssue[] | undefined) ?? [];
+          issues.push(...pageIssues);
+
+          const paging = data.paging as Record<string, unknown> | undefined;
+          const total = Number(paging?.total ?? 0);
+          if (page * pageSize >= total) break;
+          page++;
+        }
+
+        return issues;
+      });
+
+    log("Fetching issues...");
+    const issues = await fetchIssues(projectKey);
+    const findings = parseSonarIssues(issues, projectKey);
+    log(`Found ${findings.length} issue(s)`);
+    return findings;
+  } finally {
+    const deleteProject = deps.deleteProject ?? deleteSonarProject;
+    try {
+      await deleteProject(projectKey);
+    } catch (err) {
+      // Never fails the scan: the findings are already in hand by now, and a
+      // project left on the server costs disk, not correctness.
+      log(`Could not delete scratch project ${projectKey}: ${getErrMsg(err)}`);
+    }
+  }
 }
 
 export function filterDisabledSonarFindings(

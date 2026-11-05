@@ -9,9 +9,10 @@
  * `application.aiFixDeployment` 404 went unnoticed for months (see AGENTS.md).
  *
  * This runs the real path: findSonarScanner() -> sonar-scanner -> poll
- * /api/ce/task -> fetch /api/issues/search -> parseSonarIssues. It scans a
- * fixture written to a temp directory and then deletes the scratch project, so
- * it leaves nothing behind on the server.
+ * /api/ce/task -> fetch /api/issues/search -> parseSonarIssues, over a fixture
+ * written to a temp directory. It also exercises the scratch-project cleanup,
+ * since runSonarScanner deletes the project it created — check the server's
+ * project list before and after if you want to see that part.
  *
  * Needs SONARQUBE_URL and SONARQUBE_TOKEN, and `sonar-scanner` on the PATH.
  *
@@ -135,10 +136,8 @@ async function main(): Promise<void> {
     console.log("\nOK: prefixes, paths and line numbers all usable.");
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
-    // The scratch project would otherwise accumulate one row per run.
-    await sonarFetch("/api/projects/delete", { project: projectKey }, "POST").catch(
-      (err: unknown) => console.log(`  (could not delete ${projectKey}: ${getErrMsg(err)})`),
-    );
+    // The scratch project is NOT deleted here: runSonarScanner owns its
+    // lifetime and removes it in its own finally. Doing it again just 404s.
   }
 }
 

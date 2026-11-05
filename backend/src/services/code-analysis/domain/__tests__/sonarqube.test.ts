@@ -200,6 +200,7 @@ describe("runSonarScanner", () => {
 
     const repoDir = mkdtempSync(join(tmpdir(), "sonar-scan-test-"));
     const execCalls: Array<{ bin: string; repoDir: string }> = [];
+    const deleted: string[] = [];
     const findings = await runSonarScanner(repoDir, "scan-abc", {
       findScanner: () => "/opt/homebrew/bin/sonar-scanner",
       execScanner: (bin, repoDir) => {
@@ -216,6 +217,9 @@ describe("runSonarScanner", () => {
           line: 4,
         },
       ],
+      deleteProject: async (key) => {
+        deleted.push(key);
+      },
       log: (message) => logs.push(message),
     });
 
@@ -228,7 +232,117 @@ describe("runSonarScanner", () => {
       severity: "warning",
       filePath: "src/main.ts",
     });
+    expect(deleted).toEqual(["scan-abc"]);
     rmSync(repoDir, { recursive: true, force: true });
+  });
+});
+
+/**
+ * Every scan analyses under a fresh `scan-<id>` key, so a path that forgets to
+ * clean up leaves a project per scan on the server, each with its own history
+ * and search indices. Nothing bills for it and nothing errors — it just grows
+ * until the project list is unusable, which is why this needs pinning rather
+ * than trusting the happy path.
+ */
+describe("runSonarScanner — scratch project cleanup", () => {
+  const originalUrl = process.env.SONARQUBE_URL;
+  const originalToken = process.env.SONARQUBE_TOKEN;
+  const logs: string[] = [];
+
+  beforeEach(() => {
+    logs.length = 0;
+    process.env.SONARQUBE_URL = "https://sonar.example.com";
+    process.env.SONARQUBE_TOKEN = "sqp_test_token";
+  });
+
+  afterEach(() => {
+    if (originalUrl === undefined) delete process.env.SONARQUBE_URL;
+    else process.env.SONARQUBE_URL = originalUrl;
+    if (originalToken === undefined) delete process.env.SONARQUBE_TOKEN;
+    else process.env.SONARQUBE_TOKEN = originalToken;
+  });
+
+  /** Run with everything stubbed, letting one step be overridden per case. */
+  async function run(overrides: Parameters<typeof runSonarScanner>[2]) {
+    // A real directory: sonar-project.properties is written before the cleanup
+    // block is even entered, so a missing path fails ahead of what is under test.
+    const repoDir = mkdtempSync(join(tmpdir(), "sonar-cleanup-test-"));
+    const deleted: string[] = [];
+    try {
+      const findings = await runSonarScanner(repoDir, "scan-xyz", {
+        findScanner: () => "/usr/local/bin/sonar-scanner",
+        execScanner: () => {},
+        readReportTask: () => "ceTaskId=task-1\n",
+        waitForAnalysis: async () => {},
+        fetchIssues: async () => [],
+        deleteProject: async (key) => {
+          deleted.push(key);
+        },
+        log: (message: string) => logs.push(message),
+        ...overrides,
+      });
+      return { findings, deleted };
+    } finally {
+      rmSync(repoDir, { recursive: true, force: true });
+    }
+  }
+
+  it("deletes the project when the scanner binary fails to run", async () => {
+    const { deleted } = await run({
+      execScanner: () => {
+        throw new Error("exit 1");
+      },
+      readReportTask: () => null,
+    });
+
+    expect(deleted).toEqual(["scan-xyz"]);
+  });
+
+  it("deletes the project when report-task.txt never appears", async () => {
+    // The scanner can create the project server-side and then fail before
+    // writing its report, so this early return is the easiest leak to miss.
+    const { findings, deleted } = await run({ readReportTask: () => null });
+
+    expect(findings).toEqual([]);
+    expect(deleted).toEqual(["scan-xyz"]);
+  });
+
+  it("deletes the project when the report carries no ceTaskId", async () => {
+    const { deleted } = await run({ readReportTask: () => "projectKey=scan-xyz\n" });
+    expect(deleted).toEqual(["scan-xyz"]);
+  });
+
+  it("deletes the project when the analysis task fails", async () => {
+    await expect(
+      run({
+        waitForAnalysis: async () => {
+          throw new Error("SonarQube analysis FAILED");
+        },
+      }),
+    ).rejects.toThrow("analysis FAILED");
+  });
+
+  it("does not fail the scan when the delete itself fails", async () => {
+    // The findings are already in hand by then; a project left behind costs
+    // disk, not correctness.
+    const { findings } = await run({
+      fetchIssues: async () => [
+        { rule: "x:S1", severity: "MINOR", message: "m", component: "scan-xyz:a.ts", line: 1 },
+      ],
+      deleteProject: async () => {
+        throw new Error("403 insufficient privileges");
+      },
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(logs.some((l) => l.includes("Could not delete scratch project"))).toBe(true);
+  });
+
+  it("skips the delete entirely when no scanner ran", async () => {
+    // Nothing was created, so there is nothing to delete — and calling the API
+    // here would be a request on every scan in a deployment without SonarQube.
+    const { deleted } = await run({ findScanner: () => null });
+    expect(deleted).toEqual([]);
   });
 });
 
