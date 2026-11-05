@@ -24,9 +24,7 @@ const CONFIGURED = Boolean(import.meta.env.VITE_SAST_API_BASE);
 
 const ENGINE_LABEL: Record<string, string> = {
   regex: "Custom rules",
-  sonarqube: "Bearer",
-  bearer: "Bearer",
-  codeql: "CodeQL",
+  sonarqube: "SonarQube",
 };
 
 const HIDDEN_ENGINES = new Set(["semgrep"]);

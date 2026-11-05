@@ -70,7 +70,7 @@ def test_highest_severity_wins_on_collision():
 
 def test_first_occurrence_wins_on_severity_tie():
     a, b = _f(severity="warning"), _f(severity="warning")
-    a["message"], b["message"] = "from semgrep", "from codeql"
+    a["message"], b["message"] = "from semgrep", "from the regex rules"
     result = dedupe_findings([a, b])
     assert len(result) == 1
     assert result[0]["message"] == "from semgrep"
@@ -83,14 +83,14 @@ def test_unknown_severity_never_outranks_a_known_one():
 
 def test_dedupe_normalizes_paths_so_engines_agree(tmp_path):
     """
-    Semgrep echoes the absolute scratch path; CodeQL emits a relative SARIF URI.
+    Semgrep echoes the absolute scratch path; another engine may emit a relative one.
     The same issue must collapse despite arriving in two different shapes.
     """
     (tmp_path / "app.py").write_text("x")
     from_semgrep = _f(file_path=str(tmp_path / "app.py"), severity="warning")
-    from_codeql = _f(file_path="app.py", severity="error")
+    from_regex = _f(file_path="app.py", severity="error")
 
-    result = dedupe_findings([from_semgrep, from_codeql], repo_dir=str(tmp_path))
+    result = dedupe_findings([from_semgrep, from_regex], repo_dir=str(tmp_path))
     assert len(result) == 1
     assert result[0]["file_path"] == "app.py"
     assert result[0]["severity"] == "error"

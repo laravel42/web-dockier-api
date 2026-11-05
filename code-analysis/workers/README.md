@@ -1,7 +1,7 @@
 # Dockier SAST Workers
 
 Backend analysis components for Dockier's Static Application Security Testing
-(SAST) platform. Seven services, each its own process, behind one router port.
+(SAST) platform. Five services, each its own process, behind one router port.
 
 > **Status:** this tree replaces `backend/src/services/code-analysis`'s scan worker.
 > **Both must not run at once** — two consumers on the `security-scan` queue split
@@ -13,15 +13,15 @@ Backend analysis components for Dockier's Static Application Security Testing
 ```text
 pgboss:security-scan ──> gateway  ── resolves repo + credentials from the database
                                   ── clones, zips, uploads to object storage
-                                  ── fans out to four engine queues
+                                  ── fans out to every engine queue
                                         │
      pgboss:scan-semgrep   ─┐           │
-     pgboss:scan-regex     ─┼──> engine ── downloads, scans, publishes a ScanResult
-     pgboss:scan-sonarqube ─┤                   │
-     pgboss:scan-codeql    ─┘                   ▼
+     pgboss:scan-regex     ─┴──> engine ── downloads, scans, publishes a ScanResult
+                                                │
+                                                ▼
                                        pgboss:scan-results
                                                 │
-                                          aggregator ── barrier on all four engines
+                                          aggregator ── barrier on every engine
                                                      ── dedupes across engines
                                                      ── LLM marks false positives
                                                      ── writes scans + findings
@@ -57,7 +57,7 @@ src/
 ├── services/
 │   ├── base.py            # EnginePublisher — one way to report an outcome
 │   ├── worker_runtime.py  # Poll loop, concurrency cap, supervision, reaping
-│   ├── aggregator/ codeql/ gateway/ regex/ semgrep/ sonarqube/
+│   ├── aggregator/ gateway/ regex/ semgrep/ sonarqube/
 └── main.py                # Default ASGI target — the router
 ```
 
@@ -98,8 +98,6 @@ client ─→ router :8000 ┤
                                                aggregator :8003
                                                semgrep    :8004
                                                regex      :8005
-                                               sonarqube  :8006
-                                               codeql     :8007
 ```
 
 Separate processes so one engine wedging on a pathological repository cannot take

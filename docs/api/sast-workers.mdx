@@ -74,7 +74,7 @@ Enqueue a scan. Returns as soon as the job is durably queued — **not** when th
 scan finishes. Poll `GET /sast/scans/{scanId}` for progress.
 
 ```json
-{ "options": { "enableSonarqube": false } }
+{ "options": { "enableSemgrep": false } }
 ```
 
 All options default to `true`. Unknown keys are rejected rather than ignored, so
@@ -83,8 +83,6 @@ a typo like `enableSemgrap` is a 422 instead of silently meaning "enabled".
 | Option | Effect when false |
 | ------ | ----------------- |
 | `enableSemgrep` | Skip the Semgrep engine |
-| `enableSonarqube` | Skip SonarQube |
-| `enableCodeql` | Skip CodeQL |
 | `enableCustomRules` | Skip database-backed regex rules |
 | `enableSensitiveData` | Skip schema/model field classification |
 
@@ -103,11 +101,11 @@ A disabled engine reports `ok` with no findings — it is not treated as a failu
   "summary": {
     "totalFindings": 2, "errors": 1, "warnings": 1, "infos": 0,
     "filesScanned": 9, "filesInRepo": 20,
-    "partial": true, "failedEngines": ["codeql"]
+    "partial": true, "failedEngines": ["semgrep"]
   },
   "engineStatus": {
-    "semgrep": { "status": "ok", "error": null },
-    "codeql": { "status": "failed", "error": "codeql CLI not found on PATH" }
+    "regex": { "status": "ok", "error": null },
+    "semgrep": { "status": "failed", "error": "semgrep CLI not found on PATH" }
   },
   "qualityGateStatus": null,
   "progress": { "phase": "done", "filesScanned": 9, "filesInRepo": 20, "findingsCount": 2 },
@@ -185,7 +183,7 @@ Per-service liveness with queue depth, service metadata, and a manual enqueue fo
 testing. `trigger` enqueues rather than running inline, so a triggered job obeys
 the same concurrency cap, retries and expiry as any other.
 
-Services: `gateway`, `aggregator`, `semgrep`, `regex`, `sonarqube`, `codeql`.
+Services: `gateway`, `aggregator`, `semgrep`, `regex`.
 
 ---
 

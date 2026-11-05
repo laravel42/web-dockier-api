@@ -15,9 +15,6 @@ import PageLoading from "@/components/ui/PageLoading";
 import { PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./sections/RulesFilterSidebar";
-import {
-  BearerSettingsPanel, CodeQLSettingsPanel,
-} from "./sections/EngineSettingsPanels";
 import { severityDotCls } from "./sections/shared";
 // Shared with the scan page so Settings and the scan it starts cannot disagree.
 import { loadScanTools, saveScanTools } from "@/utils/scanTools";
@@ -52,9 +49,10 @@ const extIconMap: Record<string, string> = {
 // ─── Main Component ───
 
 export default function SecurityRulesTab() {
-  const [ruleSource, setRuleSource] = useState<
-    "custom" | "bearer-settings" | "codeql-settings"
-  >("custom");
+  // Only "custom" remains, but the selector stays: Semgrep and SonarQube get
+  // their own panels in the next phase, and collapsing it now would mean
+  // rebuilding it then.
+  const [ruleSource, setRuleSource] = useState<"custom">("custom");
   const [scanTools, setScanTools] = useState<Record<string, boolean>>(loadScanTools);
   const [toolMessage, setToolMessage] = useState("");
 
@@ -166,8 +164,6 @@ export default function SecurityRulesTab() {
         <div className="flex flex-wrap gap-x-8 gap-y-4">
           {([
             { key: "customRules", name: "Custom Rules" },
-            { key: "bearer", name: "Bearer" },
-            { key: "codeql", name: "CodeQL" },
           ] as const).map(({ key, name }) => (
             <div key={key} className="flex items-center gap-2.5 text-sm">
               <span className={scanTools[key] ? "text-text font-medium" : "text-text-muted"}>{name}</span>
@@ -180,13 +176,11 @@ export default function SecurityRulesTab() {
       {/* Source selector + content */}
       {(() => {
         const sources: Array<{
-          key: "custom" | "bearer-settings" | "codeql-settings";
+          key: "custom";
           label: string;
           toolKey: string | null;
         }> = [
           { key: "custom", label: "Custom Rules", toolKey: "customRules" },
-          { key: "bearer-settings", label: "Bearer", toolKey: null },
-          { key: "codeql-settings", label: "CodeQL", toolKey: null },
         ];
         const enabled = sources.filter(s => s.toolKey === null || scanTools[s.toolKey]);
         const activeVisible = enabled.some(s => s.key === ruleSource);
@@ -212,11 +206,7 @@ export default function SecurityRulesTab() {
               )}
             </div>
 
-            {effectiveSource === "bearer-settings" ? (
-              <BearerSettingsPanel />
-            ) : effectiveSource === "codeql-settings" ? (
-              <CodeQLSettingsPanel />
-            ) : (
+            {(
               <CustomRulesPanel
                 rules={rules}
                 filtered={filtered}

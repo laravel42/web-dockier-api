@@ -130,7 +130,7 @@ export function useScanDetail() {
     id: string,
     options: {
       severity?: string;
-      provider?: "semgrep" | "bearer" | "custom" | "codeql";
+      provider?: "semgrep" | "sonarqube" | "custom";
       append?: boolean;
       offset?: number;
     } = {},
@@ -180,7 +180,7 @@ export function useScanDetail() {
     if (!scanId || findingsLoading || findingsLoadingMore || !hasMoreFindings) return;
     fetchFindings(scanId, {
       severity: severityFilter || undefined,
-      provider: (providerFilter || undefined) as "semgrep" | "bearer" | "custom" | "codeql" | undefined,
+      provider: (providerFilter || undefined) as "semgrep" | "sonarqube" | "custom" | undefined,
       append: true,
       offset: findingsFetchOffsetRef.current,
     });
@@ -220,7 +220,7 @@ export function useScanDetail() {
     if (scan?.id === scanId && (scan.status === "running" || scan.status === "pending")) return;
     fetchFindings(scanId, {
       severity: severityFilter || undefined,
-      provider: (providerFilter || undefined) as "semgrep" | "bearer" | "custom" | "codeql" | undefined,
+      provider: (providerFilter || undefined) as "semgrep" | "sonarqube" | "custom" | undefined,
     });
   }, [scanId, scan?.id, scan?.status, severityFilter, providerFilter, fetchFindings]);
 
@@ -363,7 +363,7 @@ export function useScanDetail() {
       if (live.status === "completed") {
         await fetchFindings(scanId, {
           severity: severityFilter || undefined,
-          provider: (providerFilter || undefined) as "semgrep" | "bearer" | "custom" | "codeql" | undefined,
+          provider: (providerFilter || undefined) as "semgrep" | "sonarqube" | "custom" | undefined,
         });
       }
       if (project) await refreshAllScans(project.id, { silent: true });

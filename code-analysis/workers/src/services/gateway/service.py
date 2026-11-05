@@ -86,9 +86,9 @@ class GatewayService:
         """Return every language detected, most confident first.
 
         A single value was wrong twice over: walk order is arbitrary, so a
-        polyglot repo got a nondeterministic answer, and CodeQL builds one
-        database per language — reporting only the first hit silently skipped
-        the rest of the codebase.
+        polyglot repo got a nondeterministic answer, and a per-language engine
+        needs them all — reporting only the first hit silently skipped the rest
+        of the codebase.
         """
         found = []
         for manifest, language in MANIFEST_LANGUAGES:

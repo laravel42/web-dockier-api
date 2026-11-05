@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from src.api.auth import AuthContext, require_auth
 from src.api.errors import ApiError
 from src.api.schemas import (
-    AllEngineSettingsResponse, BearerSettings, CodeQLSettings, EngineSettingsResponse, FindingCounts,
+    AllEngineSettingsResponse, EngineSettingsResponse, FindingCounts,
     FindingItem, FindingsResponse, HealthResponse, QueueDepth, RegexSettings,
     RunScanRequest, RunScanResponse, ScanStatusResponse, SemgrepSettings,
 )
@@ -79,16 +79,14 @@ def _format_updated_at(value: Any) -> Optional[str]:
 def _rule_id_engine(rule_id: str) -> str:
     """Map a persisted rule id to the engine that produced it."""
     rid = rule_id or ""
-    if rid.startswith("bearer.") or rid.startswith("sonar."):
-        return "bearer"
+    if rid.startswith("sonar."):
+        return "sonarqube"
     if rid.startswith("custom.") or rid.startswith("sensitive-data."):
         return "regex"
-    if rid.startswith("codeql."):
-        return "codeql"
     return "semgrep"
 
 
-_ENGINE_ALIASES = {"sonarqube": "bearer", "custom": "regex"}
+_ENGINE_ALIASES = {"custom": "regex"}
 
 
 async def _infer_engine_status(scan_id: str, row: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -107,7 +105,10 @@ async def _infer_engine_status(scan_id: str, row: Dict[str, Any]) -> Dict[str, D
         return {}
 
     inferred: Dict[str, Dict[str, Any]] = {}
-    for engine in ("semgrep", "regex", "bearer", "codeql"):
+    # `sonarqube` is not in ENGINE_QUEUES — it has no worker in this pipeline.
+    # It stays here because historical scans run by the TS worker did produce
+    # `sonar.`-prefixed findings, and this function exists to describe them.
+    for engine in ("semgrep", "regex", "sonarqube"):
         if engine in failed:
             inferred[engine] = {"status": "failed", "error": None}
         elif engine in seen:
@@ -299,8 +300,6 @@ async def list_findings(
 SETTINGS_MODELS = {
     "semgrep": SemgrepSettings,
     "regex": RegexSettings,
-    "bearer": BearerSettings,
-    "codeql": CodeQLSettings,
 }
 
 

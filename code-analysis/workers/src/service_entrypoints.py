@@ -14,5 +14,4 @@ gateway_app = build_app(BY_NAME["gateway"])
 aggregator_app = build_app(BY_NAME["aggregator"])
 semgrep_app = build_app(BY_NAME["semgrep"])
 regex_app = build_app(BY_NAME["regex"])
-bearer_app = build_app(BY_NAME["bearer"])
-codeql_app = build_app(BY_NAME["codeql"])
+

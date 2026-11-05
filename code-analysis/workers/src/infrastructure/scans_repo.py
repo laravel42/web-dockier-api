@@ -15,7 +15,7 @@ from src.infrastructure.db_client import execute_query, execute_many, fetch_row
 
 # findings.severity is exactly this three-value vocabulary
 # (backend/src/services/code-analysis/domain/scan-analysis.ts). The engines speak
-# wider dialects — SonarQube emits blocker/critical/major/minor, CodeQL emits
+# wider dialects — SonarQube emits blocker/critical/major/minor, others emit
 # SARIF levels — so everything is funnelled through one mapping rather than
 # reaching the column raw and fragmenting the UI's severity filters.
 SEVERITY_MAP = {

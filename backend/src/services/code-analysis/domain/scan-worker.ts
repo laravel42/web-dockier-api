@@ -24,10 +24,8 @@ import { buildSummary, persistFindings, markScanFailed } from "./scan-persistenc
 export interface RunScanOptions {
   enableSemgrep?: boolean;
   enableSonarqube?: boolean;
-  enableBearer?: boolean;
   enableCustomRules?: boolean;
   enableSensitiveData?: boolean;
-  enableCodeql?: boolean;
 }
 
 /**

@@ -70,7 +70,7 @@ def test_redact_credentials(raw, expected):
 
 def test_detects_every_language_not_just_the_first(tmp_path):
     """
-    CodeQL builds one database per language. Returning a single value made a
+    A per-language engine needs them all. Returning a single value made a
     polyglot repo nondeterministic and silently skipped the rest of the code.
     """
     (tmp_path / "package.json").write_text("{}")
@@ -125,8 +125,12 @@ async def test_fans_out_to_every_engine_queue(mock_thread, mock_scan, mock_url, 
 
     await GatewayService().process_job("job-1", PAYLOAD)
 
+    # Derived from ENGINE_QUEUES, not a literal list: the fan-out iterates that
+    # dict, so a hardcoded set here would only ever restate the bug it misses.
+    from src.infrastructure.queue import ENGINE_QUEUES
     queues = [q for q, _ in published]
-    assert set(queues) == {"scan-semgrep", "scan-regex", "scan-bearer", "scan-codeql"}
+    assert set(queues) == set(ENGINE_QUEUES.values())
+    assert len(queues) == len(ENGINE_QUEUES), "one message per engine, no duplicates"
 
     body = published[0][1]
     assert body["scan_id"] == "scan-1"

@@ -32,11 +32,11 @@ from src.infrastructure.db_client import execute_query, fetch_all, fetch_row, ge
 SECURITY_SCAN_QUEUE = "security-scan"
 
 # Per-engine fan-out queues.
+# The gateway fans a scan out to every queue here, and the aggregator's
+# EXPECTED_ENGINES must match this key set exactly — see the comment there.
 ENGINE_QUEUES = {
     "semgrep": "scan-semgrep",
     "regex": "scan-regex",
-    "bearer": "scan-bearer",
-    "codeql": "scan-codeql",
 }
 
 RESULTS_QUEUE = "scan-results"

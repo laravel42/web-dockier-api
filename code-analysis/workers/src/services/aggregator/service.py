@@ -8,7 +8,12 @@ from src.infrastructure.scans_repo import persist_scan_results, resolve_file_cou
 from src.infrastructure.scan_progress import make_progress, publish_progress
 from src.infrastructure.redis_client import get_redis_client
 
-EXPECTED_ENGINES = {"semgrep", "regex", "bearer", "codeql"}
+# The barrier: a scan is not finalized until every engine here has reported.
+# It must list exactly the engines the gateway fans out to (ENGINE_QUEUES in
+# infrastructure/queue.py) — an engine listed here with no worker behind it
+# hangs every scan until BARRIER_TTL_SECONDS, with nothing marking it failed.
+# Adding SonarQube as an engine means adding it in both places.
+EXPECTED_ENGINES = {"semgrep", "regex"}
 
 # Barrier state must not outlive the scan it coordinates. Without a TTL the keys
 # leaked for every job that never completed; with one, an abandoned barrier
@@ -36,10 +41,10 @@ class AggregatorService:
     async def complete_job(self, job_id: str, scan_id: str, all_findings: list, engine_status: dict):
         print(f"[*] AggregatorService: Finalizing job {job_id} with {len(all_findings)} raw findings")
 
-        # Four engines scan the same tree and overlap heavily — Semgrep and CodeQL
-        # both report SQL injection, SonarQube and the regex rules both report
-        # hardcoded secrets. Without this the same vulnerability is persisted once
-        # per engine and the KPI counts are inflated by however many ran.
+        # The engines scan the same tree and overlap heavily — Semgrep and the
+        # regex rules both report hardcoded secrets, for instance. Without this
+        # the same vulnerability is persisted once per engine and the KPI counts
+        # are inflated by however many ran.
         deduped = dedupe_findings(all_findings)
         if len(deduped) != len(all_findings):
             print(f"[*] AggregatorService: deduped {len(all_findings)} -> {len(deduped)} findings")

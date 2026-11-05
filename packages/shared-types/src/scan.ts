@@ -78,8 +78,7 @@ export interface SecurityFindingCounts {
   warnings: number;
   infos: number;
   semgrep: number;
-  bearer: number;
+  sonarqube: number;
   custom: number;
-  codeql: number;
-  byProvider: Record<"semgrep" | "bearer" | "custom" | "codeql", ProviderSeverityCounts>;
+  byProvider: Record<"semgrep" | "sonarqube" | "custom", ProviderSeverityCounts>;
 }

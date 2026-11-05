@@ -33,13 +33,8 @@ class ScanOptions(BaseModel):
     model_config = ConfigDict(alias_generator=_camel, populate_by_name=True)
 
     enable_semgrep: bool = False
-    enable_bearer: bool = Field(
-        default=True,
-        validation_alias=AliasChoices("enable_bearer", "enableBearer", "enable_sonarqube", "enableSonarqube"),
-    )
     enable_custom_rules: bool = True
     enable_sensitive_data: bool = True
-    enable_codeql: bool = True
 
 
 class ScanMessage(BaseModel):
@@ -48,8 +43,8 @@ class ScanMessage(BaseModel):
     uri: str
     language: str
     commit_sha: str
-    # Every language detected, so CodeQL can build one database per language
-    # instead of silently analysing whichever one os.walk happened to hit first.
+    # Every language detected, not just the first one os.walk happened to hit,
+    # so a per-language engine can cover all of them.
     languages: List[str] = Field(default_factory=list)
     # Rules and overrides are per-tenant; an engine cannot load its
     # configuration without knowing whose scan this is.

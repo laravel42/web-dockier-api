@@ -51,7 +51,7 @@ async def test_no_tenant_means_no_overrides(mock_fetch):
 @pytest.mark.asyncio
 @patch("src.infrastructure.rules_repo.fetch_all", new_callable=AsyncMock)
 async def test_unknown_tool_has_no_override_table(mock_fetch):
-    assert await load_disabled_rule_ids("org-1", "codeql") == set()
+    assert await load_disabled_rule_ids("org-1", "nosuchtool") == set()
     mock_fetch.assert_not_awaited()
 
 

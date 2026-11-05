@@ -66,9 +66,7 @@ export const SCANNER_LABELS: Record<string, string> = {
   custom: "Custom rules",
   regex: "Custom rules",
   sensitive: "Sensitive data",
-  bearer: "Bearer",
-  sonarqube: "Bearer",
-  codeql: "CodeQL",
+  sonarqube: "SonarQube",
   persisting: "Saving results",
 };
 

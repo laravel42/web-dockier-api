@@ -25,8 +25,8 @@ def test_port_is_overridable(monkeypatch):
 
 
 def test_base_url_is_overridable_for_split_hosts(monkeypatch):
-    monkeypatch.setenv("SAST_URL_CODEQL", "http://scanner-box:7000")
-    assert BY_NAME["codeql"].base_url == "http://scanner-box:7000"
+    monkeypatch.setenv("SAST_URL_REGEX", "http://scanner-box:7000")
+    assert BY_NAME["regex"].base_url == "http://scanner-box:7000"
 
 
 def test_unknown_service_lookup_returns_none():

@@ -14,7 +14,7 @@ export function resolveFilteredCounts(
     infos: findingCounts.infos,
   };
 
-  if (providerFilter === "semgrep" || providerFilter === "bearer" || providerFilter === "custom" || providerFilter === "codeql") {
+  if (providerFilter === "semgrep" || providerFilter === "sonarqube" || providerFilter === "custom") {
     base = findingCounts.byProvider[providerFilter];
   }
 
@@ -36,7 +36,7 @@ export function resolveFilteredCounts(
 
 export function providerCount(
   findingCounts: SecurityFindingCounts | null,
-  provider: "semgrep" | "bearer" | "custom" | "codeql",
+  provider: "semgrep" | "sonarqube" | "custom",
 ): number {
   return findingCounts?.[provider] ?? 0;
 }

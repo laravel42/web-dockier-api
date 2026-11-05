@@ -3,7 +3,7 @@
 ## What it does
 Consumes the `security-scan` pg-boss queue — the same queue the backend API
 enqueues onto — resolves what to clone from the database, clones and uploads the
-codebase, and fans the job out to the four engine queues.
+codebase, and fans the job out to every engine queue in `ENGINE_QUEUES`.
 
 ## Input — pg-boss queue `security-scan`
 The backend's `ScanJobInput`. Note it carries **no clone URL**:
@@ -14,8 +14,11 @@ Repo, branch and commit come from the `scans` row; credentials come from
 `git_connections`, scoped to the tenant.
 
 ## Output
-A `ScanMessage` on each of `scan-semgrep`, `scan-regex`, `scan-sonarqube`,
-`scan-codeql`.
+A `ScanMessage` on each of `scan-semgrep` and `scan-regex`.
+
+The fan-out iterates `ENGINE_QUEUES.values()` (`infrastructure/queue.py`), so
+adding an engine needs no change here — but the aggregator's `EXPECTED_ENGINES`
+must gain the same key, or every scan hangs at its barrier.
 
 ## Security
 The gateway is the only component handling untrusted input from outside the
@@ -32,8 +35,8 @@ platform:
 
 ## Conventions
 - `detect_languages` must stay bounded and off the event loop. It returns *every*
-  language found: CodeQL builds one database per language, and returning a single
-  value silently skipped the rest of a polyglot repo.
+  language found, because a per-language engine needs them all and returning a
+  single value silently skipped the rest of a polyglot repo.
 - Cancellation is checked between phases and completes the job quietly — it is
   what the user asked for, and failing would make pg-boss retry it.
 

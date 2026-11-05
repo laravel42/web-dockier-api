@@ -4,10 +4,10 @@ Cross-engine finding normalization and deduplication.
 Port of the relevant half of
 backend/src/services/code-analysis/domain/scan-analysis.ts.
 
-Four engines scan the same tree, and they overlap heavily — Semgrep and CodeQL
-both report SQL injection, SonarQube and the regex rules both report hardcoded
-secrets. Without collapsing them the same vulnerability is persisted once per
-engine, and the KPI counts are inflated by however many scanners happened to run.
+Several engines scan the same tree, and they overlap heavily — Semgrep and the
+regex rules both report hardcoded secrets, for instance. Without collapsing them
+the same vulnerability is persisted once per engine, and the KPI counts are
+inflated by however many scanners happened to run.
 """
 
 import os
@@ -41,9 +41,9 @@ def to_repo_relative_path(file_path: str, repo_dir: Optional[str] = None) -> str
     """Reduce an engine's path to a repo-relative one.
 
     Engines report a mix: Semgrep echoes the absolute scratch path it was given,
-    CodeQL emits SARIF URIs already relative to the source root. A finding whose
-    path still carries `/tmp/tmpab12cd/` is both unusable in the UI and
-    undedupable, because the scratch directory differs per engine and per run.
+    others emit paths already relative to the source root. A finding whose path
+    still carries `/tmp/tmpab12cd/` is both unusable in the UI and undedupable,
+    because the scratch directory differs per engine and per run.
     """
     if not file_path:
         return file_path

@@ -67,8 +67,8 @@ async def assert_not_cancelled(scan_id: str) -> None:
     """Abort the job if the scan was cancelled or deleted underneath it.
 
     Checked between phases rather than continuously: a scan cancelled during a
-    twenty-minute CodeQL run should not keep burning CPU, and one whose row has
-    been deleted has nowhere to write results.
+    long engine run should not keep burning CPU, and one whose row has been
+    deleted has nowhere to write results.
     """
     row = await fetch_row("SELECT status FROM scans WHERE id = $1", scan_id)
     if row is None:

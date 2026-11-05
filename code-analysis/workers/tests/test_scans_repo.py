@@ -85,7 +85,7 @@ async def test_failed_engine_yields_partial_not_success(mock_fetch, mock_exec, m
     mock_fetch.side_effect = [{"id": "scan-1", "organization_id": "org-9"}, None]
 
     status = await persist_scan_results(
-        "scan-1", [], {"semgrep": {"status": "ok"}, "codeql": {"status": "failed", "error": "no cli"}}
+        "scan-1", [], {"regex": {"status": "ok"}, "semgrep": {"status": "failed", "error": "no cli"}}
     )
 
     assert status == "partial", "the caller must be told the scan was degraded"
@@ -94,8 +94,8 @@ async def test_failed_engine_yields_partial_not_success(mock_fetch, mock_exec, m
     # in the summary instead of inventing a status the API would reject.
     assert update[0][1] == "completed"
     assert update[0][2]["partial"] is True
-    assert update[0][2]["failedEngines"] == ["codeql"]
-    assert update[0][3]["codeql"]["status"] == "failed"
+    assert update[0][2]["failedEngines"] == ["semgrep"]
+    assert update[0][3]["semgrep"]["status"] == "failed"
 
 
 @pytest.mark.asyncio
@@ -181,7 +181,7 @@ async def test_partial_scan_is_not_gated(mock_fetch, mock_exec, mock_many):
     against — the engine that died is exactly the one that might have found the error.
     """
     mock_fetch.side_effect = [{"id": "scan-1", "organization_id": "org-9"}, None]
-    await persist_scan_results("scan-1", [], {"codeql": {"status": "failed", "error": "x"}})
+    await persist_scan_results("scan-1", [], {"semgrep": {"status": "failed", "error": "x"}})
 
     update = [c for c in mock_exec.await_args_list if "UPDATE scans" in c[0][0]][0]
     assert update[0][4] is None, "a partial scan must not record a gate verdict"
@@ -216,7 +216,7 @@ async def test_persisted_status_is_always_api_valid(mock_fetch, mock_exec, mock_
     scans.status is validated against z.enum(["pending","running","completed","failed"]).
     A status outside it makes the scan unreadable through the API.
     """
-    for engine_status in ({}, {"semgrep": {"status": "ok"}}, {"codeql": {"status": "failed"}}):
+    for engine_status in ({}, {"regex": {"status": "ok"}}, {"semgrep": {"status": "failed"}}):
         mock_exec.reset_mock()
         mock_fetch.side_effect = [{"id": "s", "organization_id": "o"}, None]
         await persist_scan_results("s", [], engine_status)

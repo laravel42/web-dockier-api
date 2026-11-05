@@ -27,7 +27,7 @@ if [ -f "$REPO_ROOT/.env.local" ] && [ "${NODE_ENV:-development}" != "production
 fi
 
 PYTHON=${PYTHON:-./.venv/bin/python}
-WORKERS=(gateway aggregator semgrep regex bearer codeql)
+WORKERS=(gateway aggregator semgrep regex)
 SERVICES=(api "${WORKERS[@]}")
 RUN_DIR=.run
 LOG_DIR=logs

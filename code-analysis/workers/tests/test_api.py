@@ -124,7 +124,7 @@ def test_run_enqueues_with_tenant_and_options(mock_row, mock_send, client):
     mock_send.return_value = "job-7"
 
     r = client.post("/sast/scans/scan-1/run",
-                    json={"options": {"enableSonarqube": False}},
+                    json={"options": {"enableSemgrep": False}},
                     headers={"Authorization": f"Bearer {_token('org-9')}"})
 
     assert r.status_code == 200
@@ -133,7 +133,6 @@ def test_run_enqueues_with_tenant_and_options(mock_row, mock_send, client):
     _, payload = mock_send.await_args[0]
     assert payload["scanId"] == "scan-1"
     assert payload["tenantId"] == "org-9", "tenant comes from the token, never the body"
-    assert payload["options"]["enable_bearer"] is False
     assert payload["options"]["enable_semgrep"] is False
 
 
@@ -147,9 +146,8 @@ def test_run_with_no_body_uses_server_defaults(mock_row, mock_send, client):
     assert r.status_code == 200
     opts = mock_send.await_args[0][1]["options"]
     assert opts["enable_semgrep"] is False
-    assert opts["enable_bearer"] is True
-    assert opts["enable_codeql"] is True
     assert opts["enable_custom_rules"] is True
+    assert opts["enable_sensitive_data"] is True
 
 
 @patch("src.api.routes.fetch_row", new_callable=AsyncMock)
@@ -182,16 +180,16 @@ def test_status_response_shape(mock_row, client):
 @patch("src.api.routes.fetch_row", new_callable=AsyncMock)
 def test_partial_scan_surfaces_failed_engines(mock_row, client):
     row = dict(SCAN_ROW)
-    row["summary"] = {**SCAN_ROW["summary"], "partial": True, "failedEngines": ["codeql"]}
-    row["engine_status"] = {"codeql": {"status": "failed", "error": "no cli"}}
+    row["summary"] = {**SCAN_ROW["summary"], "partial": True, "failedEngines": ["semgrep"]}
+    row["engine_status"] = {"semgrep": {"status": "failed", "error": "no cli"}}
     row["quality_gate_status"] = None
     mock_row.return_value = row
 
     body = client.get("/sast/scans/scan-1",
                       headers={"Authorization": f"Bearer {_token()}"}).json()
     assert body["summary"]["partial"] is True
-    assert body["summary"]["failedEngines"] == ["codeql"]
-    assert body["engineStatus"]["codeql"]["error"] == "no cli"
+    assert body["summary"]["failedEngines"] == ["semgrep"]
+    assert body["engineStatus"]["semgrep"]["error"] == "no cli"
     assert body["qualityGateStatus"] is None
 
 
@@ -215,15 +213,14 @@ def test_infers_engine_status_from_findings(mock_row, mock_all, client):
     row["summary"] = {**SCAN_ROW["summary"], "totalFindings": 3}
     mock_row.return_value = row
     mock_all.return_value = [
-        {"rule_id": "bearer.javascript_lang_rule"},
+        {"rule_id": "sonar.javascript_lang_rule"},
         {"rule_id": "custom.my_rule"},
-        {"rule_id": "codeql.sql-injection"},
     ]
     body = client.get("/sast/scans/scan-1",
                       headers={"Authorization": f"Bearer {_token()}"}).json()
-    assert body["engineStatus"]["bearer"]["status"] == "ok"
+    assert body["engineStatus"]["sonarqube"]["status"] == "ok"
     assert body["engineStatus"]["regex"]["status"] == "ok"
-    assert body["engineStatus"]["codeql"]["status"] == "ok"
+
     assert "semgrep" not in body["engineStatus"]
 
 
@@ -366,8 +363,8 @@ def test_settings_returns_defaults_for_a_fresh_tenant(mock_get, client):
     mock_get.return_value = {k: dict(v) for k, v in DEFAULTS.items()}
 
     body = client.get("/sast/settings", headers={"Authorization": f"Bearer {_token()}"}).json()
-    assert body["bearer"]["enabled"] is True
-    assert body["codeql"]["querySuite"] == "security-and-quality"
+    assert body["regex"]["enabled"] is True
+    assert body["semgrep"]["enabled"] is False, "semgrep ships off"
     assert mock_get.await_args[0][0] == "org-9", "scoped to the token's tenant"
 
 
@@ -378,32 +375,26 @@ def test_settings_requires_a_token(client):
 @patch("src.api.routes.engine_settings.save_settings", new_callable=AsyncMock)
 def test_put_settings_validates_against_the_engine_schema(mock_save, client):
     mock_save.side_effect = lambda t, e, c: c
-    r = client.put("/sast/settings/codeql",
-                   json={"languages": ["python"], "querySuite": "security-extended"},
+    r = client.put("/sast/settings/semgrep",
+                   json={"ruleTimeoutSeconds": 45},
                    headers={"Authorization": f"Bearer {_token()}"})
     assert r.status_code == 200
-    assert r.json()["config"]["querySuite"] == "security-extended"
+    assert r.json()["config"]["ruleTimeoutSeconds"] == 45
 
 
-@pytest.mark.parametrize("body,why", [
-    ({"languages": ["cobol"]}, "language not supported by codeql"),
-    ({"querySuite": "everything"}, "suite not in the catalogue"),
-    ({"timeoutSeconds": 5}, "below the floor"),
-    ({"buildMode": "make"}, "not a valid build mode"),
+@pytest.mark.parametrize("engine,body,why", [
+    ("semgrep", {"ruleTimeoutSeconds": 0}, "below the floor"),
+    ("semgrep", {"maxTargetBytes": "big"}, "not a number"),
+    ("semgrep", {"enabled": "maybe"}, "not coercible to a boolean"),
+    ("semgrep", {"extraExcludes": "not-a-list"}, "not a list"),
+    ("regex", {"customRules": []}, "not coercible to a boolean"),
+    ("regex", {"unknownKey": 1}, "extra=forbid rejects a typo"),
 ])
 @patch("src.api.routes.engine_settings.save_settings", new_callable=AsyncMock)
-def test_put_settings_rejects_bad_codeql_config(mock_save, client, body, why):
-    r = client.put("/sast/settings/codeql", json=body,
+def test_put_settings_rejects_bad_config(mock_save, client, engine, body, why):
+    r = client.put(f"/sast/settings/{engine}", json=body,
                    headers={"Authorization": f"Bearer {_token()}"})
     assert r.status_code == 422, why
-    mock_save.assert_not_awaited()
-
-
-@patch("src.api.routes.engine_settings.save_settings", new_callable=AsyncMock)
-def test_bearer_rejects_unknown_scanner(mock_save, client):
-    r = client.put("/sast/settings/bearer", json={"scanners": ["sast", "nmap"]},
-                   headers={"Authorization": f"Bearer {_token()}"})
-    assert r.status_code == 422
     mock_save.assert_not_awaited()
 
 
@@ -411,7 +402,7 @@ def test_bearer_rejects_unknown_scanner(mock_save, client):
 @patch("src.api.routes.engine_settings.save_settings", new_callable=AsyncMock)
 def test_credentials_are_refused_with_an_explanation(mock_save, client, key):
     """A token in a settings row would land in every backup and every SELECT."""
-    r = client.put("/sast/settings/bearer", json={"skipPaths": ["**/vendor/**"], key: "leak"},
+    r = client.put("/sast/settings/regex", json={"extraExcludes": ["**/vendor/**"], key: "leak"},
                    headers={"Authorization": f"Bearer {_token()}"})
     assert r.status_code == 422
     assert r.json()["code"] == "SECRET_NOT_ALLOWED"
@@ -423,4 +414,4 @@ def test_unknown_engine_names_the_configurable_ones(client):
     r = client.put("/sast/settings/nessus", json={},
                    headers={"Authorization": f"Bearer {_token()}"})
     assert r.status_code == 404
-    assert "bearer" in r.json()["message"]
+    assert "semgrep" in r.json()["message"]

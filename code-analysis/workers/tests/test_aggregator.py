@@ -57,22 +57,40 @@ async def test_findings_survive_the_redis_round_trip(fake_redis, finding):
     for item in captured["findings"]:
         assert isinstance(item, dict), f"expected finding object, got {item!r}"
         assert {"rule_id", "severity", "message", "file_path", "line"} <= set(item)
-    assert {f["rule_id"] for f in captured["findings"]} == {"rule-0", "rule-1", "rule-2", "rule-3"}
+    assert {f["rule_id"] for f in captured["findings"]} == {
+        f"rule-{i}" for i in range(len(EXPECTED_ENGINES))
+    }
 
 
 @pytest.mark.asyncio
 async def test_barrier_waits_for_all_engines(fake_redis, finding):
+    """
+    Derived from EXPECTED_ENGINES on purpose, never a hardcoded engine list.
+
+    Removing an engine's worker without removing it from EXPECTED_ENGINES hangs
+    every scan until BARRIER_TTL_SECONDS with nothing marking it failed, and a
+    test naming the old engines keeps passing while that happens. Stated the
+    other way: this must fail the moment the two sets disagree.
+    """
+    engines = sorted(EXPECTED_ENGINES)
+    assert len(engines) >= 2, "the barrier is meaningless with a single engine"
+
     service = _service(fake_redis)
     service.complete_job = AsyncMock()
 
-    await service.process_result(_result("semgrep", [finding()]))
-    await service.process_result(_result("regex", []))
-    await service.process_result(_result("bearer", []))
-
+    for engine in engines[:-1]:
+        await service.process_result(_result(engine, [finding()]))
     service.complete_job.assert_not_called()
 
-    await service.process_result(_result("codeql", []))
+    await service.process_result(_result(engines[-1], []))
     service.complete_job.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_barrier_matches_the_queues_the_gateway_fans_out_to(fake_redis):
+    """An engine in one set and not the other is the hang described above."""
+    from src.infrastructure.queue import ENGINE_QUEUES
+    assert EXPECTED_ENGINES == set(ENGINE_QUEUES)
 
 
 @pytest.mark.asyncio
@@ -98,10 +116,8 @@ async def test_only_one_caller_finalizes(fake_redis, finding):
     assert service.complete_job.await_count == 1
 
     # A late duplicate that re-populates the set must not finalize a second time.
-    await service.process_result(_result("semgrep", [finding()]))
-    await service.process_result(_result("regex", []))
-    await service.process_result(_result("bearer", []))
-    await service.process_result(_result("codeql", []))
+    for engine in EXPECTED_ENGINES:
+        await service.process_result(_result(engine, [finding()]))
     assert service.complete_job.await_count == 1
 
 
@@ -121,18 +137,18 @@ async def test_failed_engine_is_recorded(fake_redis, finding):
     service = _service(fake_redis)
 
     with patch("src.services.aggregator.service.persist_scan_results", new_callable=AsyncMock) as persist:
-        await service.process_result(_result("semgrep", [finding()]))
-        await service.process_result(_result("regex", []))
-        await service.process_result(_result("bearer", []))
+        healthy = sorted(EXPECTED_ENGINES - {"regex"})
+        for engine in healthy:
+            await service.process_result(_result(engine, [finding()]))
         await service.process_result(
-            _result("codeql", [], status="failed", error="codeql CLI not found on PATH")
+            _result("regex", [], status="failed", error="rule load failed")
         )
 
         persist.assert_awaited_once()
         scan_id, judged, engine_status = persist.await_args[0]
         assert scan_id == "scan-1"
-        assert engine_status["codeql"]["status"] == "failed"
-        assert engine_status["semgrep"]["status"] == "ok"
+        assert engine_status["regex"]["status"] == "failed"
+        assert all(engine_status[e]["status"] == "ok" for e in healthy)
 
 
 @pytest.mark.asyncio
@@ -197,9 +213,8 @@ async def test_keys_are_cleaned_up_after_completion(fake_redis, finding):
 @pytest.mark.asyncio
 async def test_identical_findings_from_different_engines_collapse(fake_redis, finding):
     """
-    Semgrep and CodeQL both report SQL injection; SonarQube and the regex rules
-    both report hardcoded secrets. Persisting one row per engine inflates the KPI
-    counts by however many scanners happened to run.
+    Semgrep and the regex rules both report hardcoded secrets. Persisting one
+    row per engine inflates the KPI counts by however many scanners ran.
     """
     service = _service(fake_redis)
 
@@ -210,4 +225,4 @@ async def test_identical_findings_from_different_engines_collapse(fake_redis, fi
             )
 
         _, judged, _ = persist.await_args[0]
-        assert len(judged) == 1, "the same issue reported by four engines is one finding"
+        assert len(judged) == 1, "the same issue reported by every engine is one finding"

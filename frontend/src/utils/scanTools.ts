@@ -2,8 +2,8 @@
  * Which security engines a scan runs. Stored per browser in `localStorage` —
  * the Settings page writes it, the scan page reads it, so both must agree on
  * the defaults and on the legacy key migration. Previously each side had its
- * own copy and they disagreed: a stored `sonarqube: false` showed Bearer off in
- * Settings while the scan page still enabled it.
+ * own copy and they disagreed: a stored value showed one thing in Settings
+ * while the scan page did another.
  */
 
 const STORAGE_KEY = "scan_tools";
@@ -11,9 +11,8 @@ const STORAGE_KEY = "scan_tools";
 /** Semgrep is off everywhere: the engine is not wired up in this deployment. */
 export const DEFAULT_SCAN_TOOLS: Record<string, boolean> = {
   semgrep: false,
-  bearer: true,
+  sonarqube: true,
   customRules: true,
-  codeql: true,
 };
 
 export function loadScanTools(): Record<string, boolean> {
@@ -21,11 +20,15 @@ export function loadScanTools(): Record<string, boolean> {
   if (!saved) return { ...DEFAULT_SCAN_TOOLS };
   try {
     const parsed = JSON.parse(saved) as Record<string, boolean>;
-    // `sonarqube` was renamed to `bearer`; honour the old value either way.
-    if (parsed.sonarqube !== undefined && parsed.bearer === undefined) {
-      parsed.bearer = parsed.sonarqube;
-      delete parsed.sonarqube;
+    // The engine was briefly called `bearer`, which was only ever SonarQube
+    // under a half-finished rename. Browsers still carry that key, so honour
+    // it as `sonarqube` rather than resetting the user's choice to the default.
+    if (parsed.bearer !== undefined && parsed.sonarqube === undefined) {
+      parsed.sonarqube = parsed.bearer;
     }
+    delete parsed.bearer;
+    // CodeQL was removed: it cannot be licensed for scanning private repos.
+    delete parsed.codeql;
     return { ...DEFAULT_SCAN_TOOLS, ...parsed, semgrep: false };
   } catch {
     return { ...DEFAULT_SCAN_TOOLS };
@@ -44,11 +47,8 @@ export function saveScanTools(tools: Record<string, boolean>): void {
 export function scanToolFlags(tools: Record<string, boolean>) {
   return {
     enableSemgrep: false,
-    // One engine, two flag names on the API — `sonarqube` is the legacy spelling.
-    enableBearer: tools.bearer,
-    enableSonarqube: tools.bearer,
+    enableSonarqube: tools.sonarqube,
     enableCustomRules: tools.customRules,
-    enableCodeql: tools.codeql,
     enableSensitiveData: false,
   };
 }

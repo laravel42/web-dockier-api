@@ -6,11 +6,14 @@
  * than a guess — keep the two in step.
  */
 
+/**
+ * No SonarQube toggle: that engine has no worker in this service (see
+ * `ENGINE_QUEUES` in `infrastructure/queue.py`), and the request model is
+ * `extra="forbid"`, so sending one would be a 422 rather than a skipped engine.
+ * The Fastify backend's own run endpoint is where `enableSonarqube` belongs.
+ */
 export interface SastScanOptions {
   enableSemgrep?: boolean;
-  enableBearer?: boolean;
-  enableSonarqube?: boolean;
-  enableCodeql?: boolean;
   enableCustomRules?: boolean;
   enableSensitiveData?: boolean;
 }
@@ -19,7 +22,7 @@ export type SastScanStatus = "pending" | "running" | "completed" | "failed";
 
 export type SastSeverity = "error" | "warning" | "info";
 
-export type SastEngine = "semgrep" | "regex" | "bearer" | "codeql";
+export type SastEngine = "semgrep" | "regex";
 
 export interface SastEngineStatus {
   status: "ok" | "failed";
@@ -116,30 +119,6 @@ export interface SastHealth {
 // secret, password or apiKey in a settings row — those live in the secret
 // store — and the database enforces it with a CHECK constraint.
 
-export interface BearerSettings {
-  enabled: boolean;
-  scanners: Array<"sast" | "secrets">;
-  severities: string;
-  skipTest: boolean;
-  skipPaths: string[];
-  timeoutSeconds: number;
-}
-
-export type CodeQLLanguage =
-  | "python" | "javascript" | "go" | "ruby" | "java" | "csharp" | "cpp";
-
-export type CodeQLSuite =
-  | "security-and-quality" | "security-extended" | "code-scanning";
-
-export interface CodeQLSettings {
-  enabled: boolean;
-  /** Narrows what the gateway detected; cannot add a language the repo lacks. */
-  languages: CodeQLLanguage[];
-  querySuite: CodeQLSuite;
-  buildMode: "none" | "autobuild";
-  timeoutSeconds: number;
-}
-
 export interface SemgrepSettings {
   enabled: boolean;
   ruleTimeoutSeconds: number;
@@ -162,8 +141,6 @@ export interface RegexSettings {
 export interface EngineSettings {
   semgrep: SemgrepSettings;
   regex: RegexSettings;
-  bearer: BearerSettings;
-  codeql: CodeQLSettings;
 }
 
 export type EngineName = keyof EngineSettings;

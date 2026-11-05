@@ -20,9 +20,8 @@ export interface SecurityFindingCounts {
   warnings: number;
   infos: number;
   semgrep: number;
-  bearer: number;
+  sonarqube: number;
   custom: number;
-  codeql: number;
   byProvider: Record<FindingProvider, ProviderSeverityCounts>;
 }
 
@@ -37,14 +36,12 @@ function emptyCounts(): SecurityFindingCounts {
     warnings: 0,
     infos: 0,
     semgrep: 0,
-    bearer: 0,
+    sonarqube: 0,
     custom: 0,
-    codeql: 0,
     byProvider: {
       semgrep: emptyProviderCounts(),
-      bearer: emptyProviderCounts(),
+      sonarqube: emptyProviderCounts(),
       custom: emptyProviderCounts(),
-      codeql: emptyProviderCounts(),
     },
   };
 }
@@ -239,15 +236,15 @@ export async function listFindings(params: ListFindingsParams): Promise<ListFind
     let next = query.eq("scan_id", scanId).eq("suppressed_by_llm", false);
     if (severityFilter) next = next.eq("severity", severityFilter);
     if (excludeSensitiveData) next = next.not("rule_id", "like", "sensitive-data.%");
-    if (provider === "bearer") next = next.or("rule_id.like.bearer.%,rule_id.like.sonar.%");
+    // Mirrors findingProvider() in finding-filters.ts: semgrep is defined by
+    // exclusion, so a prefix added there must be excluded here too or its
+    // findings show up under Semgrep as well as their own provider.
+    if (provider === "sonarqube") next = next.like("rule_id", "sonar.%");
     else if (provider === "custom") next = next.like("rule_id", "custom.%");
-    else if (provider === "codeql") next = next.like("rule_id", "codeql.%");
     else if (provider === "semgrep") {
       next = next
         .not("rule_id", "like", "sonar.%")
-        .not("rule_id", "like", "bearer.%")
         .not("rule_id", "like", "custom.%")
-        .not("rule_id", "like", "codeql.%")
         .not("rule_id", "like", "sensitive-data.%");
     }
     return next;

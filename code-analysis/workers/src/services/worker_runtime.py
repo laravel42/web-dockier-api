@@ -6,8 +6,8 @@ had the same three defects (§4.5, §4.7, §4.8):
 
   * the gateway held one pool connection for the entire process lifetime;
   * every message spawned an unbounded `asyncio.create_task`, so a burst could
-    start any number of concurrent clones and `codeql database create` runs
-    while MAX_WORKERS sat in config.py unreferenced;
+    start any number of concurrent clones and engine runs while MAX_WORKERS
+    sat in config.py unreferenced;
   * tasks were never retained and carried no done-callback, so a dropped
     connection killed a worker silently and permanently — and every subsequent
     scan then hung at the aggregator barrier with no log line to explain it.

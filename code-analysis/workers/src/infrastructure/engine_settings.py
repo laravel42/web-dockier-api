@@ -2,8 +2,8 @@
 Per-tenant engine configuration, read from and written to `engine_settings`.
 
 The engines previously took their configuration from the process environment,
-which meant a SonarQube host was a deploy decision rather than a tenant one, and
-CodeQL's language set was a constant in the source. Both are now stored.
+which meant a host or a timeout was a deploy decision rather than a tenant one.
+It is now stored per tenant.
 
 Two rules this module enforces, because the alternative fails quietly:
 
@@ -24,11 +24,6 @@ from src.infrastructure.db_client import execute_query, fetch_all, fetch_row
 # Kept in step with the CHECK constraint in migration 0066.
 SECRET_KEYS = {"token", "secret", "password", "apiKey", "api_key", "privateKey"}
 
-# CodeQL builds one database per language; these are the ones it supports here.
-CODEQL_LANGUAGES = ["python", "javascript", "go", "ruby", "java", "csharp", "cpp"]
-
-CODEQL_SUITES = ["security-and-quality", "security-extended", "code-scanning"]
-
 DEFAULTS: Dict[str, Dict[str, Any]] = {
     "semgrep": {
         "enabled": False,
@@ -46,24 +41,6 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
         "sensitiveData": True,
         "maxFileBytes": 2 * 1024 * 1024,
         "extraExcludes": [],
-    },
-    "bearer": {
-        "enabled": True,
-        # sast = static analysis rules; secrets = hard-coded credentials and similar.
-        "scanners": ["sast", "secrets"],
-        "severities": "critical,high,medium,low,warning",
-        "skipTest": True,
-        "skipPaths": [],
-        "timeoutSeconds": 1800,
-    },
-    "codeql": {
-        "enabled": True,
-        "languages": ["python", "javascript", "go", "ruby"],
-        "querySuite": "security-and-quality",
-        # `none` lets a compiled language build a database without a build
-        # command; `autobuild` is for repos that genuinely need compiling.
-        "buildMode": "none",
-        "timeoutSeconds": 3600,
     },
 }
 

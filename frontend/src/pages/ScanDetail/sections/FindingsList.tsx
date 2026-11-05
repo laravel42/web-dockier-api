@@ -34,7 +34,7 @@ interface Props {
   onCreateMR: (f: Finding) => void;
 }
 
-type ProviderKey = "semgrep" | "bearer" | "custom" | "codeql";
+type ProviderKey = "semgrep" | "sonarqube" | "custom";
 
 const PROVIDER_DEFS: Array<{
   key: string;
@@ -43,8 +43,7 @@ const PROVIDER_DEFS: Array<{
 }> = [
   { key: "", label: "All", countKey: null },
   { key: "custom", label: "Custom rules", countKey: "custom" },
-  { key: "codeql", label: "CodeQL", countKey: "codeql" },
-  { key: "bearer", label: "Bearer", countKey: "bearer" },
+  { key: "sonarqube", label: "SonarQube", countKey: "sonarqube" },
 ];
 
 export function ProviderFilters({
