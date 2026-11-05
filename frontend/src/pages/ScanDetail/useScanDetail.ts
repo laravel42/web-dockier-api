@@ -141,8 +141,14 @@ export function useScanDetail() {
       setFindingsLoadingMore(true);
     } else {
       setFindingsLoading(true);
+      // The rows are cleared, the counts are NOT. The list changes with the
+      // filter, so stale rows would be wrong; the counts do not — the API
+      // computes them per scan and ignores severity and provider
+      // (getSecurityFindingCounts in domain/findings.ts). Blanking them made
+      // every tab's number vanish and come back on each switch, discarding a
+      // value for one identical to it. They are reset where they genuinely go
+      // stale instead: the [scanId] effect below.
       setFindings([]);
-      setFindingCounts(null);
       setHasMoreFindings(false);
     }
     setFindingsError("");
@@ -224,13 +230,11 @@ export function useScanDetail() {
     });
   }, [scanId, scan?.id, scan?.status, severityFilter, providerFilter, fetchFindings]);
 
-  useEffect(() => {
-    if (!findingCounts || !providerFilter) return;
-    const providerTotal = findingCounts[providerFilter as keyof SecurityFindingCounts];
-    if (typeof providerTotal === "number" && providerTotal === 0) {
-      setProviderFilter("");
-    }
-  }, [findingCounts, providerFilter]);
+  // An engine with no findings deliberately keeps its tab selected. This used
+  // to clear the filter instead, which moved the user somewhere they had not
+  // asked to go and left them to work out why — "SonarQube found nothing" and
+  // "you are now looking at everything" are different answers to the question
+  // they asked. FindingsList says the former in its empty state.
 
   useEffect(() => {
     if (scanId) {
@@ -412,8 +416,17 @@ export function useScanDetail() {
     });
   }, [findings, project, fileContents, fileFetchTick]);
 
+  /**
+   * Severity and provider are independent filters and compose.
+   *
+   * This used to clear the provider, so picking a severity while on an engine's
+   * tab threw you back to All — you could not ask for "Semgrep errors", which is
+   * the narrowing a user wants most. Nothing required it: the API applies both
+   * filters independently, and resolveFilteredCounts already switches the
+   * severity cards to the selected provider's own breakdown so they keep showing
+   * real, clickable numbers while both are active.
+   */
   const handleSeverityFilter = (severity: string) => {
-    setProviderFilter("");
     setSeverityFilter((prev) => (prev === severity ? "" : severity));
   };
 

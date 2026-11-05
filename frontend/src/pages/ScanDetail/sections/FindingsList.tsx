@@ -6,6 +6,7 @@ import { displayFindingPath } from "@/pages/ScanDetail/utils/scanPaths";
 import { buildCodePreviewRows, buildSnippetPreviewRow } from "@/pages/ScanDetail/utils/codePreview";
 import { providerCount } from "@/pages/ScanDetail/utils/findingCounts";
 import { usePermissions } from "@/context/PermissionsContext";
+import { emptyFilterMessage, PROVIDER_DEFS } from "../utils/providerFilters";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import type { Finding, PMIntegration, SecurityFindingCounts } from "@/types";
 import Spinner from "@/components/Spinner";
@@ -33,22 +34,6 @@ interface Props {
   onCreateIssue: (f: Finding) => void;
   onCreateMR: (f: Finding) => void;
 }
-
-type ProviderKey = "semgrep" | "sonarqube" | "custom";
-
-const PROVIDER_DEFS: Array<{
-  key: string;
-  label: string;
-  countKey: ProviderKey | null;
-}> = [
-  { key: "", label: "All", countKey: null },
-  // Semgrep is also the catch-all bucket: findingProvider() returns it for any
-  // rule id without a known prefix, so a new engine whose prefix is not
-  // registered there lands under this tab rather than its own.
-  { key: "semgrep", label: "Semgrep", countKey: "semgrep" },
-  { key: "custom", label: "Custom rules", countKey: "custom" },
-  { key: "sonarqube", label: "SonarQube", countKey: "sonarqube" },
-];
 
 export function ProviderFilters({
   findingCounts,
@@ -125,17 +110,6 @@ function sortFindingsBySeverityDesc(findings: Finding[]): Finding[] {
   );
 }
 
-function emptyFilterMessage(severityFilter: string, providerFilter: string): string {
-  const parts: string[] = [];
-  if (providerFilter) {
-    const label = PROVIDER_DEFS.find((p) => p.key === providerFilter)?.label ?? providerFilter;
-    parts.push(label);
-  }
-  if (severityFilter) parts.push(`severity "${severityFilter}"`);
-  if (parts.length === 0) return "No security findings for this scan.";
-  return `No findings match ${parts.join(" and ")}.`;
-}
-
 export default function FindingsList({
   findings, findingCounts, findingsLoading, findingsLoadingMore, hasMoreFindings, onLoadMore,
   scanCompleted,
@@ -181,7 +155,12 @@ export default function FindingsList({
         <div className={`${cardCls} p-8 text-center`}>
           <p className="text-sm text-text-muted">{emptyFilterMessage(severityFilter, providerFilter)}</p>
           {hasActiveFilter && (
-            <p className="text-xs text-text-muted mt-2">Clear the summary or source filters to see all findings.</p>
+            // Names the two controls as they are labelled on screen: the
+            // severity cards above and the All tab in this row.
+            <p className="mt-2 text-xs text-text-muted">
+              Pick <span className="font-medium">All</span> above, or deselect the severity card, to
+              see every finding.
+            </p>
           )}
         </div>
       ) : (

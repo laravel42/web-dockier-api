@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ProviderFilters } from "../pages/ScanDetail/sections/FindingsList";
+import { emptyFilterMessage } from "../pages/ScanDetail/utils/providerFilters";
 import type { SecurityFindingCounts } from "@/types";
 
 /**
@@ -92,5 +93,39 @@ describe("ProviderFilters", () => {
 
     expect(selected).toHaveLength(1);
     expect(selected[0].textContent).toContain("All");
+  });
+});
+
+/**
+ * The reply when a filtered list comes back empty — including when an engine
+ * found nothing in the whole scan, because its tab now stays selected instead
+ * of the hook silently moving the user to All.
+ *
+ * Phrased as a statement about the engine, not about the query: a scan that
+ * found nothing is the reassuring case, and the old wording ("No findings match
+ * Semgrep and severity \"error\"") read like a failure.
+ */
+describe("emptyFilterMessage", () => {
+  it.each([
+    ["semgrep", "", "No Semgrep findings in this scan."],
+    ["sonarqube", "", "No SonarQube findings in this scan."],
+    ["custom", "", "No Custom rules findings in this scan."],
+    ["semgrep", "error", 'No Semgrep findings with severity "error" in this scan.'],
+    ["", "warning", 'No findings with severity "warning" in this scan.'],
+    ["", "", "No security findings for this scan."],
+  ])("provider %s + severity %s", (provider, severity, expected) => {
+    expect(emptyFilterMessage(severity, provider)).toBe(expected);
+  });
+
+  it("uses the tab's label, not the raw provider key", () => {
+    // `sonarqube` would read as a key; the tab says SonarQube.
+    expect(emptyFilterMessage("", "sonarqube")).toContain("SonarQube");
+    expect(emptyFilterMessage("", "sonarqube")).not.toContain("sonarqube");
+  });
+
+  it("falls back to the key for a provider with no tab", () => {
+    // Should not happen — provider-filters above pins that every provider has a
+    // tab — but a missing label must not render "No undefined findings".
+    expect(emptyFilterMessage("", "codeql")).toBe("No codeql findings in this scan.");
   });
 });
