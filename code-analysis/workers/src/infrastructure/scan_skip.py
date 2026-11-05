@@ -11,7 +11,7 @@ import os
 import re
 from typing import List
 
-# Directory names skipped when walking repos and passed to Semgrep/SonarQube.
+# Directory names skipped when walking repos and passed to the engines.
 SCAN_SKIP_DIRS = {
     "node_modules", ".git", "vendor", "vendors", "bower_components", "jspm_packages",
     "third_party", "third-party", "dist", "build", "target", "out",
@@ -95,11 +95,6 @@ def semgrep_exclude_args() -> List[str]:
     for glob in GENERATED_GLOBS:
         args += ["--exclude", glob]
     return args
-
-
-def sonar_exclusion_globs() -> str:
-    """Comma-separated SonarQube sonar.exclusions glob list."""
-    return ",".join(f"**/{d}/**" for d in sorted(SCAN_SKIP_DIRS))
 
 
 def semgrep_ignore_lines() -> List[str]:

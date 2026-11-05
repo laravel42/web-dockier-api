@@ -57,7 +57,7 @@ src/
 ├── services/
 │   ├── base.py            # EnginePublisher — one way to report an outcome
 │   ├── worker_runtime.py  # Poll loop, concurrency cap, supervision, reaping
-│   ├── aggregator/ gateway/ regex/ semgrep/ sonarqube/
+│   ├── aggregator/ gateway/ regex/ semgrep/
 └── main.py                # Default ASGI target — the router
 ```
 
@@ -126,7 +126,7 @@ pytest                    # 309 tests
 | `S3_BUCKET_NAME` | no | Object storage; falls back to a local mock store |
 | `ALLOWED_CLONE_HOSTS` | no | Comma-separated host allowlist; unset means any https host |
 | `OPENGREP_RULES_DIR` | no | Rule corpus location (default `code-analysis/rules/opengrep`) |
-| `SONAR_HOST_URL`, `SONAR_TOKEN` | for SonarQube | Scanner and API access |
+
 | `JWT_SECRET` | yes, for the API | Verifies tenant tokens; the API fails closed without it |
 | `CORS_ALLOW_ORIGINS` | for any non-local origin | Comma-separated. Defaults to `http://localhost:5173` and the 127.0.0.1 equivalent so local dev works unconfigured; setting it replaces that default entirely. No wildcard — credentials are in play |
 
