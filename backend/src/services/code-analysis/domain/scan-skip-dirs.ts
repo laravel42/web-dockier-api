@@ -77,6 +77,49 @@ export function isGeneratedAssetName(name: string): boolean {
 }
 
 /**
+ * Paths that hold tests rather than shipped code.
+ *
+ * Deliberately NOT added to SCAN_SKIP_DIRS: tests are still worth scanning. A
+ * test can call an unsafe API for real, and an injection or XSS finding there is
+ * a genuine signal about the code under test. This classification exists for the
+ * one rule family where a test is a false positive by construction — secret
+ * detection, where the fixture is fake credentials on purpose. See
+ * `isSecretDetectionFinding` in finding-filters.ts.
+ */
+const TEST_PATH_PATTERNS: RegExp[] = [
+  // Directories, in any position.
+  /(^|\/)(__tests__|__mocks__|__fixtures__|tests?|spec|specs|e2e|fixtures|testdata)(\/|$)/i,
+  // JS/TS conventions, including Cypress and Playwright.
+  /\.(test|spec|cy|e2e)\.[cm]?[jt]sx?$/i,
+  // Python: pytest and unittest both.
+  /(^|\/)(test_[^/]+|[^/]+_test)\.py$/i,
+  /(^|\/)conftest\.py$/i,
+  // Go, Rust.
+  /_test\.go$/i,
+  /(^|\/)tests\.rs$/i,
+  // JVM and .NET.
+  /(Test|Tests|TestCase|Spec)\.(java|kt|scala|cs)$/,
+  // PHP: PHPUnit and Pest, the Laravel conventions.
+  /(Test|Spec)\.php$/,
+  /\.(test|spec)\.php$/i,
+  // Ruby.
+  /(^|\/)[^/]+_(test|spec)\.rb$/i,
+];
+
+/**
+ * True when a repo-relative path is test code.
+ *
+ * Erring toward false positives here is the safer direction: a missed test file
+ * keeps reporting fake credentials, while a source file wrongly judged a test
+ * would hide real ones. Every pattern below therefore needs a test marker in the
+ * name or an unambiguous directory, never a bare "contains the word test".
+ */
+export function isTestFilePath(relativePath: string): boolean {
+  const normalized = relativePath.replace(/\\/g, "/");
+  return TEST_PATH_PATTERNS.some((re) => re.test(normalized));
+}
+
+/**
  * Longest line we will accept in a text asset before treating it as minified.
  *
  * Minified bundles put a whole library on one line. A finding on such a file is
