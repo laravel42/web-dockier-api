@@ -35,9 +35,15 @@ describe("loadScanTools", () => {
     expect(loadScanTools().codeql).toBeUndefined();
   });
 
-  it("keeps semgrep off even when storage says otherwise", () => {
-    localStorage.setItem("scan_tools", JSON.stringify({ semgrep: true }));
+  it("honours a stored semgrep choice", () => {
+    // It used to be forced off on every read, which silently overrode the
+    // toggle. The engine is on by default now, so only an explicit opt-out
+    // should turn it off.
+    localStorage.setItem("scan_tools", JSON.stringify({ semgrep: false }));
     expect(loadScanTools().semgrep).toBe(false);
+
+    localStorage.setItem("scan_tools", JSON.stringify({ semgrep: true }));
+    expect(loadScanTools().semgrep).toBe(true);
   });
 
   it("falls back to the defaults on unparseable storage", () => {
@@ -56,14 +62,33 @@ describe("scanToolFlags", () => {
     const flags = scanToolFlags(DEFAULT_SCAN_TOOLS);
 
     expect(flags).toEqual({
-      enableSemgrep: false,
+      enableSemgrep: true,
       enableSonarqube: true,
       enableCustomRules: true,
+      // Opt-in on the backend too: schema field classification is project
+      // information, not a security finding.
       enableSensitiveData: false,
     });
   });
 
-  it("disables sonarqube when the toggle is off", () => {
-    expect(scanToolFlags({ ...DEFAULT_SCAN_TOOLS, sonarqube: false }).enableSonarqube).toBe(false);
-  });
+  it.each(["semgrep", "sonarqube", "customRules"] as const)(
+    "forwards the %s toggle when it is off",
+    (engine) => {
+      // Each engine needs its own flag reaching the API. The UI once had one
+      // toggle driving two flags and another engine with no toggle at all.
+      const flags = scanToolFlags({ ...DEFAULT_SCAN_TOOLS, [engine]: false });
+      const flagName = {
+        semgrep: "enableSemgrep",
+        sonarqube: "enableSonarqube",
+        customRules: "enableCustomRules",
+      }[engine] as keyof ReturnType<typeof scanToolFlags>;
+
+      expect(flags[flagName]).toBe(false);
+      // and nothing else changed
+      const others = Object.entries(flags).filter(
+        ([k]) => k !== flagName && k !== "enableSensitiveData",
+      );
+      expect(others.every(([, v]) => v === true)).toBe(true);
+    },
+  );
 });

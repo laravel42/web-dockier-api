@@ -163,6 +163,8 @@ export default function SecurityRulesTab() {
         </div>
         <div className="flex flex-wrap gap-x-8 gap-y-4">
           {([
+            { key: "semgrep", name: "Semgrep" },
+            { key: "sonarqube", name: "SonarQube" },
             { key: "customRules", name: "Custom Rules" },
           ] as const).map(({ key, name }) => (
             <div key={key} className="flex items-center gap-2.5 text-sm">

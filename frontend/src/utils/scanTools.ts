@@ -8,9 +8,8 @@
 
 const STORAGE_KEY = "scan_tools";
 
-/** Semgrep is off everywhere: the engine is not wired up in this deployment. */
 export const DEFAULT_SCAN_TOOLS: Record<string, boolean> = {
-  semgrep: false,
+  semgrep: true,
   sonarqube: true,
   customRules: true,
 };
@@ -29,7 +28,7 @@ export function loadScanTools(): Record<string, boolean> {
     delete parsed.bearer;
     // CodeQL was removed: it cannot be licensed for scanning private repos.
     delete parsed.codeql;
-    return { ...DEFAULT_SCAN_TOOLS, ...parsed, semgrep: false };
+    return { ...DEFAULT_SCAN_TOOLS, ...parsed };
   } catch {
     return { ...DEFAULT_SCAN_TOOLS };
   }
@@ -43,10 +42,17 @@ export function saveScanTools(tools: Record<string, boolean>): void {
   }
 }
 
-/** Map the stored toggles onto the flags `POST /scans/:id/run` expects. */
+/**
+ * Map the stored toggles onto the flags `POST /scans/:id/run` expects.
+ *
+ * `enableSensitiveData` stays off: schema-derived field classification is
+ * project information, not a security finding, and the backend gates it the
+ * same way (`options.enableSensitiveData === true`, opt-in rather than
+ * opt-out).
+ */
 export function scanToolFlags(tools: Record<string, boolean>) {
   return {
-    enableSemgrep: false,
+    enableSemgrep: tools.semgrep,
     enableSonarqube: tools.sonarqube,
     enableCustomRules: tools.customRules,
     enableSensitiveData: false,
