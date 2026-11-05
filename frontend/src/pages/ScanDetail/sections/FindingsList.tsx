@@ -42,6 +42,10 @@ const PROVIDER_DEFS: Array<{
   countKey: ProviderKey | null;
 }> = [
   { key: "", label: "All", countKey: null },
+  // Semgrep is also the catch-all bucket: findingProvider() returns it for any
+  // rule id without a known prefix, so a new engine whose prefix is not
+  // registered there lands under this tab rather than its own.
+  { key: "semgrep", label: "Semgrep", countKey: "semgrep" },
   { key: "custom", label: "Custom rules", countKey: "custom" },
   { key: "sonarqube", label: "SonarQube", countKey: "sonarqube" },
 ];
