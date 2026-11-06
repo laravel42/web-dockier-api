@@ -1,0 +1,148 @@
+/**
+ * The scan subprocess had no deadline at all.
+ *
+ * Every step inside it is bounded — clone 120s, semgrep 600s per batch,
+ * sonar-scanner 300s plus a 120s task poll — but a hang outside those ran
+ * forever. pg-boss expired the job at an hour and the worker reported a
+ * failure, while the child carried on with its clone still on disk, invisible
+ * to the queue, the UI and the reconciler alike.
+ *
+ * These drive the real `spawn` with short-lived scripts rather than a mocked
+ * child, because what matters is that a process actually dies and its directory
+ * actually goes. A faked ChildProcess would assert that `.kill()` was called and
+ * prove neither.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+vi.mock("../../../../shared/logger.js", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
+const { runScanInSubprocess } = await import("../run-scan-subprocess.js");
+
+/** A scan id whose first 8 characters are unique to this run. */
+const scanId = () => `${Date.now().toString(16).slice(-8)}-dead-4bee-8111-000000000000`;
+
+/** Mirrors cloneRepo: <tmpdir>/build-<shortId>-XXXXXX. */
+async function makeWorkDir(id: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), `build-${id.slice(0, 8)}-`));
+  await mkdir(join(dir, "repo"), { recursive: true });
+  await writeFile(join(dir, "repo", "app.js"), "// clone contents\n", "utf-8");
+  return dir;
+}
+
+async function workDirsFor(id: string): Promise<string[]> {
+  const prefix = `build-${id.slice(0, 8)}-`;
+  const entries = await readdir(tmpdir(), { withFileTypes: true });
+  return entries.filter((e) => e.isDirectory() && e.name.startsWith(prefix)).map((e) => e.name);
+}
+
+/**
+ * Stand in for scan-runner.js next to the module under test, so the resolver
+ * finds it: resolveScanRunnerSpawnArgs() prefers `scan-runner.js` in its own
+ * directory. Restored afterwards.
+ */
+const runnerPath = join(import.meta.dirname, "..", "scan-runner.js");
+let runnerExisted = false;
+
+async function installRunner(body: string): Promise<void> {
+  await writeFile(runnerPath, body, "utf-8");
+}
+
+beforeEach(() => {
+  runnerExisted = existsSync(runnerPath);
+  expect(runnerExisted).toBe(false); // a built dist runner would be clobbered
+});
+
+afterEach(async () => {
+  await rm(runnerPath, { force: true });
+});
+
+describe("runScanInSubprocess", () => {
+  it("resolves when the runner exits cleanly", async () => {
+    await installRunner("process.exit(0);\n");
+    await expect(runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} })).resolves.toBeUndefined();
+  });
+
+  it("rejects with the exit code when the runner fails", async () => {
+    await installRunner("process.exit(3);\n");
+    await expect(
+      runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }),
+    ).rejects.toThrow(/code 3/);
+  });
+
+  it("kills a runner that ignores SIGTERM and never exits", async () => {
+    // The actual failure mode: a wedged process. SIGTERM is trapped here on
+    // purpose, so only the SIGKILL that follows can end it.
+    await installRunner(`
+      process.on("SIGTERM", () => {});
+      setInterval(() => {}, 1000);
+    `);
+    const id = scanId();
+    const started = Date.now();
+
+    await expect(
+      runScanInSubprocess({ scanId: id, tenantId: "t", options: {} }, 300),
+    ).rejects.toThrow(/timed out after/);
+
+    // Returned on the kill, not on some later tick.
+    expect(Date.now() - started).toBeLessThan(30_000);
+  }, 40_000);
+
+  it("removes the clone the killed runner left behind", async () => {
+    // The child is signalled mid-clone, so the `finally` that would have
+    // removed this never runs — the parent has to.
+    const id = scanId();
+    const workDir = await makeWorkDir(id);
+    expect(existsSync(workDir)).toBe(true);
+
+    await installRunner('setInterval(() => {}, 1000);\n');
+    await expect(
+      runScanInSubprocess({ scanId: id, tenantId: "t", options: {} }, 300),
+    ).rejects.toThrow(/timed out/);
+
+    expect(existsSync(workDir)).toBe(false);
+    expect(await workDirsFor(id)).toEqual([]);
+  }, 40_000);
+
+  it("leaves another scan's clone alone", async () => {
+    // Scoped to this scan's own prefix. A broad sweep of the temp directory
+    // would delete a concurrent scan's repository out from under it.
+    const mine = scanId();
+    const other = "99999999-aaaa-4bbb-8ccc-000000000000";
+    const otherDir = await makeWorkDir(other);
+
+    try {
+      await installRunner('setInterval(() => {}, 1000);\n');
+      await expect(
+        runScanInSubprocess({ scanId: mine, tenantId: "t", options: {} }, 300),
+      ).rejects.toThrow(/timed out/);
+
+      expect(existsSync(otherDir)).toBe(true);
+    } finally {
+      await rm(otherDir, { recursive: true, force: true });
+    }
+  }, 40_000);
+
+  it("does not clean up after a runner that failed on its own", async () => {
+    // Only the timeout path signals the child. A runner that exits by itself
+    // already ran its own cleanup, and deleting here would race a retry.
+    const id = scanId();
+    const workDir = await makeWorkDir(id);
+
+    try {
+      await installRunner("process.exit(1);\n");
+      await expect(
+        runScanInSubprocess({ scanId: id, tenantId: "t", options: {} }),
+      ).rejects.toThrow(/code 1/);
+
+      expect(existsSync(workDir)).toBe(true);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
+});
