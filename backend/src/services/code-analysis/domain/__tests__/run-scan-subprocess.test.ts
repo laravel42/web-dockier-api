@@ -35,6 +35,19 @@ async function makeWorkDir(id: string): Promise<string> {
   return dir;
 }
 
+/** Direct children of this process, so a spawned runner can be inspected. */
+async function childPidsOfThisProcess(): Promise<number[]> {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const { stdout } = await promisify(execFile)("pgrep", ["-P", String(process.pid)]).catch(() => ({
+    stdout: "",
+  }));
+  return stdout
+    .split("\n")
+    .map((line) => Number(line.trim()))
+    .filter((pid) => Number.isInteger(pid) && pid > 0);
+}
+
 async function workDirsFor(id: string): Promise<string[]> {
   const prefix = `build-${id.slice(0, 8)}-`;
   const entries = await readdir(tmpdir(), { withFileTypes: true });
@@ -143,6 +156,62 @@ describe("runScanInSubprocess", () => {
       expect(existsSync(workDir)).toBe(true);
     } finally {
       await rm(workDir, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * A scan has to lose CPU races against the process serving requests.
+ *
+ * Semgrep takes roughly six of eight cores and cannot be throttled — `--jobs`
+ * was measured and barely moves it (559% -> 520% CPU, and slightly slower). On
+ * one machine with the API, the scan and the dev servers, the site stopped
+ * responding for the length of a scan and recovered the moment it ended. In
+ * production the same contention means one tenant's scan degrades the API for
+ * everyone else.
+ */
+describe("subprocess priority", () => {
+  it("runs the scan at the lowest niceness, leaving the parent alone", async () => {
+    const os = await import("node:os");
+    const parentBefore = os.getPriority(process.pid);
+
+    // Long enough to read the child's priority while it is alive.
+    await installRunner("setTimeout(() => process.exit(0), 2000);\n");
+
+    let childPriority: number | undefined;
+    const spawned = runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }, 30_000);
+
+    await new Promise((r) => setTimeout(r, 400));
+    for (const pid of await childPidsOfThisProcess()) {
+      try {
+        childPriority = os.getPriority(pid);
+      } catch {
+        // exited already
+      }
+    }
+
+    await expect(spawned).resolves.toBeUndefined();
+
+    expect(childPriority).toBe(19);
+    // Niceness is per-process: lowering the child's must not touch ours, or the
+    // API would be slowed by the very thing meant to get out of its way.
+    expect(os.getPriority(process.pid)).toBe(parentBefore);
+  }, 40_000);
+
+  it("still runs the scan if the priority call is refused", async () => {
+    // Platform-dependent and never worth failing a scan over.
+    const os = await import("node:os");
+    const spy = vi.spyOn(os.default, "setPriority").mockImplementation(() => {
+      throw new Error("EPERM");
+    });
+
+    try {
+      await installRunner("process.exit(0);\n");
+      await expect(
+        runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }),
+      ).resolves.toBeUndefined();
+    } finally {
+      spy.mockRestore();
     }
   });
 });

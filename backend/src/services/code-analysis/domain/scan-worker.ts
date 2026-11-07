@@ -6,7 +6,7 @@ import { nowIso } from "../../../shared/utils/time.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
 import { getConnectionForTenant } from "../../../shared/service-clients/git-connections.js";
-import { emit } from "../../../shared/events.js";
+import { emitScanNotification } from "./scan-events.js";
 import { type ScanFindingInput, dedupeScanFindings, toRepoRelativePath } from "./scan-analysis.js";
 import { dropSecretFindingsInTests } from "./finding-filters.js";
 import { isTestFilePath } from "./scan-skip-dirs.js";
@@ -301,10 +301,12 @@ export async function executeScan(
 
     broadcastScanStatus(scanId, "completed", summary);
 
-    emit("notification:send", {
+    // Not `emit` directly: this runs in a subprocess, where the in-process
+    // event bus has no listeners. See emitScanNotification.
+    emitScanNotification({
       tenantId,
       title: "Security scan completed",
-      message: `Scan of ${scanRow.repo} (${scanRow.branch}) finished with ${findings.length} finding(s) (${summary.errors} errors, ${summary.warnings} warnings).`,
+      message: `Scan of ${scanRow.repo} (${scanRow.branch}) finished with ${summary.totalFindings} finding(s) (${summary.errors} errors, ${summary.warnings} warnings).`,
       metadata: {
         kind: "scan",
         repo: scanRow.repo,
@@ -322,7 +324,7 @@ export async function executeScan(
     });
 
     await logger.success(
-      `Scan ${scanId} completed: ${findings.length} finding(s), ${filesInRepo} file(s) in repo`,
+      `Scan ${scanId} completed: ${summary.totalFindings} finding(s), ${filesInRepo} file(s) in repo`,
     );
   } catch (err) {
     const message = getErrMsg(err);

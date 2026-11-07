@@ -2,12 +2,13 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
+import os, { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
-import { broadcastScanEvent, type ScanWsMessage } from "./scan-events.js";
+import { emit } from "../../../shared/events.js";
+import { broadcastScanEvent, type ScanIpcMessage } from "./scan-events.js";
 import type { RunScanOptions } from "./scan-worker.js";
 
 interface ScanJobInput {
@@ -44,6 +45,9 @@ const SCAN_SUBPROCESS_TIMEOUT_MS = 50 * 60 * 1000;
  */
 const KILL_GRACE_MS = 10_000;
 
+/** Lowest niceness the OS offers, so the scan yields to everything else. */
+const SCAN_SUBPROCESS_NICENESS = 19;
+
 /**
  * Remove clone directories left by a killed child.
  *
@@ -67,12 +71,6 @@ async function removeOrphanedWorkDirs(scanId: string): Promise<void> {
   }
 }
 
-interface ScanIpcMessage {
-  type: "scan-event";
-  scanId: string;
-  message: ScanWsMessage;
-}
-
 /** tsx only exports the loader on "." — dist/cli.mjs is not in "exports". */
 function resolveTsxLoader(): string {
   const backendPkg = join(__dirname, "../../../../package.json");
@@ -92,11 +90,25 @@ function resolveScanRunnerSpawnArgs(): string[] {
   return ["--import", tsxLoader, tsRunner];
 }
 
+/**
+ * Deliver what the child could not reach on its own.
+ *
+ * WebSocket subscribers and the domain event bus both live only in this
+ * process. The notification case is why a completed scan used to notify nobody:
+ * the child emitted onto an event bus whose listener array is empty there.
+ */
 function relayScanIpc(msg: unknown): void {
   if (!msg || typeof msg !== "object") return;
   const payload = msg as Partial<ScanIpcMessage>;
-  if (payload.type !== "scan-event" || !payload.scanId || !payload.message) return;
-  broadcastScanEvent(payload.scanId, payload.message);
+
+  if (payload.type === "scan-event" && payload.scanId && payload.message) {
+    broadcastScanEvent(payload.scanId, payload.message);
+    return;
+  }
+
+  if (payload.type === "scan-notification" && payload.event) {
+    emit("notification:send", payload.event);
+  }
 }
 
 export function runScanInSubprocess(
@@ -115,6 +127,24 @@ export function runScanInSubprocess(
     } catch (err) {
       reject(err);
       return;
+    }
+
+    // A scan must lose CPU races against the process serving requests.
+    //
+    // Semgrep alone takes around six of eight cores and cannot be throttled:
+    // `--jobs` was measured and barely moves it (559% -> 520% CPU, and
+    // slightly slower). With the API, the scan and — in development — Vite and
+    // tsx on one machine, the result was a site that stopped responding for
+    // the length of a scan and recovered the moment it ended. In production the
+    // same contention means one tenant's scan degrades the API for every other.
+    //
+    // Niceness only decides who yields under contention, so this costs the scan
+    // nothing on an idle box. Best-effort: lowering priority needs no privilege,
+    // but the call is platform-dependent and must never fail a scan.
+    try {
+      os.setPriority(child.pid as number, SCAN_SUBPROCESS_NICENESS);
+    } catch (err) {
+      logger.warn(`[scan] Could not lower the subprocess priority: ${getErrMsg(err)}`);
     }
 
     let timedOut = false;
