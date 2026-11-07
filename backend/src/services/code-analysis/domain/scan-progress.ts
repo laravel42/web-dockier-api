@@ -38,6 +38,9 @@ export async function updateScanProgress(scanId: string, progress: ScanProgressP
   const now = Date.now();
   const last = lastDbWrite.get(scanId) ?? 0;
   if (now - last < DB_WRITE_INTERVAL_MS) return;
+  // Claim the slot before awaiting: marking it after the round-trip let every
+  // concurrent caller through the gate and exhausted the process fd limit.
+  lastDbWrite.set(scanId, now);
 
   const { data, error: fetchError } = await supabaseAdmin
     .from("scans")
@@ -47,12 +50,13 @@ export async function updateScanProgress(scanId: string, progress: ScanProgressP
   if (fetchError || !data) return;
 
   const summary = { ...parseSummary(data.summary), progress };
-  const { error } = await supabaseAdmin
+  await supabaseAdmin
     .from("scans")
     .update({ summary: summary as unknown as Json, updated_at: nowIso() })
+    // An in-flight progress write must never resurrect a scan that already
+    // finished or failed, or it erases the summary.error just written.
+    .in("status", ["running", "pending"])
     .eq("id", scanId);
-
-  if (!error) lastDbWrite.set(scanId, now);
 }
 
 /** Force-write progress to DB (phase transitions, completion). */

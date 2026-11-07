@@ -144,25 +144,11 @@ export async function runCustomRules(
       findingsCount: findings.length,
       currentFile: relPath,
       currentRule: applicableRules[0]?.ruleId,
-      rulesChecked: 0,
+      rulesChecked: applicableRules.length,
       rulesTotal: applicableRules.length,
     });
 
-    for (let ruleIndex = 0; ruleIndex < applicableRules.length; ruleIndex++) {
-      const rule = applicableRules[ruleIndex];
-      onProgress({
-        phase: "scanning",
-        scanner: "custom",
-        filesScanned,
-        filesInRepo,
-        findingsCount: findings.length,
-        currentFile: relPath,
-        currentRule: rule.ruleId,
-        rulesChecked: ruleIndex + 1,
-        rulesTotal: applicableRules.length,
-      });
-      findings.push(...runCustomRulesOnContent(relPath, content, [rule]));
-    }
+    findings.push(...runCustomRulesOnContent(relPath, content, applicableRules));
   }
 
   return { findings, filesScanned };
