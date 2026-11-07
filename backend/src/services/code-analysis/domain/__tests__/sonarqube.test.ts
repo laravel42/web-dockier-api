@@ -346,6 +346,98 @@ describe("runSonarScanner — scratch project cleanup", () => {
   });
 });
 
+/**
+ * Every early exit of runSonarScanner returns `[]`, the same value as "analysed
+ * and found nothing". A scan with SonarQube down (Docker stopped, wrong URL)
+ * therefore completed with a clean-looking 0. onUnavailable is how the caller
+ * tells the two apart, so each exit that analysed nothing has to call it — and
+ * the one that did analyse must not.
+ */
+describe("runSonarScanner — reporting an engine that did not run", () => {
+  const originalUrl = process.env.SONARQUBE_URL;
+  const originalToken = process.env.SONARQUBE_TOKEN;
+
+  beforeEach(() => {
+    process.env.SONARQUBE_URL = "https://sonar.example.com";
+    process.env.SONARQUBE_TOKEN = "sqp_test_token";
+  });
+
+  afterEach(() => {
+    if (originalUrl === undefined) delete process.env.SONARQUBE_URL;
+    else process.env.SONARQUBE_URL = originalUrl;
+    if (originalToken === undefined) delete process.env.SONARQUBE_TOKEN;
+    else process.env.SONARQUBE_TOKEN = originalToken;
+  });
+
+  async function reasons(overrides: Parameters<typeof runSonarScanner>[2]): Promise<string[]> {
+    const repoDir = mkdtempSync(join(tmpdir(), "sonar-unavailable-test-"));
+    const reported: string[] = [];
+    try {
+      await runSonarScanner(repoDir, "scan-xyz", {
+        findScanner: () => "/usr/local/bin/sonar-scanner",
+        execScanner: () => {},
+        readReportTask: () => "ceTaskId=task-1\n",
+        waitForAnalysis: async () => {},
+        fetchIssues: async () => [],
+        deleteProject: async () => {},
+        log: () => {},
+        onUnavailable: (reason) => reported.push(reason),
+        ...overrides,
+      });
+    } finally {
+      rmSync(repoDir, { recursive: true, force: true });
+    }
+    return reported;
+  }
+
+  it("reports a missing configuration", async () => {
+    delete process.env.SONARQUBE_URL;
+    delete process.env.SONARQUBE_TOKEN;
+    expect(await reasons({})).toEqual(["is not set up on this server"]);
+  });
+
+  it("reports a missing scanner binary", async () => {
+    expect(await reasons({ findScanner: () => null })).toEqual(["is not available on this server"]);
+  });
+
+  it("tells the user it could not be reached, and keeps the cause for the log", async () => {
+    // What a stopped SonarQube produces: the exception message is only the
+    // command line, stderr is empty, and the diagnosis is an ERROR line on
+    // stdout. That line carries the server URL — fine for the operator's log,
+    // not for a reason stored on the scan and served to every tenant member.
+    const failure = Object.assign(new Error("Command failed: sonar-scanner -Dsonar.projectBaseDir=/tmp/x"), {
+      stdout: Buffer.from(
+        "INFO: Scanner configuration file\nERROR: Failed to query server version: Connect to localhost:9100 failed\nINFO: EXECUTION FAILURE\n",
+      ),
+      stderr: Buffer.from(""),
+    });
+    const logged: string[] = [];
+    const reported = await reasons({
+      execScanner: () => {
+        throw failure;
+      },
+      readReportTask: () => null,
+      log: (message: string) => logged.push(message),
+    });
+
+    expect(reported).toEqual(["could not be reached"]);
+    expect(reported.join(" ")).not.toMatch(/localhost|9100|sonar-scanner|ERROR/);
+    expect(logged.join("\n")).toContain("Failed to query server version: Connect to localhost:9100 failed");
+  });
+
+  it("reports a missing report when the scanner exited cleanly", async () => {
+    expect(await reasons({ readReportTask: () => null })).toEqual(["could not be reached"]);
+  });
+
+  it("reports a report without an analysis task id", async () => {
+    expect(await reasons({ readReportTask: () => "projectKey=scan-xyz\n" })).toEqual(["could not be reached"]);
+  });
+
+  it("reports nothing when the analysis ran, even if it found nothing", async () => {
+    expect(await reasons({})).toEqual([]);
+  });
+});
+
 describe("getSonarConfig — variable naming", () => {
   const saved = { ...process.env };
   afterEach(() => { process.env = { ...saved }; });

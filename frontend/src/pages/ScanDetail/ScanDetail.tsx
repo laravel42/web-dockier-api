@@ -9,6 +9,7 @@ import FindingsList, { ProviderFilters } from "./sections/FindingsList";
 import ScanSidebar from "./sections/ScanSidebar";
 import ScanProgressPanel from "./sections/ScanProgressPanel";
 import EngineOutcomePanel from "./sections/EngineOutcomePanel";
+import SkippedEnginesNotice from "./sections/SkippedEnginesNotice";
 import EmptyScanState from "./sections/EmptyScanState";
 import CreateIssueModal from "./sections/CreateIssueModal";
 import FixWithAIModal from "./sections/FixWithAIModal";
@@ -81,6 +82,7 @@ export default function ScanDetail() {
     return <PageLoading />;
   }
 
+  const skippedEngines = core.scan.summary.skippedEngines ?? [];
   return (
     <div className="flex gap-6">
       <div className="flex-1 min-w-0">
@@ -94,6 +96,7 @@ export default function ScanDetail() {
             <ProviderFilters
               findingCounts={core.findingCounts}
               providerFilter={core.providerFilter}
+              skippedEngines={skippedEngines}
               onProviderFilterChange={core.setProviderFilter}
             />
           )}
@@ -121,6 +124,7 @@ export default function ScanDetail() {
           />
         )}
 
+        <SkippedEnginesNotice engines={skippedEngines} />
         <EngineOutcomePanel
           scanId={core.scanId ?? ""}
           scanStatus={core.scan?.status ?? core.liveStatus}
@@ -136,6 +140,7 @@ export default function ScanDetail() {
           scanCompleted={core.scan.status === "completed"}
           severityFilter={core.severityFilter}
           providerFilter={core.providerFilter}
+          skippedEngines={skippedEngines}
           fileContents={core.fileContents}
           pmIntegrations={issue.pmIntegrations}
           hasConnectionId={!!core.project?.connectionId}

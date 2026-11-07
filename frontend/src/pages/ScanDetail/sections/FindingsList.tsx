@@ -8,7 +8,7 @@ import { providerCount } from "@/pages/ScanDetail/utils/findingCounts";
 import { usePermissions } from "@/context/PermissionsContext";
 import { emptyFilterMessage, PROVIDER_DEFS } from "../utils/providerFilters";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
-import type { Finding, PMIntegration, SecurityFindingCounts } from "@/types";
+import type { Finding, PMIntegration, SecurityFindingCounts, SkippedEngine } from "@/types";
 import Spinner from "@/components/Spinner";
 import {
   ChevronRightIcon,
@@ -27,6 +27,7 @@ interface Props {
   scanCompleted: boolean;
   severityFilter: string;
   providerFilter: string;
+  skippedEngines: SkippedEngine[];
   fileContents: Record<string, string>;
   pmIntegrations: PMIntegration[];
   hasConnectionId: boolean;
@@ -38,10 +39,12 @@ interface Props {
 export function ProviderFilters({
   findingCounts,
   providerFilter,
+  skippedEngines,
   onProviderFilterChange,
 }: {
   findingCounts: SecurityFindingCounts | null;
   providerFilter: string;
+  skippedEngines: SkippedEngine[];
   onProviderFilterChange: (provider: string) => void;
 }) {
   const moveSelection = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -74,6 +77,7 @@ export function ProviderFilters({
                 ? providerCount(findingCounts, p.countKey)
                 : null;
         const selected = providerFilter === p.key;
+        const skipped = skippedEngines.find((e) => e.engine === p.key);
         return (
           <button
             key={p.key || "all"}
@@ -88,7 +92,10 @@ export function ProviderFilters({
             }`}
           >
             {p.label}
-            {count != null && (
+            {skipped ? (
+              // A count of 0 here would read as "ran and found nothing".
+              <span className="ml-1 text-warning-500" title={`${p.label} ${skipped.reason}`}>(did not run)</span>
+            ) : count != null && (
               <span className="ml-1 tabular-nums text-text-muted">({count})</span>
             )}
           </button>
@@ -113,7 +120,7 @@ function sortFindingsBySeverityDesc(findings: Finding[]): Finding[] {
 export default function FindingsList({
   findings, findingCounts, findingsLoading, findingsLoadingMore, hasMoreFindings, onLoadMore,
   scanCompleted,
-  severityFilter, providerFilter,
+  severityFilter, providerFilter, skippedEngines,
   fileContents, pmIntegrations, hasConnectionId, mrCreating,
   onCreateIssue, onCreateMR,
 }: Props) {
@@ -153,7 +160,7 @@ export default function FindingsList({
     <>
       {findings.length === 0 ? (
         <div className={`${cardCls} p-8 text-center`}>
-          <p className="text-sm text-text-muted">{emptyFilterMessage(severityFilter, providerFilter)}</p>
+          <p className="text-sm text-text-muted">{emptyFilterMessage(severityFilter, providerFilter, skippedEngines)}</p>
           {hasActiveFilter && (
             // Names the two controls as they are labelled on screen: the
             // severity cards above and the All tab in this row.

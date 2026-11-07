@@ -27,6 +27,7 @@ export interface ScanSummary {
   filesInRepo: number;
   error?: string;
   progress?: ReturnType<typeof scanProgressSchema.parse>;
+  skippedEngines?: Array<{ engine: string; reason: string }>;
 }
 
 function normalizeSummaryRaw(raw: unknown): unknown {

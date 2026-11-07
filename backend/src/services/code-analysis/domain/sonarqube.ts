@@ -299,6 +299,30 @@ export interface RunSonarScannerDeps {
   fetchIssues?: (projectKey: string) => Promise<SonarApiIssue[]>;
   deleteProject?: (projectKey: string) => Promise<void>;
   log?: (message: string) => void;
+  /**
+   * Called when the scan ends without having analysed anything. Every such exit
+   * returns `[]`, indistinguishable from "analysed and found nothing", so the
+   * caller needs this to tell the user the engine did not look.
+   *
+   * The reason is a predicate for the user ("could not be reached"), never the
+   * technical cause: it is stored on the scan and served to every member of the
+   * tenant, and a URL or a stack line is neither actionable for them nor
+   * something to hand out. The cause goes to `log`.
+   */
+  onUnavailable?: (reason: string) => void;
+}
+
+/**
+ * One line saying why sonar-scanner failed, for the log. The scanner prints its
+ * diagnosis (`ERROR: Failed to query server version …`) on stdout, so stderr
+ * alone is usually empty and the exception message is just the command line.
+ */
+function scannerFailureDetail(err: unknown): string {
+  const e = err as { stdout?: Buffer; stderr?: Buffer; message?: string };
+  const output = `${e.stderr?.toString() ?? ""}\n${e.stdout?.toString() ?? ""}`;
+  const errorLine = output.split("\n").find((line) => /\bERROR\b/.test(line));
+  const text = (errorLine ?? e.message ?? String(err)).replace(/^.*?\bERROR:?\s*/, "").trim();
+  return text.slice(0, 300);
 }
 
 /**
@@ -331,6 +355,7 @@ export async function runSonarScanner(
   const config = getSonarConfig();
   if (!config) {
     log("SonarQube not configured (set SONARQUBE_URL and SONARQUBE_TOKEN), skipping");
+    deps.onUnavailable?.("is not set up on this server");
     return [];
   }
 
@@ -338,6 +363,7 @@ export async function runSonarScanner(
   const scannerBin = findScanner();
   if (!scannerBin) {
     log("sonar-scanner binary not found, skipping");
+    deps.onUnavailable?.("is not available on this server");
     return [];
   }
 
@@ -373,9 +399,7 @@ export async function runSonarScanner(
     try {
       execScanner(scannerBin, repoDir);
     } catch (err) {
-      const execErr = err as { stderr?: Buffer; message?: string };
-      const stderr = execErr.stderr?.toString() ?? "";
-      log(`Scanner failed: ${stderr || execErr.message || String(err)}`);
+      log(`Scanner failed: ${scannerFailureDetail(err)}`);
     }
 
     const readReportTask =
@@ -389,12 +413,14 @@ export async function runSonarScanner(
     const reportContent = readReportTask(repoDir);
     if (!reportContent) {
       log("No report-task.txt found, scanner may have failed");
+      deps.onUnavailable?.("could not be reached");
       return [];
     }
 
     const ceTaskIdMatch = reportContent.match(/ceTaskId=(.+)/);
     if (!ceTaskIdMatch) {
       log("Could not find ceTaskId in report-task.txt");
+      deps.onUnavailable?.("could not be reached");
       return [];
     }
 

@@ -30,6 +30,7 @@ export type {
   FindingSeverity,
   ScanProgress,
   ScanSummary,
+  SkippedEngine,
   Scan,
   Finding,
   ProviderSeverityCounts,

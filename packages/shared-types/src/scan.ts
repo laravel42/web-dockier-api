@@ -20,6 +20,17 @@ export interface ScanProgress {
   rulesTotal?: number;
 }
 
+/**
+ * An engine that did not run. `status` is a closed enum with no room for
+ * "degraded", so this is the only signal that a "0" for an engine means "did
+ * not look" rather than "looked and found nothing".
+ */
+export interface SkippedEngine {
+  /** Matches the provider tabs: "semgrep" | "sonarqube" | "custom". */
+  engine: string;
+  reason: string;
+}
+
 export interface ScanSummary {
   totalFindings: number;
   errors: number;
@@ -29,6 +40,7 @@ export interface ScanSummary {
   filesInRepo: number;
   error?: string;
   progress?: ScanProgress;
+  skippedEngines?: SkippedEngine[];
 }
 
 export interface Scan {

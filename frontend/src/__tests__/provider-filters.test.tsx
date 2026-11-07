@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ProviderFilters } from "../pages/ScanDetail/sections/FindingsList";
 import { emptyFilterMessage } from "../pages/ScanDetail/utils/providerFilters";
-import type { SecurityFindingCounts } from "@/types";
+import SkippedEnginesNotice from "../pages/ScanDetail/sections/SkippedEnginesNotice";
+import type { SecurityFindingCounts, SkippedEngine } from "@/types";
 
 /**
  * An engine the API can filter by, with no tab to filter by it.
@@ -34,12 +35,13 @@ const counts: SecurityFindingCounts = {
   },
 };
 
-function renderFilters(providerFilter = "") {
+function renderFilters(providerFilter = "", skippedEngines: SkippedEngine[] = []) {
   const onProviderFilterChange = vi.fn();
   render(
     <ProviderFilters
       findingCounts={counts}
       providerFilter={providerFilter}
+      skippedEngines={skippedEngines}
       onProviderFilterChange={onProviderFilterChange}
     />,
   );
@@ -127,5 +129,49 @@ describe("emptyFilterMessage", () => {
     // Should not happen — provider-filters above pins that every provider has a
     // tab — but a missing label must not render "No undefined findings".
     expect(emptyFilterMessage("", "codeql")).toBe("No codeql findings in this scan.");
+  });
+});
+
+/**
+ * A scan status has no "degraded" value, so a stopped SonarQube produced
+ * "completed" with a SonarQube tab reading (0) — indistinguishable from a clean
+ * run. These pin the three places that now have to say otherwise.
+ */
+describe("an engine that did not run", () => {
+  const skipped: SkippedEngine[] = [
+    { engine: "sonarqube", reason: "could not be reached" },
+  ];
+
+  it("replaces the tab's count, which would read as zero findings", () => {
+    renderFilters("", skipped);
+
+    const tab = screen.getByRole("radio", { name: /SonarQube/ });
+    expect(tab).toHaveTextContent("did not run");
+    expect(tab).not.toHaveTextContent("(54)");
+    // The other engines keep their counts.
+    expect(screen.getByRole("radio", { name: /Semgrep/ })).toHaveTextContent("(24)");
+  });
+
+  it("answers an empty tab with the reason, not 'No findings'", () => {
+    expect(emptyFilterMessage("", "sonarqube", skipped)).toBe(
+      "SonarQube could not be reached, so this scan has no SonarQube results.",
+    );
+    // Another engine's empty tab is unaffected.
+    expect(emptyFilterMessage("", "semgrep", skipped)).toBe("No Semgrep findings in this scan.");
+  });
+
+  it("shows a notice naming the engine, with something the reader can do", () => {
+    render(<SkippedEnginesNotice engines={skipped} />);
+
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("This scan is incomplete.");
+    expect(notice).toHaveTextContent("SonarQube could not be reached.");
+    expect(notice).toHaveTextContent("Run the scan again");
+    expect(notice).toHaveTextContent("contact your administrator");
+  });
+
+  it("renders nothing when every engine ran", () => {
+    const { container } = render(<SkippedEnginesNotice engines={[]} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

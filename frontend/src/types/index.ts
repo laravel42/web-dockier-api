@@ -17,6 +17,7 @@ export type {
   DeployStrategy,
   Provider,
   ScanSummary,
+  SkippedEngine,
   Scan,
   ScanStatus,
   Finding,

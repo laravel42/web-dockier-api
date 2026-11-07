@@ -6,6 +6,8 @@
  * only exports components and keeps working with Fast Refresh.
  */
 
+import type { SkippedEngine } from "@/types";
+
 export type ProviderKey = "semgrep" | "sonarqube" | "custom";
 
 export const PROVIDER_DEFS: Array<{
@@ -35,10 +37,18 @@ export const PROVIDER_DEFS: Array<{
  * stays selected on purpose — the hook no longer moves the user to All behind
  * their back — so this text carries the answer.
  */
-export function emptyFilterMessage(severityFilter: string, providerFilter: string): string {
+export function emptyFilterMessage(
+  severityFilter: string,
+  providerFilter: string,
+  skippedEngines: SkippedEngine[] = [],
+): string {
   const engine = providerFilter
     ? (PROVIDER_DEFS.find((p) => p.key === providerFilter)?.label ?? providerFilter)
     : "";
+  // "Found nothing" and "did not run" both leave the list empty; only the
+  // second is a problem, and the tab must not answer it with the first.
+  const skipped = skippedEngines.find((e) => e.engine === providerFilter);
+  if (engine && skipped) return `${engine} ${skipped.reason}, so this scan has no ${engine} results.`;
   const severity = severityFilter ? ` with severity "${severityFilter}"` : "";
 
   if (engine) return `No ${engine} findings${severity} in this scan.`;

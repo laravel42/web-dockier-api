@@ -37,6 +37,7 @@ export const summarySchema = z.object({
   filesInRepo: z.number().int().nonnegative(),
   error: z.string().optional(),
   progress: scanProgressSchema.optional(),
+  skippedEngines: z.array(z.object({ engine: z.string(), reason: z.string() })).optional(),
 });
 
 export const scanStatusSchema = z.enum(["pending", "running", "completed", "failed"]);

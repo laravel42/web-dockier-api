@@ -127,6 +127,9 @@ export async function executeScan(
 
     const findings: ScanFindingInput[] = [];
     let filesScanned = 0;
+    // An engine that could not run reports here. A "0" from a skipped engine is
+    // "did not look", not "looked and found nothing" — the UI must say which.
+    const skippedEngines: Array<{ engine: string; reason: string }> = [];
 
     if (enableSemgrep) {
       await logger.section("Semgrep");
@@ -252,12 +255,14 @@ export async function executeScan(
           log: async (message) => {
             await logger.info(message);
           },
+          onUnavailable: (reason) => skippedEngines.push({ engine: "sonarqube", reason }),
         });
         const enabledSonarFindings = filterDisabledSonarFindings(sonarFindings, disabledSonarRuleIds);
         findings.push(...enabledSonarFindings);
         await logger.success(`SonarQube found ${enabledSonarFindings.length} issue(s)`);
       } catch (err) {
         const message = getErrMsg(err);
+        skippedEngines.push({ engine: "sonarqube", reason: "failed during analysis" });
         await logger.warn(`SonarQube scan skipped or failed: ${message}`);
       } finally {
         stopSonarHeartbeat();
@@ -287,7 +292,10 @@ export async function executeScan(
     const uniqueFindings = dedupeScanFindings(kept, cloneResult.repoDir);
     await persistFindings(scanId, tenantId, uniqueFindings);
 
-    const summary = buildSummary(uniqueFindings, filesInRepo, filesScanned);
+    const summary = {
+      ...buildSummary(uniqueFindings, filesInRepo, filesScanned),
+      ...(skippedEngines.length > 0 ? { skippedEngines } : {}),
+    };
     const { error: updateError } = await supabaseAdmin
       .from("scans")
       .update({
@@ -306,7 +314,11 @@ export async function executeScan(
     emitScanNotification({
       tenantId,
       title: "Security scan completed",
-      message: `Scan of ${scanRow.repo} (${scanRow.branch}) finished with ${summary.totalFindings} finding(s) (${summary.errors} errors, ${summary.warnings} warnings).`,
+      message: `Scan of ${scanRow.repo} (${scanRow.branch}) finished with ${summary.totalFindings} finding(s) (${summary.errors} errors, ${summary.warnings} warnings).${
+        skippedEngines.length > 0
+          ? ` Incomplete: ${skippedEngines.map((e) => e.engine).join(", ")} did not run.`
+          : ""
+      }`,
       metadata: {
         kind: "scan",
         repo: scanRow.repo,
