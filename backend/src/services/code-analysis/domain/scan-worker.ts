@@ -252,8 +252,8 @@ export async function executeScan(
         );
         const sonarProjectKey = sonarProjectKeyFor(scanId);
         const sonarFindings = await runSonarScanner(cloneResult.repoDir, sonarProjectKey, {
-          log: async (message) => {
-            await logger.info(message);
+          log: (message) => {
+            void logger.info(message);
           },
           onUnavailable: (reason) => skippedEngines.push({ engine: "sonarqube", reason }),
         });

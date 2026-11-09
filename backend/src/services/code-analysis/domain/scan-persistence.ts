@@ -198,5 +198,14 @@ export async function markScanFailed(scanId: string, message: string): Promise<v
     })
     .eq("id", scanId);
   if (error) obsLogger.error({ err: error.message }, `[scan] Failed to mark scan ${scanId} as failed`);
+
+  // A scan that dies mid-insert leaves its first batches behind. Nothing else
+  // removes them: persistFindings deletes by scan_id, and a new scan gets a new
+  // id. A failed scan reporting a partial result is worse than one reporting none.
+  const { error: cleanupError } = await supabaseAdmin.from("findings").delete().eq("scan_id", scanId);
+  if (cleanupError) {
+    obsLogger.warn({ err: cleanupError.message }, `[scan] Could not clear partial findings of failed scan ${scanId}`);
+  }
+
   broadcastScanStatus(scanId, "failed", summary);
 }
