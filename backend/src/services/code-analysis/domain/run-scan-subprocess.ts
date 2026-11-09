@@ -10,6 +10,7 @@ import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { emit } from "../../../shared/events.js";
 import { broadcastScanEvent, type ScanIpcMessage } from "./scan-events.js";
 import { deleteSonarProject, sonarProjectKeyFor } from "./sonarqube.js";
+import { ScanCancelledError } from "./scan-cancel.js";
 import type { RunScanOptions } from "./scan-worker.js";
 
 interface ScanJobInput {
@@ -45,6 +46,19 @@ const SCAN_SUBPROCESS_TIMEOUT_MS = 50 * 60 * 1000;
  * `finally` that removes the clone. That is why the parent cleans up below.
  */
 const KILL_GRACE_MS = 10_000;
+
+/**
+ * How often the owner of a scan asks the database whether a cancel was
+ * requested. This is the cancellation latency, and one small query per running
+ * scan per interval is its whole cost.
+ */
+const CANCEL_POLL_MS = 5_000;
+
+export interface RunScanSubprocessOptions {
+  /** Resolves true once a user has asked to cancel this scan. */
+  isCancelled?: () => Promise<boolean>;
+  pollMs?: number;
+}
 
 /** Lowest niceness the OS offers, so the scan yields to everything else. */
 const SCAN_SUBPROCESS_NICENESS = 19;
@@ -170,6 +184,7 @@ function relayScanIpc(msg: unknown): void {
 export function runScanInSubprocess(
   input: ScanJobInput,
   timeoutMs: number = SCAN_SUBPROCESS_TIMEOUT_MS,
+  options: RunScanSubprocessOptions = {},
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const runnerArgs = [...resolveScanRunnerSpawnArgs(), JSON.stringify(input)];
@@ -207,26 +222,56 @@ export function runScanInSubprocess(
       logger.warn(`[scan] Could not lower the subprocess priority: ${getErrMsg(err)}`);
     }
 
-    let timedOut = false;
+    let stopReason: "timeout" | "cancelled" | null = null;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const deadline = setTimeout(() => {
-      timedOut = true;
-      logger.error(
-        `[scan] Subprocess for ${input.scanId} exceeded ${Math.round(timeoutMs / 60000)}m, terminating`,
-      );
+    /** One way to end the runner, whatever the reason; the first reason wins. */
+    const terminate = (reason: "timeout" | "cancelled") => {
+      if (stopReason) return;
+      stopReason = reason;
       killGroup(child, "SIGTERM");
       // The runner installs no SIGTERM handler, so this is the one that
       // actually ends a wedged process.
       killTimer = setTimeout(() => killGroup(child, "SIGKILL"), KILL_GRACE_MS);
       killTimer.unref?.();
+    };
+
+    const deadline = setTimeout(() => {
+      logger.error(
+        `[scan] Subprocess for ${input.scanId} exceeded ${Math.round(timeoutMs / 60000)}m, terminating`,
+      );
+      terminate("timeout");
     }, timeoutMs);
     deadline.unref?.();
 
-    /** Both timers must go on every exit path, or the worker never settles. */
+    let cancelPoll: ReturnType<typeof setInterval> | undefined;
+    let polling = false;
+    if (options.isCancelled) {
+      const isCancelled = options.isCancelled;
+      cancelPoll = setInterval(() => {
+        // One query at a time: a slow database must not stack up requests.
+        if (polling || stopReason) return;
+        polling = true;
+        isCancelled()
+          .then((requested) => {
+            if (!requested) return;
+            logger.info(`[scan] Cancel requested for ${input.scanId}, terminating`);
+            terminate("cancelled");
+          })
+          // A flaky database must not kill a healthy scan; the next tick retries.
+          .catch((err: unknown) => logger.warn(`[scan] Could not check for cancellation: ${getErrMsg(err)}`))
+          .finally(() => {
+            polling = false;
+          });
+      }, options.pollMs ?? CANCEL_POLL_MS);
+      cancelPoll.unref?.();
+    }
+
+    /** Every timer must go on every exit path, or the worker never settles. */
     const clearTimers = () => {
       clearTimeout(deadline);
       if (killTimer) clearTimeout(killTimer);
+      if (cancelPoll) clearInterval(cancelPoll);
     };
 
     child.on("message", relayScanIpc);
@@ -241,7 +286,11 @@ export function runScanInSubprocess(
       clearTimers();
       if (childPid !== undefined) liveGroups.delete(childPid);
 
-      if (timedOut) {
+      // A runner that finished on its own just as the kill went out has a
+      // result; discarding it would cancel a scan that already completed.
+      const finishedCleanly = code === 0 && signal === null;
+
+      if (stopReason && !finishedCleanly) {
         // The runner may have exited on SIGTERM while a descendant did not, and
         // the SIGKILL timer was just cleared. One more pass over the group.
         killGroup(child, "SIGKILL");
@@ -250,10 +299,12 @@ export function runScanInSubprocess(
         // created on the SonarQube server.
         void Promise.all([removeOrphanedWorkDirs(input.scanId), removeOrphanedSonarProject(input.scanId)]).finally(() => {
           reject(
-            new Error(
-              `Scan timed out after ${Math.round(timeoutMs / 60000)} minutes and was terminated. ` +
-                "Try again, or scan a smaller branch if the repository is very large.",
-            ),
+            stopReason === "cancelled"
+              ? new ScanCancelledError()
+              : new Error(
+                  `Scan timed out after ${Math.round(timeoutMs / 60000)} minutes and was terminated. ` +
+                    "Try again, or scan a smaller branch if the repository is very large.",
+                ),
           );
         });
         return;

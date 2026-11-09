@@ -237,6 +237,7 @@ export type Database = {
           commit_message: string;
           commit_author: string;
           commit_date: string | null;
+          cancel_requested_at: string | null;
           created_at: string;
           updated_at: string;
         };

@@ -38,6 +38,8 @@ export const summarySchema = z.object({
   error: z.string().optional(),
   progress: scanProgressSchema.optional(),
   skippedEngines: z.array(z.object({ engine: z.string(), reason: z.string() })).optional(),
+  /** The scan ended because a user cancelled it, not because it broke. */
+  cancelled: z.boolean().optional(),
 });
 
 export const scanStatusSchema = z.enum(["pending", "running", "completed", "failed"]);

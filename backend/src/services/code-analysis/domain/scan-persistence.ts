@@ -173,7 +173,11 @@ export async function persistFindings(
  * and broadcast the failure. Best-effort — a DB update failure is logged, not
  * thrown, so it never masks the original error.
  */
-export async function markScanFailed(scanId: string, message: string): Promise<void> {
+export async function markScanFailed(
+  scanId: string,
+  message: string,
+  extra: { cancelled?: boolean } = {},
+): Promise<void> {
   const { data } = await supabaseAdmin
     .from("scans")
     .select("summary")
@@ -188,6 +192,7 @@ export async function markScanFailed(scanId: string, message: string): Promise<v
     filesScanned: existing.filesScanned || existing.progress?.filesScanned || 0,
     filesInRepo: existing.filesInRepo || existing.progress?.filesInRepo || 0,
     error: message,
+    ...(extra.cancelled ? { cancelled: true } : {}),
   };
   const { error } = await supabaseAdmin
     .from("scans")

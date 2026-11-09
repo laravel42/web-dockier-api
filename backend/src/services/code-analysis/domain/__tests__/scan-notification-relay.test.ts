@@ -16,6 +16,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearAllListeners, on, type NotifyEvent } from "../../../../shared/events.js";
 import { emitScanNotification } from "../scan-events.js";
 
+// The subprocess module reaches Supabase only through scan-cancel; nothing here
+// touches the database, and importing the real client needs live config.
+vi.mock("../../../../shared/supabase/client.js", () => ({ supabaseAdmin: {} }));
+
 const event: NotifyEvent = {
   tenantId: "org-1",
   title: "Security scan completed",

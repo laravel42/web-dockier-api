@@ -7,6 +7,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { runScanInSubprocess } from "./run-scan-subprocess.js";
 import { failScanIfStillRunning, type RunScanOptions } from "./scan-worker.js";
 import { parseSummary } from "./mappers.js";
+import { ScanCancelledError, isScanCancelRequested, markScanCancelled } from "./scan-cancel.js";
 
 async function resolveScanJobError(scanId: string, err: unknown): Promise<Error> {
   await failScanIfStillRunning(scanId, err);
@@ -28,17 +29,34 @@ export interface ScanJobInput {
   correlationId?: string;
 }
 
-const scanWorker = createWorker<ScanJobInput>(
-  SECURITY_SCAN_QUEUE,
-  async (input) => {
-    try {
-      await runScanInSubprocess(input);
-    } catch (err) {
-      throw await resolveScanJobError(input.scanId, err);
+/**
+ * A cancelled scan must END the job, not fail it: the queue retries a failed
+ * job (retryLimit below), which would start the scan the user just stopped.
+ */
+export async function handleScanJob(input: ScanJobInput): Promise<void> {
+  // Cancelled while still queued: there is no process to kill, only a job that
+  // must not start. `runScan` marks a scan running as soon as it enqueues it.
+  if (await isScanCancelRequested(input.scanId)) {
+    await markScanCancelled(input.scanId);
+    return;
+  }
+  try {
+    await runScanInSubprocess(input, undefined, {
+      isCancelled: () => isScanCancelRequested(input.scanId),
+    });
+  } catch (err) {
+    if (err instanceof ScanCancelledError) {
+      await markScanCancelled(input.scanId);
+      return;
     }
-  },
-  { retryLimit: 1, expireInSeconds: 3600 },
-);
+    throw await resolveScanJobError(input.scanId, err);
+  }
+}
+
+const scanWorker = createWorker<ScanJobInput>(SECURITY_SCAN_QUEUE, handleScanJob, {
+  retryLimit: 1,
+  expireInSeconds: 3600,
+});
 
 export const registerScanWorker = scanWorker.register;
 

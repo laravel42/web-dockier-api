@@ -6,7 +6,7 @@ import { scanSchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema, paginatedResponse } from "../../../shared/schemas/responses.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
-import { createScan, listScans, getScan, deleteScan, runScan } from "../domain/scans.js";
+import { createScan, listScans, getScan, deleteScan, runScan, cancelScan } from "../domain/scans.js";
 
 export async function registerScanRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -105,6 +105,23 @@ export async function registerScanRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       await deleteScan(request.params.scanId, auth.tenantId);
       return { success: true as const };
+    },
+  );
+
+  typed.post(
+    "/code-analysis/scans/:scanId/cancel",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.SCAN_RUN), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "scan-cancel" })],
+      schema: {
+        tags: ["code-analysis"],
+        summary: "Request cancellation of a running scan",
+        params: z.object({ scanId: z.uuid() }),
+        response: { 200: scanSchema },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      return await cancelScan(request.params.scanId, auth.tenantId);
     },
   );
 

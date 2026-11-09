@@ -9,6 +9,7 @@ import { enqueueScan } from "./worker.js";
 import type { RunScanOptions } from "./scan-worker.js";
 import { persistScanProgress } from "./scan-progress.js";
 import { reconcileStaleScanById } from "./scan-reconcile.js";
+import { requestScanCancel } from "./scan-cancel.js";
 import { getSecurityFindingCounts, getSecurityFindingCountsForScans, countDistinctFindingFiles } from "./findings.js";
 
 export type { RunScanOptions };
@@ -183,6 +184,21 @@ export async function deleteScan(scanId: string, tenantId: string) {
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to delete scan" });
 }
 
+/**
+ * Ask for a running scan to be cancelled. The instance that owns the scan's
+ * subprocess picks the request up on its next poll (see scan-cancel.ts).
+ */
+export async function cancelScan(scanId: string, tenantId: string) {
+  const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
+  const scan = unwrapQuery(data, error, CodeAnalysisError, { notFoundMsg: "Scan not found" });
+  assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
+
+  if (!(await requestScanCancel(scanId))) {
+    throw new CodeAnalysisError("This scan is not running, so there is nothing to cancel.", "bad_request");
+  }
+  return rowToScan(scan);
+}
+
 export async function runScan(scanId: string, tenantId: string, options: RunScanOptions = {}, correlationId?: string) {
   await reconcileStaleScanById(scanId);
 
@@ -216,6 +232,8 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
     .update({
       status: "running",
       summary: runningSummary as unknown as Json,
+      // A fresh run must not inherit the cancel request of the previous one.
+      cancel_requested_at: null,
       updated_at: nowIso(),
     })
     .eq("id", scanId)

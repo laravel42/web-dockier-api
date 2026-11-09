@@ -41,6 +41,8 @@ export interface ScanSummary {
   error?: string;
   progress?: ScanProgress;
   skippedEngines?: SkippedEngine[];
+  /** The scan ended because a user cancelled it, not because it broke. */
+  cancelled?: boolean;
 }
 
 export interface Scan {

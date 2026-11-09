@@ -22,6 +22,10 @@ vi.mock("../../../../shared/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+// The runner reaches the database only through scan-cancel's error type here;
+// nothing in these tests may touch Supabase, and importing it needs live config.
+vi.mock("../../../../shared/supabase/client.js", () => ({ supabaseAdmin: {} }));
+
 const deleteSonarProject = vi.fn(async (_key: string) => {});
 vi.mock("../sonarqube.js", () => ({
   deleteSonarProject: (key: string) => deleteSonarProject(key),
@@ -197,6 +201,90 @@ describe("runScanInSubprocess", () => {
     ).rejects.toThrow(/code 1/);
     expect(deleteSonarProject).not.toHaveBeenCalled();
   });
+
+  it("stops the runner when a cancel is requested, and says it was a cancel", async () => {
+    // Real process, real poll: what matters is that a cancel ends it quickly and
+    // the caller can tell it apart from a timeout.
+    const { ScanCancelledError } = await import("../scan-cancel.js");
+    await installRunner("setInterval(() => {}, 1000);\n");
+    let requested = false;
+    setTimeout(() => (requested = true), 400);
+    const started = Date.now();
+
+    await expect(
+      runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }, 600_000, {
+        isCancelled: async () => requested,
+        pollMs: 100,
+      }),
+    ).rejects.toBeInstanceOf(ScanCancelledError);
+
+    expect(Date.now() - started).toBeLessThan(15_000);
+  }, 40_000);
+
+  it("cleans up after a cancelled runner like it does after a timeout", async () => {
+    const id = scanId();
+    const workDir = await makeWorkDir(id);
+    await installRunner("setInterval(() => {}, 1000);\n");
+
+    await expect(
+      runScanInSubprocess({ scanId: id, tenantId: "t", options: {} }, 600_000, {
+        isCancelled: async () => true,
+        pollMs: 100,
+      }),
+    ).rejects.toThrow(/cancelled/i);
+
+    expect(existsSync(workDir)).toBe(false);
+    expect(deleteSonarProject).toHaveBeenCalledExactlyOnceWith(`scan-${id}`);
+  }, 40_000);
+
+  it("keeps a scan that finished cleanly just as the cancel went out", async () => {
+    // The kill can race the runner's last instruction. Here the runner answers
+    // the signal by exiting 0, which is a result: throwing it away would
+    // "cancel" a scan that had in fact completed.
+    await installRunner(`
+      process.on("SIGTERM", () => process.exit(0));
+      setInterval(() => {}, 1000);
+    `);
+
+    await expect(
+      runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }, 600_000, {
+        isCancelled: async () => true,
+        pollMs: 100,
+      }),
+    ).resolves.toBeUndefined();
+  }, 40_000);
+
+  it("does not kill a healthy scan because the cancel check failed", async () => {
+    // A flaky database must cost the cancel one tick, not the scan.
+    await installRunner("setTimeout(() => process.exit(0), 600);\n");
+    const check = vi.fn().mockRejectedValue(new Error("connection terminated"));
+
+    await expect(
+      runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }, 600_000, {
+        isCancelled: check,
+        pollMs: 50,
+      }),
+    ).resolves.toBeUndefined();
+    expect(check).toHaveBeenCalled();
+  }, 40_000);
+
+  it("asks one question at a time, however slow the database is", async () => {
+    await installRunner("setTimeout(() => process.exit(0), 700);\n");
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const slow = async () => {
+      maxInFlight = Math.max(maxInFlight, ++inFlight);
+      await new Promise((r) => setTimeout(r, 300));
+      inFlight--;
+      return false;
+    };
+
+    await runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }, 600_000, {
+      isCancelled: slow,
+      pollMs: 20,
+    });
+    expect(maxInFlight).toBe(1);
+  }, 40_000);
 
   it("leaves another scan's clone alone", async () => {
     // Scoped to this scan's own prefix. A broad sweep of the temp directory
