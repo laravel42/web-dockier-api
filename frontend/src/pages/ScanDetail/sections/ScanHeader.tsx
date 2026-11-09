@@ -1,4 +1,5 @@
 import { statusBadgeColors as statusColors } from "@/utils/styles";
+import { effectiveScanStatus } from "@/utils/scanSummary";
 import Button from "@/components/ui/Button";
 import type { Scan, Project } from "@/types";
 import { ChevronLeftIcon, ShieldCheckIcon } from "lucide-react";
@@ -14,7 +15,7 @@ interface Props {
 }
 
 export default function ScanHeader({ scan, project, liveStatus, onBack, onNavigateProject, actions }: Props) {
-  const status = liveStatus ?? scan.status;
+  const status = effectiveScanStatus(liveStatus ?? scan.status, scan.summary);
   return (
     <>
       <Button variant="ghost" onClick={onBack} iconLeft={<ChevronLeftIcon className="size-4" />} className="mb-6">

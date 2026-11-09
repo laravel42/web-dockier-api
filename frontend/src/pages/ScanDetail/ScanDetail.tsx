@@ -13,6 +13,7 @@ import SkippedEnginesNotice from "./sections/SkippedEnginesNotice";
 import EmptyScanState from "./sections/EmptyScanState";
 import CreateIssueModal from "./sections/CreateIssueModal";
 import FixWithAIModal from "./sections/FixWithAIModal";
+import ConfirmModal from "@/components/ConfirmModal";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
 import type { ScanProgress } from "@/types";
@@ -207,11 +208,23 @@ export default function ScanDetail() {
         />
       </div>
 
+      <ConfirmModal
+        open={core.cancelConfirm.showModal}
+        onClose={core.cancelConfirm.close}
+        onConfirm={core.cancelConfirm.execute}
+        title="Cancel scan"
+        confirmLabel="Cancel scan"
+        message="Cancel this scan? It stops within a few seconds and its partial results are discarded."
+      />
       <ScanSidebar
         scanId={core.scanId}
         allScans={core.allScans}
         allScansLoading={core.allScansLoading}
         scanError={core.scanError}
+        scanCancelled={core.scanCancelled}
+        scanRunning={core.scanRunning}
+        cancelling={core.cancelling}
+        onCancelScan={core.cancelConfirm.open}
         hasConnectionId={!!core.project?.connectionId}
         onRunScan={core.handleRunScan}
         onSelectScan={(id) => core.navigate(`/security/${id}`)}

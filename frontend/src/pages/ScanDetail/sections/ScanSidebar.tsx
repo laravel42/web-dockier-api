@@ -13,7 +13,7 @@ import Button from "@/components/ui/Button";
 import Spinner from "@/components/Spinner";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { ShieldCheckIcon } from "lucide-react";
-import { scanFindingSeverityDotClass } from "@/utils/scanSummary";
+import { failedScanDotClass, scanFindingSeverityDotClass } from "@/utils/scanSummary";
 import { clickableProps } from "@/utils/a11y";
 
 interface Props {
@@ -21,6 +21,12 @@ interface Props {
   allScans: Scan[];
   allScansLoading: boolean;
   scanError: string;
+  /** The selected scan ended because a user cancelled it. */
+  scanCancelled?: boolean;
+  scanRunning?: boolean;
+  cancelling?: boolean;
+  /** Absent where there is no scan to cancel (the empty state). */
+  onCancelScan?: () => void;
   hasConnectionId: boolean;
   onRunScan: () => void;
   onSelectScan: (id: string) => void;
@@ -29,7 +35,7 @@ interface Props {
 
 export default function ScanSidebar({
   scanId, allScans, allScansLoading,
-  scanError,
+  scanError, scanCancelled = false, scanRunning = false, cancelling = false, onCancelScan,
   hasConnectionId, onRunScan, onSelectScan, runScanBusy = false,
 }: Props) {
   const { has, isOwner, loading: permissionsLoading } = usePermissions();
@@ -50,7 +56,24 @@ export default function ScanSidebar({
             >
               Run new scan
             </Button>
+            {scanRunning && canRunScan && onCancelScan && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancelScan}
+                disabled={cancelling}
+                loading={cancelling}
+                className="mt-2 w-full"
+              >
+                {cancelling ? "Cancelling…" : "Cancel scan"}
+              </Button>
+            )}
           </div>
+          {scanCancelled && !scanError && (
+            <div className="px-2.5 py-2 border-b border-border/40 text-xs/snug text-text-muted">
+              This scan was cancelled. Its results were discarded.
+            </div>
+          )}
 
           {scanError && (
             <div className="px-2.5 py-2 border-b border-danger-500/20 bg-danger-500/5 text-xs/snug  text-danger-500">
@@ -77,7 +100,7 @@ export default function ScanSidebar({
                 const dotClass = isLive
                   ? getStatusDotClass(s.status)
                   : s.status === "failed"
-                    ? getStatusDotClass("failed")
+                    ? failedScanDotClass(s.summary)
                     : scanFindingSeverityDotClass(s.summary);
                 return (
                   <div

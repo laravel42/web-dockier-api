@@ -19,6 +19,8 @@ export const codeAnalysisApi = {
       summary: ScanSummary;
     }>(`/code-analysis/scans/${scanId}/run`, { method: "POST", body: JSON.stringify({ scanId, ...tools }) }),
 
+  cancelScan: (scanId: string) =>
+    request<Scan>(`/code-analysis/scans/${scanId}/cancel`, { method: "POST" }),
   listFindings: (
     scanId: string,
     options?: { severity?: string; provider?: "semgrep" | "sonarqube" | "custom"; limit?: number; offset?: number },

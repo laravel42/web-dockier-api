@@ -6,7 +6,7 @@ import { tableCellCls, tableCellMutedCls, typeCardDateCls, tableRowLinkCls } fro
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import type { Scan, Project, TechBadgeInfo } from "@/types";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
-import { scanFindingSeverityDotClass, scanSecurityFindingCount } from "@/utils/scanSummary";
+import { failedScanDotClass, scanFindingSeverityDotClass, scanSecurityFindingCount } from "@/utils/scanSummary";
 
 interface Props {
   sortedProjectIds: string[];
@@ -20,7 +20,7 @@ interface Props {
 
 function getScanStatusDot(latest: Scan, summary: Scan["summary"] | undefined): string {
   if (latest.status === "completed") return scanFindingSeverityDotClass(summary);
-  if (latest.status === "failed") return "bg-danger-500";
+  if (latest.status === "failed") return failedScanDotClass(latest.summary);
   if (latest.status === "running") return "bg-primary-500";
   return "bg-secondary-400";
 }

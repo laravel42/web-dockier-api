@@ -38,6 +38,9 @@ vi.mock("@/context/ScanProgressContext", () => ({
   useScanLiveState: () => null,
 }));
 
+// useScanDetail now owns the cancel confirmation, which reports failures as toasts.
+vi.mock("@/context/useToast", () => ({ useToast: () => ({ error: vi.fn(), success: vi.fn() }) }));
+
 vi.mock("react-router-dom", () => ({
   useParams: () => ({ scanId: SCAN_ID }),
   useNavigate: () => vi.fn(),

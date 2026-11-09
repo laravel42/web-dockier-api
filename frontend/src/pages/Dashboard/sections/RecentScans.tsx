@@ -4,7 +4,7 @@ import Button from "@/components/ui/Button";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import SeverityBadge from "@/components/SeverityBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
-import { isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
+import { failedScanDotClass, isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
 import { clickableProps } from "@/utils/a11y";
 
 interface Props {
@@ -38,7 +38,7 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
               s.status === "completed"
                 ? scanFindingSeverityDotClass(summary)
                 : s.status === "failed"
-                  ? "bg-danger-500"
+                  ? failedScanDotClass(summary)
                   : "bg-primary-500";
             return (
               <li key={s.id}>

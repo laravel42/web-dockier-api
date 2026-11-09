@@ -9,6 +9,7 @@ import { codeAnalysisApi, projectsApi, gitApi } from "@/services/api";
 import { getErrorMessage, isApiError } from "@/utils/errors";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import { loadScanTools, scanToolFlags } from "@/utils/scanTools";
+import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { useScanLiveState, useScanProgress } from "@/context/ScanProgressContext";
 import type { Scan, Finding, Project, ScanProgress, ScanSummary, SecurityFindingCounts } from "@/types";
 import { displayFindingPath } from "@/pages/ScanDetail/utils/scanPaths";
@@ -119,10 +120,15 @@ export function useScanDetail() {
     return apiSummary ?? liveSummary ?? null;
   }, [scan?.summary, live?.summary, live?.progress, live?.status, scanRunning, scanMatchesUrl]);
 
+  // A cancelled scan ended the way its user asked; it is not an error to show
+  // in red, only a fact the sidebar states plainly.
+  const scanCancelled = Boolean(
+    (scanMatchesUrl && scan?.summary?.cancelled) || live?.summary?.cancelled,
+  );
   const scanError =
     runScanError
-    || live?.error
-    || (scan?.status === "failed" ? scan.summary?.error || "Scan failed" : "");
+    || (scanCancelled ? "" : live?.error)
+    || (scan?.status === "failed" && !scanCancelled ? scan.summary?.error || "Scan failed" : "");
 
   const findingsRequestIdRef = useRef(0);
 
@@ -430,6 +436,19 @@ export function useScanDetail() {
     setSeverityFilter((prev) => (prev === severity ? "" : severity));
   };
 
+  // The request only records intent; the scan stops within a few seconds, when
+  // the backend notices it. Until then the sidebar says "Cancelling…" rather
+  // than letting the user press the button again.
+  const [cancelRequestedFor, setCancelRequestedFor] = useState<string | null>(null);
+  const cancelConfirm = useConfirmableAction(
+    async () => {
+      if (!scanId) return;
+      await codeAnalysisApi.cancelScan(scanId);
+      setCancelRequestedFor(scanId);
+    },
+    { errorFallback: "Could not cancel the scan" },
+  );
+  const cancelling = scanRunning && cancelRequestedFor !== null && cancelRequestedFor === scanId;
   const handleRunScan = async () => {
     if (!project || runScanBusy) return;
     setRunScanError("");
@@ -510,6 +529,9 @@ export function useScanDetail() {
     displaySummary,
     liveStatus: live?.status,
     scanError,
+    scanCancelled,
+    cancelConfirm,
+    cancelling,
     handleRunScan,
     runScanBusy,
   };

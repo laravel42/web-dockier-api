@@ -4,7 +4,7 @@ import { formatCardDateTime } from "@/utils/formatCardDate";
 import { dayLabel } from "@/utils/timeAgo";
 import SeverityBadge from "@/components/SeverityBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
-import { isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
+import { failedScanDotClass, isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
 import EmptyState from "@/components/ui/EmptyState";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import TabSpinner from "@/components/ui/TabSpinner";
@@ -139,7 +139,7 @@ export default function RecentScans({
                   row.scan.status === "completed"
                     ? scanFindingSeverityDotClass(row.scan.summary)
                     : row.scan.status === "failed"
-                      ? "bg-danger-500"
+                      ? failedScanDotClass(row.scan.summary)
                       : "bg-primary-500"
                 }`}
               />

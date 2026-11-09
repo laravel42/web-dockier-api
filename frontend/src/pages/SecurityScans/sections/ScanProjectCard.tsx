@@ -3,7 +3,7 @@ import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { cardInteractiveCls, typeCardDateCls, typeCardMeta, typeCardTitle } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
-import { scanFindingSeverityDotClass } from "@/utils/scanSummary";
+import { failedScanDotClass, scanFindingSeverityDotClass } from "@/utils/scanSummary";
 import type { Scan, Project, TechBadgeInfo } from "@/types";
 import { ShieldCheckIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
@@ -27,7 +27,7 @@ export default function ScanProjectCard({ project, projectId, scans, badges, bad
     latest.status === "completed"
       ? scanFindingSeverityDotClass(summary)
       : latest.status === "failed"
-        ? "bg-danger-500"
+        ? failedScanDotClass(latest.summary)
         : latest.status === "running"
           ? "bg-primary-500"
           : "bg-secondary-400";
