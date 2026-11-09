@@ -61,7 +61,9 @@ export const ProviderApiError = createDomainErrorClass<
 >("ProviderApiError");
 
 function statusToDomainCode(status: number) {
-  if (status === 401) return "unauthorized" as const;
+  // A rejected provider token is NOT a Dockier session failure: a 401 here
+  // would make the frontend clear the session and log the user out.
+  if (status === 401) return "bad_request" as const;
   if (status === 403) return "forbidden" as const;
   if (status === 404) return "not_found" as const;
   if (status === 429) return "too_many_requests" as const;

@@ -163,7 +163,7 @@ describe("listRepos (GitLab)", () => {
 
     const err = await listRepos(gitlabConn).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ProviderApiError);
-    expect((err as InstanceType<typeof ProviderApiError>).code).toBe("unauthorized");
+    expect((err as InstanceType<typeof ProviderApiError>).code).toBe("bad_request"); // never "unauthorized": a 401 logs the user out of Dockier
     expect((err as Error).message).toContain("GitLab API error 401");
     // A 401 is not a scope problem — no associations fallback attempted.
     expect(fetchMock.mock.calls.every(([u]) => !String(u).includes("associations"))).toBe(true);
