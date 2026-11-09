@@ -10,7 +10,7 @@ import { emitScanNotification } from "./scan-events.js";
 import { type ScanFindingInput, dedupeScanFindings, toRepoRelativePath } from "./scan-analysis.js";
 import { dropSecretFindingsInTests } from "./finding-filters.js";
 import { isTestFilePath } from "./scan-skip-dirs.js";
-import { filterDisabledSonarFindings, runSonarScanner } from "./sonarqube.js";
+import { filterDisabledSonarFindings, runSonarScanner, sonarProjectKeyFor } from "./sonarqube.js";
 import { listRuleOverrides } from "./rule-overrides.js";
 import {
   broadcastScanStatus,
@@ -250,7 +250,7 @@ export async function executeScan(
         const disabledSonarRuleIds = new Set(
           sonarOverrides.filter((override) => !override.enabled).map((override) => override.ruleId),
         );
-        const sonarProjectKey = `scan-${scanId}`;
+        const sonarProjectKey = sonarProjectKeyFor(scanId);
         const sonarFindings = await runSonarScanner(cloneResult.repoDir, sonarProjectKey, {
           log: async (message) => {
             await logger.info(message);

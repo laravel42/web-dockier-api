@@ -22,6 +22,12 @@ vi.mock("../../../../shared/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+const deleteSonarProject = vi.fn(async (_key: string) => {});
+vi.mock("../sonarqube.js", () => ({
+  deleteSonarProject: (key: string) => deleteSonarProject(key),
+  sonarProjectKeyFor: (id: string) => `scan-${id}`,
+}));
+
 const { runScanInSubprocess } = await import("../run-scan-subprocess.js");
 
 /** A scan id whose first 8 characters are unique to this run. */
@@ -67,6 +73,7 @@ async function installRunner(body: string): Promise<void> {
 }
 
 beforeEach(() => {
+  deleteSonarProject.mockClear();
   runnerExisted = existsSync(runnerPath);
   expect(runnerExisted).toBe(false); // a built dist runner would be clobbered
 });
@@ -74,6 +81,16 @@ beforeEach(() => {
 afterEach(async () => {
   await rm(runnerPath, { force: true });
 });
+
+/** True while the process exists. Signal 0 only probes. */
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe("runScanInSubprocess", () => {
   it("resolves when the runner exits cleanly", async () => {
@@ -121,6 +138,65 @@ describe("runScanInSubprocess", () => {
     expect(existsSync(workDir)).toBe(false);
     expect(await workDirsFor(id)).toEqual([]);
   }, 40_000);
+
+  it("kills what the runner launched, not just the runner", async () => {
+    // Semgrep and sonar-scanner are grandchildren of this process. Signalling
+    // only the runner left them running for up to their own timeouts, long
+    // after the scan was declared dead. The runner here dies on SIGTERM (like
+    // the real one, which installs no handler) while its child ignores it.
+    const pidFile = join(await mkdtemp(join(tmpdir(), "scan-grandchild-")), "pid");
+    await installRunner(`
+      import { spawn } from "node:child_process";
+      import { writeFileSync } from "node:fs";
+      const grandchild = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: "ignore" });
+      writeFileSync(${JSON.stringify(pidFile)}, String(grandchild.pid));
+      setInterval(() => {}, 1000);
+    `);
+    const { readFileSync } = await import("node:fs");
+    let grandchildPid = 0;
+    try {
+      await expect(
+        runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }, 1500),
+      ).rejects.toThrow(/timed out/);
+      grandchildPid = Number(readFileSync(pidFile, "utf-8"));
+      expect(grandchildPid).toBeGreaterThan(0);
+      // Give the kernel a moment to reap after SIGKILL.
+      await new Promise((r) => setTimeout(r, 300));
+      expect(isAlive(grandchildPid)).toBe(false);
+    } finally {
+      if (grandchildPid > 0 && isAlive(grandchildPid)) process.kill(grandchildPid, "SIGKILL");
+      await rm(join(pidFile, ".."), { recursive: true, force: true });
+    }
+  }, 40_000);
+
+  it("deletes the scratch SonarQube project of the scan it killed", async () => {
+    // The runner removes it in a `finally` that a signal skips, so without this
+    // every timed-out scan leaves a project on the server for good.
+    const id = scanId();
+    await installRunner("setInterval(() => {}, 1000);\n");
+    await expect(
+      runScanInSubprocess({ scanId: id, tenantId: "t", options: {} }, 300),
+    ).rejects.toThrow(/timed out/);
+    expect(deleteSonarProject).toHaveBeenCalledExactlyOnceWith(`scan-${id}`);
+  }, 40_000);
+
+  it("still reports the timeout when the SonarQube delete fails", async () => {
+    deleteSonarProject.mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
+    await installRunner("setInterval(() => {}, 1000);\n");
+    await expect(
+      runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }, 300),
+    ).rejects.toThrow(/timed out/);
+  }, 40_000);
+
+  it("does not touch SonarQube after a runner that failed on its own", async () => {
+    // The runner's own finally already ran; deleting again would be a request
+    // per failed scan against a server that may not exist.
+    await installRunner("process.exit(1);\n");
+    await expect(
+      runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }),
+    ).rejects.toThrow(/code 1/);
+    expect(deleteSonarProject).not.toHaveBeenCalled();
+  });
 
   it("leaves another scan's clone alone", async () => {
     // Scoped to this scan's own prefix. A broad sweep of the temp directory

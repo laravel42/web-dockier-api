@@ -338,6 +338,15 @@ function scannerFailureDetail(err: unknown): string {
  * sends people to (PRODUCT.md: "One pane, no context-switching"), so there is
  * nothing to keep server-side.
  */
+/**
+ * The scratch project key for a scan. One definition, because the scan runner
+ * creates the project under it and the parent has to delete it by the same name
+ * when the runner is killed before its own cleanup can run.
+ */
+export function sonarProjectKeyFor(scanId: string): string {
+  return `scan-${scanId}`;
+}
+
 export async function deleteSonarProject(
   projectKey: string,
   fetchFn: FetchFn = fetch,
