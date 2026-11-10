@@ -102,11 +102,6 @@ const envSchema = z
      * process.
      */
     DIRECT_URL: optionalEnv(z.string().min(1)),
-    /** When true, the Fastify backend does not consume `security-scan` — SAST workers do. */
-    DISABLE_TS_SCAN_WORKER: z
-      .enum(["true", "false"])
-      .default("false")
-      .transform((v) => v === "true"),
   })
   .superRefine((data, ctx) => {
     if (!data.SUPABASE_SECRET_KEY && !data.SUPABASE_SERVICE_ROLE_KEY) {

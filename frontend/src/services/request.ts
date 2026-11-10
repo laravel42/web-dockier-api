@@ -31,8 +31,8 @@ export interface RequestOptions extends RequestInit {
   noRetry?: boolean;
   /**
    * Override the API base for this request. Used by services that live outside
-   * the Fastify gateway (e.g. the SAST workers) so they inherit the same auth
-   * header, timeout, retry and 401 session handling rather than reimplementing it.
+   * the Fastify gateway (e.g. OSV in services/osv.ts) so they inherit the same
+   * timeout and retry handling rather than reimplementing it.
    */
   baseUrl?: string;
 }

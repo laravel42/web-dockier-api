@@ -45,13 +45,7 @@ const workerRegistry: WorkerEntry[] = [
   },
   {
     services: ["code-analysis"],
-    register: async () => {
-      if (env.DISABLE_TS_SCAN_WORKER) {
-        logger.info("[scan] TS scan worker disabled — SAST workers consume security-scan");
-        return;
-      }
-      await registerScanWorker();
-    },
+    register: registerScanWorker,
     onStartup: async () => {
       const staleJobs = await reconcileStaleScanJobs();
       if (staleJobs > 0) {

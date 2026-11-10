@@ -22,10 +22,6 @@
 **/*.pyc
 **/coverage
 
-# The standalone Python SAST service. The backend reads only
-# code-analysis/rules; nothing in it imports the workers.
-code-analysis/workers
-
 # Not part of any image.
 .git
 .github

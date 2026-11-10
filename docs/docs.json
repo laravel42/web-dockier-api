@@ -31,7 +31,6 @@
               "api/notifications",
               "api/integrations",
               "api/code-analysis",
-              "api/sast-workers",
               "api/git-integration",
               "api/migration-status"
             ]

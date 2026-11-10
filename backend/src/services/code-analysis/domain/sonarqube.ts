@@ -48,7 +48,7 @@ interface SonarApiIssue {
 /**
  * Resolve the SonarQube server, accepting either naming.
  *
- * The standalone SAST service (code-analysis/workers) has always read
+ * The standalone Python SAST service (since removed) read
  * SONAR_HOST_URL / SONAR_TOKEN, while this backend read SONARQUBE_URL /
  * SONARQUBE_TOKEN. One server under two names meant an operator could configure
  * scanning and rule browsing against different servers without either surface
