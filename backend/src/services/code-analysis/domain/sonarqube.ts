@@ -55,8 +55,7 @@ interface SonarApiIssue {
  * noticing. Both pairs now work here, so a single pair configures the whole
  * platform; SONARQUBE_* wins when both are set.
  *
- * Per-tenant overrides live in `engine_settings.hostUrl` and apply to scans
- * only — this function is process-wide and has no tenant in scope.
+ * There is no per-tenant override: one server serves every tenant.
  */
 export function getSonarConfig(): SonarConfig | null {
   const baseUrl = env.SONARQUBE_URL?.trim() || process.env.SONAR_HOST_URL?.trim();
