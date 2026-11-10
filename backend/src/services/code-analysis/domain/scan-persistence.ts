@@ -97,6 +97,11 @@ async function insertOnce(rows: FindingRow[], attempts: number): Promise<void> {
  * row is stored without its snippet — the finding survives, the one field that
  * trips the edge is withheld — and its rule and location are logged so the
  * trigger can be identified. Non-edge errors propagate untouched.
+ *
+ * The one trigger seen so far: a test asserting that `'http://2852039166/'`
+ * (169.254.169.254, the cloud metadata IP, written as a decimal integer) is
+ * refused. Cloudflare's SSRF rule blocks that URL in any request body, and a
+ * security scanner stores exactly that kind of code.
  */
 async function insertRows(rows: FindingRow[], attempts: number): Promise<void> {
   try {
@@ -115,7 +120,10 @@ async function insertRows(rows: FindingRow[], attempts: number): Promise<void> {
       { ruleId: row.rule_id, filePath: row.file_path, line: row.start_line, snippetLength: row.snippet.length },
       "[scan] Edge blocked a finding row; storing it without its snippet",
     );
-    await insertOnce([{ ...row, snippet: "[snippet withheld: blocked by the database edge]" }], 1);
+    // Empty rather than a placeholder: the UI then falls back to the file from
+    // the repo, and Fix with AI and issue summaries already say "snippet
+    // unavailable" — a placeholder string would be shown to the user as code.
+    await insertOnce([{ ...row, snippet: "" }], 1);
   }
 }
 

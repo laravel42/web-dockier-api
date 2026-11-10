@@ -14,8 +14,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  dropSecretFindingsInTests,
+  dropFixtureFindingsInTests,
   isSecretDetectionFinding,
+  isTestFixtureFinding,
 } from "../finding-filters.js";
 import { isTestFilePath } from "../scan-skip-dirs.js";
 
@@ -104,7 +105,7 @@ describe("isTestFilePath", () => {
   });
 });
 
-describe("dropSecretFindingsInTests", () => {
+describe("dropFixtureFindingsInTests", () => {
   it("reproduces the real scan: drops the 3 fixtures, keeps the 2 real ones", () => {
     const findings = [
       finding("generic.secrets.gitleaks.private-key", "src/lib/vault-note-language.test.ts"),
@@ -114,7 +115,7 @@ describe("dropSecretFindingsInTests", () => {
       finding("dockerfile.security.secret-in-build-arg", "Dockerfile"),
     ];
 
-    const { kept, dropped } = dropSecretFindingsInTests(findings, isTestFilePath);
+    const { kept, dropped } = dropFixtureFindingsInTests(findings, isTestFilePath);
 
     expect(dropped).toBe(3);
     expect(kept.map((f) => f.filePath)).toEqual(["src/lib/vault.ts", "Dockerfile"]);
@@ -127,7 +128,7 @@ describe("dropSecretFindingsInTests", () => {
       finding("javascript.browser.security.insecure-innerhtml", "src/lib/render.test.ts"),
     ];
 
-    const { kept, dropped } = dropSecretFindingsInTests(findings, isTestFilePath);
+    const { kept, dropped } = dropFixtureFindingsInTests(findings, isTestFilePath);
 
     expect(dropped).toBe(0);
     expect(kept).toHaveLength(1);
@@ -135,10 +136,36 @@ describe("dropSecretFindingsInTests", () => {
 
   it("keeps a secret finding outside test code", () => {
     const findings = [finding("generic.secrets.gitleaks.private-key", "config/keys.ts")];
-    expect(dropSecretFindingsInTests(findings, isTestFilePath).dropped).toBe(0);
+    expect(dropFixtureFindingsInTests(findings, isTestFilePath).dropped).toBe(0);
   });
 
   it("returns an empty result unchanged", () => {
-    expect(dropSecretFindingsInTests([], isTestFilePath)).toEqual({ kept: [], dropped: 0 });
+    expect(dropFixtureFindingsInTests([], isTestFilePath)).toEqual({ kept: [], dropped: 0 });
+  });
+});
+
+/**
+ * `http-no-tls` in a test file flags an input the test feeds to the code, never
+ * a connection the product makes. The paths and lines are from the real scan of
+ * laravel42/berry, where one URL-parser test produced 14 of them.
+ */
+describe("plain-HTTP findings in tests", () => {
+  it("counts http-no-tls as a fixture rule, and it is not a secret rule", () => {
+    expect(isTestFixtureFinding("custom.generic.http-no-tls")).toBe(true);
+    expect(isSecretDetectionFinding("custom.generic.http-no-tls")).toBe(false);
+  });
+
+  it("drops it in a test file and keeps it in product code", () => {
+    const findings = [
+      finding("custom.generic.http-no-tls", "server-ts/src/runtime/lmstudio-endpoint.test.ts"),
+      finding("custom.generic.http-no-tls", "server-ts/src/runtime/lmstudio-endpoint.ts"),
+    ];
+    const { kept, dropped } = dropFixtureFindingsInTests(findings, isTestFilePath);
+    expect(dropped).toBe(1);
+    expect(kept.map((f) => f.filePath)).toEqual(["server-ts/src/runtime/lmstudio-endpoint.ts"]);
+  });
+
+  it("still keeps other rules in test files", () => {
+    expect(isTestFixtureFinding("javascript.browser.security.insecure-innerhtml")).toBe(false);
   });
 });

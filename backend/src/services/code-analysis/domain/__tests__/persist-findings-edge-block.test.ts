@@ -101,7 +101,7 @@ describe("persistFindings against an edge block", () => {
     const accepted = stored.filter((r) => r.snippet !== "TRIGGER");
     // Rows rejected on the way are re-sent in smaller batches, so count distinct files.
     expect(new Set(accepted.map((r) => r.file_path)).size).toBe(250);
-    const withheld = accepted.filter((r) => r.snippet.startsWith("[snippet withheld"));
+    const withheld = accepted.filter((r) => r.snippet === "");
     expect(withheld.map((r) => r.file_path)).toEqual(["src/file-137.js"]);
   });
 

@@ -44,7 +44,22 @@ export function isSecretDetectionFinding(ruleId: string): boolean {
 }
 
 /**
- * Drop secret findings that point at test code.
+ * Rules whose every hit in a test file is a fixture rather than a finding.
+ *
+ * `http-no-tls` asks for HTTPS. In a test, an http:// URL is an input the test
+ * feeds to the code — a local server, a URL it checks is refused — never a
+ * connection the product makes. One test of an LM Studio endpoint parser in
+ * laravel42/berry produced 14 of them, all of that kind.
+ */
+const TEST_FIXTURE_RULE_IDS = new Set(["custom.generic.http-no-tls"]);
+
+export function isTestFixtureFinding(ruleId: string): boolean {
+  return isSecretDetectionFinding(ruleId) || TEST_FIXTURE_RULE_IDS.has(ruleId);
+}
+
+/**
+ * Drop findings in test code from rules that only ever flag fixtures there:
+ * secret detection, and the plain-HTTP rule above.
  *
  * A test fixture holds fake credentials on purpose, so a secret rule firing
  * there is a false positive by construction — not a judgement call. On the first
@@ -52,18 +67,18 @@ export function isSecretDetectionFinding(ruleId: string): boolean {
  * (`vault.test.ts`, `vault-note-language.test.ts`, `password-recovery.test.ts`),
  * a 60% false-positive rate in the category users check first.
  *
- * Scoped to secret rules alone, and applied to findings rather than to the file
+ * Scoped to those rules alone, and applied to findings rather than to the file
  * walk, because tests themselves are still worth scanning: a test can call an
  * unsafe API for real, and an injection or XSS finding there says something true
  * about the code under test. Excluding the directories outright — which is what
  * the deleted Bearer engine did with `skipTest` — would throw that away too.
  */
-export function dropSecretFindingsInTests<T extends { ruleId: string; filePath: string }>(
+export function dropFixtureFindingsInTests<T extends { ruleId: string; filePath: string }>(
   findings: T[],
   isTestPath: (filePath: string) => boolean,
 ): { kept: T[]; dropped: number } {
   const kept = findings.filter(
-    (finding) => !(isSecretDetectionFinding(finding.ruleId) && isTestPath(finding.filePath)),
+    (finding) => !(isTestFixtureFinding(finding.ruleId) && isTestPath(finding.filePath)),
   );
   return { kept, dropped: findings.length - kept.length };
 }

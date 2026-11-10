@@ -8,7 +8,7 @@ import type { Json } from "../../../shared/supabase/types.js";
 import { getConnectionForTenant } from "../../../shared/service-clients/git-connections.js";
 import { emitScanNotification } from "./scan-events.js";
 import { type ScanFindingInput, dedupeScanFindings, toRepoRelativePath } from "./scan-analysis.js";
-import { dropSecretFindingsInTests } from "./finding-filters.js";
+import { dropFixtureFindingsInTests } from "./finding-filters.js";
 import { isTestFilePath } from "./scan-skip-dirs.js";
 import { filterDisabledSonarFindings, runSonarScanner, sonarProjectKeyFor } from "./sonarqube.js";
 import { listRuleOverrides } from "./rule-overrides.js";
@@ -280,13 +280,13 @@ export async function executeScan(
     });
 
     // One chokepoint for every engine, after they have all reported: a secret
-    // rule that fired on a test fixture is a false positive by construction,
-    // whichever engine found it.
-    const { kept, dropped } = dropSecretFindingsInTests(findings, (filePath) =>
+    // or plain-HTTP rule that fired on a test fixture is a false positive by
+    // construction, whichever engine found it.
+    const { kept, dropped } = dropFixtureFindingsInTests(findings, (filePath) =>
       isTestFilePath(toRepoRelativePath(filePath, cloneResult.repoDir)),
     );
     if (dropped > 0) {
-      await logger.info(`Ignored ${dropped} secret finding(s) in test files`);
+      await logger.info(`Ignored ${dropped} finding(s) on test fixtures (secrets, plain-HTTP URLs)`);
     }
 
     const uniqueFindings = dedupeScanFindings(kept, cloneResult.repoDir);
