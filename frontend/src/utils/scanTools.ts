@@ -1,10 +1,4 @@
-/**
- * Which security engines a scan runs. Stored per browser in `localStorage` —
- * the Settings page writes it, the scan page reads it, so both must agree on
- * the defaults and on the legacy key migration. Previously each side had its
- * own copy and they disagreed: a stored value showed one thing in Settings
- * while the scan page did another.
- */
+/** Engines a scan runs, per browser. Settings and the scan page share this so they cannot disagree. */
 
 const STORAGE_KEY = "scan_tools";
 
@@ -40,14 +34,7 @@ export function saveScanTools(tools: Record<string, boolean>): void {
   }
 }
 
-/**
- * Map the stored toggles onto the flags `POST /scans/:id/run` expects.
- *
- * `enableSensitiveData` stays off: schema-derived field classification is
- * project information, not a security finding, and the backend gates it the
- * same way (`options.enableSensitiveData === true`, opt-in rather than
- * opt-out).
- */
+/** Flags for `POST /scans/:id/run`. Sensitive data is project info, not a finding, so it stays off. */
 export function scanToolFlags(tools: Record<string, boolean>) {
   return {
     enableSemgrep: tools.semgrep,

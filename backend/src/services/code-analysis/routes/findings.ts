@@ -35,11 +35,7 @@ export async function registerFindingRoutes(app: FastifyInstance) {
             findings: z.array(findingSchema),
             total: z.number().int().nonnegative(),
             hasMore: z.boolean(),
-            counts: z.object({
-              total: z.number().int().nonnegative(),
-              errors: z.number().int().nonnegative(),
-              warnings: z.number().int().nonnegative(),
-              infos: z.number().int().nonnegative(),
+            counts: providerSeverityCountsSchema.extend({
               semgrep: z.number().int().nonnegative(),
               sonarqube: z.number().int().nonnegative(),
               custom: z.number().int().nonnegative(),

@@ -7,7 +7,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import TechBadge from "@/components/TechBadge";
 import { Combobox } from "@/components/ui/Combobox";
 import { SettingsField, SettingsTextField } from "@/components/SettingsField";
-import { segmentActiveCls, segmentIdleCls } from "@/utils/styles";
+import { segmentActiveCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
@@ -32,9 +32,6 @@ interface CRule {
   isSystem: boolean;
 }
 
-const toolKeyForSource: Record<string, string> = {
-  custom: "customRules",
-};
 
 
 
@@ -49,10 +46,6 @@ const extIconMap: Record<string, string> = {
 // ─── Main Component ───
 
 export default function SecurityRulesTab() {
-  // Only "custom" remains, but the selector stays: Semgrep and SonarQube get
-  // their own panels in the next phase, and collapsing it now would mean
-  // rebuilding it then.
-  const [ruleSource, setRuleSource] = useState<"custom">("custom");
   const [scanTools, setScanTools] = useState<Record<string, boolean>>(loadScanTools);
   const [toolMessage, setToolMessage] = useState("");
 
@@ -65,18 +58,6 @@ export default function SecurityRulesTab() {
       return next;
     });
   };
-
-  // Auto-switch away from a rule list whose engine has been switched off.
-  useEffect(() => {
-    const toolKey = toolKeyForSource[ruleSource];
-    if (!toolKey || scanTools[toolKey]) return;
-
-    const sources = [
-      { key: "custom" as const, toolKey: "customRules" },
-    ];
-    const first = sources.find(s => scanTools[s.toolKey]);
-    if (first) setRuleSource(first.key);
-  }, [scanTools, ruleSource]);
 
   // ─── Custom Rules state ───
   const [rules, setRules] = useState<CRule[]>([]);
@@ -175,68 +156,47 @@ export default function SecurityRulesTab() {
         </div>
       </div>
 
-      {/* Source selector + content */}
-      {(() => {
-        const sources: Array<{
-          key: "custom";
-          label: string;
-          toolKey: string | null;
-        }> = [
-          { key: "custom", label: "Custom Rules", toolKey: "customRules" },
-        ];
-        const enabled = sources.filter(s => s.toolKey === null || scanTools[s.toolKey]);
-        const activeVisible = enabled.some(s => s.key === ruleSource);
-        const effectiveSource = activeVisible ? ruleSource : (enabled[0]?.key ?? "custom");
-
-        return enabled.length === 0 ? (
-          <p className="text-sm text-text-muted text-center py-12">Enable at least one scan engine above to manage its rules.</p>
-        ) : (
-          <>
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              {enabled.map(s => (
-                <button key={s.key} type="button" onClick={() => setRuleSource(s.key)} className={`h-9 shrink-0 whitespace-nowrap px-4 text-sm font-medium rounded-lg border transition-all ${effectiveSource === s.key ? segmentActiveCls : segmentIdleCls}`}>
-                  {s.label}
-                </button>
-              ))}
-              {effectiveSource === "custom" && (
-                <div className="flex w-full min-w-0 basis-full flex-col gap-2 sm:ml-auto sm:w-auto sm:basis-auto sm:flex-row sm:items-center">
-                  <Input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" className="w-full min-w-0 sm:w-[280px]" />
-                  <Button onClick={openAdd} iconLeft={<PlusIcon className="size-4" />} className="w-full shrink-0 sm:w-auto">
-                    Add Rule
-                  </Button>
-                </div>
-              )}
+      {!scanTools.customRules ? (
+        <p className="text-sm text-text-muted text-center py-12">Turn on Custom Rules above to manage its rules.</p>
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <h2 className={`flex h-9 shrink-0 items-center whitespace-nowrap px-4 text-sm font-medium rounded-lg border ${segmentActiveCls}`}>
+              Custom Rules
+            </h2>
+            <div className="flex w-full min-w-0 basis-full flex-col gap-2 sm:ml-auto sm:w-auto sm:basis-auto sm:flex-row sm:items-center">
+              <Input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" className="w-full min-w-0 sm:w-[280px]" />
+              <Button onClick={openAdd} iconLeft={<PlusIcon className="size-4" />} className="w-full shrink-0 sm:w-auto">
+                Add Rule
+              </Button>
             </div>
-
-            {(
-              <CustomRulesPanel
-                rules={rules}
-                filtered={filtered}
-                counts={counts}
-                loading={loading}
-                sevTab={sevTab}
-                langFilter={langFilter}
-                showForm={showForm}
-                editingRule={editingRule}
-                form={form}
-                saving={saving}
-                error={error}
-                deleteId={deleteId}
-                onSevTabChange={setSevTab}
-                onLangFilterChange={setLangFilter}
-                onToggle={handleToggle}
-                onEdit={openEdit}
-                onDelete={setDeleteId}
-                onFormChange={setForm}
-                onSave={handleSave}
-                onCloseForm={() => setShowForm(false)}
-                onConfirmDelete={handleDelete}
-                onCloseDelete={() => setDeleteId(null)}
-              />
-            )}
-          </>
-        );
-      })()}
+          </div>
+          <CustomRulesPanel
+            rules={rules}
+            filtered={filtered}
+            counts={counts}
+            loading={loading}
+            sevTab={sevTab}
+            langFilter={langFilter}
+            showForm={showForm}
+            editingRule={editingRule}
+            form={form}
+            saving={saving}
+            error={error}
+            deleteId={deleteId}
+            onSevTabChange={setSevTab}
+            onLangFilterChange={setLangFilter}
+            onToggle={handleToggle}
+            onEdit={openEdit}
+            onDelete={setDeleteId}
+            onFormChange={setForm}
+            onSave={handleSave}
+            onCloseForm={() => setShowForm(false)}
+            onConfirmDelete={handleDelete}
+            onCloseDelete={() => setDeleteId(null)}
+          />
+        </>
+      )}
     </div>
   );
 }
