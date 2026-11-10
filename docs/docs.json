@@ -41,6 +41,7 @@
               "operations/cloudflare",
               "operations/railway",
               "operations/dokploy",
+              "operations/sonarqube",
               "operations/migrations"
             ]
           }

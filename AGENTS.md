@@ -356,11 +356,17 @@ new scan id and nothing else would reclaim them.
 (`docker-compose.yml`, image pinned, its own Postgres — never the app database).
 It listens on host port **9100, not 9000**: php-fpm binds `127.0.0.1:9000` on
 machines running PHP, Docker then gets only the IPv6 wildcard, and the scanner
-talks FastCGI to an HTTP server ("header parser received no bytes"). Railway
-cannot host it (Elasticsearch needs `vm.max_map_count`), so production needs a
-host of its own. Each scan analyses under a throwaway `scan-<id>` project,
-deleted afterwards. Community Edition processes one analysis at a time, and the
-backend waits up to 120 s for it; concurrent scans have not been measured
+talks FastCGI to an HTTP server ("header parser received no bytes"). That file
+is for development only. Production runs SonarQube on a dedicated host behind
+Caddy (`infra/sonarqube/`, runbook `docs/operations/sonarqube.mdx`), reached by
+the backend over HTTPS; the two stacks share no containers or volumes. Each scan
+analyses under a throwaway `scan-<id>` project, deleted afterwards — which is
+why the scanner account needs, besides `scan` and `provisioning`,
+**Project Creator → Administer** in the default permission template; without
+it the delete answers 403, which is only logged, and every scan leaves its
+project behind. It does not need `profileadmin`: the profile rule-toggle
+endpoint has no UI calling it. Community Edition processes one analysis at a
+time, and the backend waits up to 120 s for it; concurrent scans have not been measured
 against that limit.
 
 **Docker.** `backend/Dockerfile` pins Semgrep and sonar-scanner and is what

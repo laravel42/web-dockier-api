@@ -1,0 +1,4 @@
+# Caddy obtains and renews the certificate for this name on its own.
+{$SONAR_DOMAIN} {
+	reverse_proxy sonarqube:9000
+}

@@ -1,0 +1,155 @@
+# SonarQube (dedicated host)
+
+The backend runs `sonar-scanner` itself and uploads each analysis to a SonarQube
+server. In development that server is the root `docker-compose.yml` on
+`localhost:9100`. Production needs its own server reachable from Railway over
+HTTPS; the files for it are in `infra/sonarqube/`.
+
+Until this is set up, every production scan completes with the
+"This scan is incomplete — SonarQube could not be reached" notice. Nothing in the
+backend changes: it only reads `SONARQUBE_URL` and `SONARQUBE_TOKEN`.
+
+| File | Purpose |
+|------|---------|
+| `infra/sonarqube/docker-compose.yml` | SonarQube, its own Postgres, and Caddy for HTTPS |
+| `infra/sonarqube/Caddyfile` | Proxies the public domain to SonarQube; Caddy obtains the certificate |
+| `infra/sonarqube/.env.example` | The two values the stack needs |
+
+Only ports 80 and 443 are published. SonarQube and its database are reachable
+only through Caddy, on the compose network.
+
+## What you need first
+
+- **A Linux server** — e.g. Ubuntu 24.04 with **8 GB RAM, 2 vCPU, 40 GB disk**.
+  SonarQube alone uses about 4 GB. Not the Dokploy server that builds user apps:
+  a scan would compete with their builds for memory.
+- **A domain name** for it, e.g. `sonar.example.com`, with an **A record pointing
+  at the server**. It must resolve before the first start, or Caddy cannot
+  obtain the certificate.
+- **A firewall** allowing 22 (SSH, ideally from your IP only), 80 and 443.
+
+The scan uploads the source of the repository being scanned, so treat this host
+as holding customer code.
+
+## 1. Prepare the host
+
+Install Docker Engine with the Compose plugin, then raise the kernel limits
+SonarQube's Elasticsearch checks at startup. Persist them, or it refuses to boot
+after the next reboot:
+
+```bash
+sudo tee /etc/sysctl.d/99-sonarqube.conf <<'EOF'
+vm.max_map_count=524288
+fs.file-max=131072
+EOF
+sudo sysctl --system
+```
+
+The open-file and process limits are set per container in the compose file.
+
+## 2. Start the stack
+
+```bash
+# copy infra/sonarqube/ to the server, then in that directory:
+cp .env.example .env
+#   SONAR_DOMAIN=sonar.example.com
+#   SONARQUBE_DB_PASSWORD=$(openssl rand -base64 32)
+docker compose up -d --wait
+```
+
+The first start migrates the schema and builds the search indices: allow a few
+minutes. `--wait` returns once SonarQube reports `UP`. Then check it from
+outside:
+
+```bash
+curl https://sonar.example.com/api/system/status   # {"status":"UP",...}
+```
+
+The compose file refuses to start while either value in `.env` is empty.
+
+## 3. Secure the admin account
+
+Open `https://sonar.example.com` and log in as `admin` / `admin`. SonarQube
+forces a password change; use a strong one and keep it out of the repository.
+
+## 4. Create the scanner account
+
+Dockier uses a dedicated account with only the permissions it needs, never
+`admin`. These steps were verified against this exact image: without step 3, a
+scan works but leaves its scratch project behind.
+
+1. **Administration → Security → Users → Create User**: login `dockier-scanner`.
+2. **Administration → Security → Global Permissions**, for `dockier-scanner`:
+   - **Execute Analysis** (`scan`)
+   - **Create Projects** (`provisioning`)
+
+   Not **Administer Quality Profiles** (`profileadmin`): it would let the
+   account change rules server-wide, and nothing in Dockier needs it. Only
+   `POST /code-analysis/sonar/rules/toggle` would, and no screen calls it; if
+   one is ever built, it also needs an editable copy of a profile, because
+   built-in profiles such as "Sonar way" cannot be changed.
+3. **Administration → Security → Permission Templates → Default template**: give
+   **Project Creator** the **Administer** permission. Each scan analyses under a
+   throwaway `scan-<id>` project and deletes it afterwards; this lets the
+   account delete the projects it created, and only those.
+4. Log in as `dockier-scanner` → **My Account → Security** → generate a **User
+   token**. Copy it now; it is shown once.
+
+The same steps through the API, as `admin`:
+
+```bash
+S=https://sonar.example.com; A='admin:<admin password>'
+curl -u "$A" -X POST "$S/api/users/create" -d login=dockier-scanner -d name="Dockier scanner" -d password='<a password>'
+for p in scan provisioning; do
+  curl -u "$A" -X POST "$S/api/permissions/add_user" -d login=dockier-scanner -d permission=$p
+done
+curl -u "$A" -X POST "$S/api/permissions/add_project_creator_to_template" \
+  --data-urlencode templateName="Default template" -d permission=admin
+curl -u "$A" -X POST "$S/api/user_tokens/generate" -d login=dockier-scanner -d name=dockier-backend
+```
+
+## 5. Point the backend at it
+
+In Railway, on the backend service:
+
+| Variable | Value |
+|----------|-------|
+| `SONARQUBE_URL` | `https://sonar.example.com` |
+| `SONARQUBE_TOKEN` | the `dockier-scanner` token |
+
+Do **not** put these in the root `.env`. That file belongs to local
+development; with production values in it, `pnpm backend:dev` would upload every
+local scan to the production server.
+
+## 6. Verify
+
+From a development machine, run the smoke test against the new server. It
+analyses a small fixture, checks the findings, and deletes its project:
+
+```bash
+SONARQUBE_URL=https://sonar.example.com SONARQUBE_TOKEN=<token> \
+  pnpm --filter @dockier/backend-fastify smoke:sonar
+```
+
+It must end with `OK` and must **not** log `Could not delete scratch project`
+(that means step 4.3 is missing). Then run a scan in production: the
+"incomplete" notice must be gone and the SonarQube tab must show a count.
+
+On a large repository, time the SonarQube phase. The backend allows the scanner
+300 s and waits up to 120 s for the server to process the report; over the
+network a big repository may come close.
+
+## Operating it
+
+- **Backups.** Scan projects are throwaway, but quality profiles, users and
+  tokens live in SonarQube's database. Back it up:
+  `docker compose exec sonarqube-db pg_dump -U sonar sonar | gzip > sonar-$(date +%F).sql.gz`.
+  The `caddy_data` volume holds the certificates; losing it only means they are
+  requested again.
+- **Upgrades.** The image is pinned, here and in the root compose file. Change
+  both together, so local and production analyse with the same rules, and read
+  SonarQube's upgrade notes first: the schema migrates on start and does not
+  roll back.
+- **Concurrency.** Community Build processes one analysis at a time. Concurrent
+  scans queue on the server; this has not been measured against the backend's
+  120 s wait.

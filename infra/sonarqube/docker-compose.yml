@@ -1,0 +1,82 @@
+# Production SonarQube on a dedicated Linux host. NOT for local development:
+# that is the root docker-compose.yml, and the two never share containers or
+# volumes (Compose names each stack after its directory).
+#
+#   cp .env.example .env    # then fill it in
+#   docker compose up -d --wait
+#
+# Setup, first login, the scanner token and backups: docs/operations/sonarqube.mdx
+services:
+  sonarqube-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: ${SONARQUBE_DB_PASSWORD:?set SONARQUBE_DB_PASSWORD in .env}
+      POSTGRES_DB: sonar
+    volumes:
+      - sonarqube_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar -d sonar"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  sonarqube:
+    # Same pinned version as the root compose file, so local and production
+    # analyse with the same rules.
+    image: sonarqube:26.10.0.133078-community
+    depends_on:
+      sonarqube-db:
+        condition: service_healthy
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONARQUBE_DB_PASSWORD:?set SONARQUBE_DB_PASSWORD in .env}
+      # No allow_mmap=false here, unlike the root file: on a host you control,
+      # raise vm.max_map_count instead (see the runbook).
+    # Elasticsearch's bootstrap checks, per SonarQube's Docker requirements.
+    ulimits:
+      nofile:
+        soft: 131072
+        hard: 131072
+      nproc: 8192
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_extensions:/opt/sonarqube/extensions
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -sf http://localhost:9000/api/system/status
+          | grep -q '"status":"UP"'
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 180s
+    restart: unless-stopped
+    # No ports: only Caddy reaches SonarQube, over the compose network.
+
+  caddy:
+    image: caddy:2.11.9-alpine
+    depends_on:
+      - sonarqube
+    environment:
+      SONAR_DOMAIN: ${SONAR_DOMAIN:?set SONAR_DOMAIN in .env}
+    ports:
+      - "80:80"   # Let's Encrypt validation and the redirect to HTTPS
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data   # certificates; losing it re-requests them
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  sonarqube_db:
+  sonarqube_data:
+  sonarqube_logs:
+  sonarqube_extensions:
+  caddy_data:
+  caddy_config:
