@@ -335,6 +335,18 @@ is a short user-facing phrase ("could not be reached"); the technical cause —
 server URL, scanner output — goes to the backend log only, because the summary
 is served to every member of the tenant. Semgrep failing still fails the scan.
 
+**Rule overrides** turn a Semgrep or SonarQube rule off for one organization
+(tables `opengrep_rules` / `sonarqube_rules`, keyed by `organization_id`; UI in
+Settings → Security Tools). They only take effect if the stored id is the one a
+scan reports: for Semgrep the rule's directory plus the `id` inside its YAML
+(`listSemgrepRules`, matching `normalizeSemgrepRuleId`), never the file name; for
+SonarQube the rule key without the `sonar.` prefix. They apply to scans started
+afterwards, which the UI says after every change. Never let a tenant request
+write the shared corpus or SonarQube's quality profiles: both once had
+endpoints (`PUT /semgrep-rules/content`, `POST /sonar/rules/toggle`), and either
+let one organization's admin change the rules every organization is scanned
+with.
+
 **Findings filters** (`domain/finding-filters.ts`, applied once after all engines
 report): secret-detection rules and `custom.generic.http-no-tls` are dropped in
 test files, where every hit is a fixture by construction. Every other rule keeps
@@ -364,8 +376,8 @@ analyses under a throwaway `scan-<id>` project, deleted afterwards — which is
 why the scanner account needs, besides `scan` and `provisioning`,
 **Project Creator → Administer** in the default permission template; without
 it the delete answers 403, which is only logged, and every scan leaves its
-project behind. It does not need `profileadmin`: the profile rule-toggle
-endpoint has no UI calling it. Community Edition processes one analysis at a
+project behind. It does not need `profileadmin`: rules are turned off per
+organization through rule overrides, never in SonarQube's shared profiles. Community Edition processes one analysis at a
 time, and the backend waits up to 120 s for it; concurrent scans have not been measured
 against that limit.
 

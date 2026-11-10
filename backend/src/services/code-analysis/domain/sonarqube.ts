@@ -245,23 +245,6 @@ export async function listSonarRules(params: {
   };
 }
 
-export async function toggleSonarRule(params: {
-  profileKey: string;
-  ruleKey: string;
-  activate: boolean;
-}): Promise<void> {
-  const endpoint = params.activate
-    ? "/api/qualityprofiles/activate_rule"
-    : "/api/qualityprofiles/deactivate_rule";
-  await sonarFetch(
-    endpoint,
-    {
-      key: params.profileKey,
-      rule: params.ruleKey,
-    },
-    "POST",
-  );
-}
 
 export async function waitForSonarAnalysis(
   taskId: string,

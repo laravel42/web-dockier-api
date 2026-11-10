@@ -7,7 +7,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import TechBadge from "@/components/TechBadge";
 import { Combobox } from "@/components/ui/Combobox";
 import { SettingsField, SettingsTextField } from "@/components/SettingsField";
-import { segmentActiveCls } from "@/utils/styles";
+import { segmentActiveCls, segmentIdleCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
@@ -15,6 +15,8 @@ import PageLoading from "@/components/ui/PageLoading";
 import { PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./sections/RulesFilterSidebar";
+import SemgrepRulesPanel from "./sections/SemgrepRulesPanel";
+import SonarQubeRulesPanel from "./sections/SonarQubeRulesPanel";
 import { severityDotCls } from "./sections/shared";
 // Shared with the scan page so Settings and the scan it starts cannot disagree.
 import { loadScanTools, saveScanTools } from "@/utils/scanTools";
@@ -59,6 +61,11 @@ export default function SecurityRulesTab() {
     });
   };
 
+  const [source, setSource] = useState<"custom" | "semgrep" | "sonarqube">("custom");
+  // Shown after any saved rule change: overrides only reach scans started later.
+  const [rulesChanged, setRulesChanged] = useState(false);
+  const markChanged = () => setRulesChanged(true);
+
   // ─── Custom Rules state ───
   const [rules, setRules] = useState<CRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +109,7 @@ export default function SecurityRulesTab() {
       } else {
         await codeAnalysisApi.createCustomRule({ ruleId: form.ruleId, severity: form.severity, message: form.message, pattern: form.pattern, extensions: form.extensions });
       }
-      setShowForm(false); fetchRules();
+      setShowForm(false); markChanged(); fetchRules();
     } catch (err: unknown) { setError((err as Error).message || "Failed to save rule"); }
     finally { setSaving(false); }
   };
@@ -111,6 +118,7 @@ export default function SecurityRulesTab() {
     setRules(prev => prev.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x));
     try {
       await codeAnalysisApi.updateCustomRule(r.id, { enabled: !r.enabled });
+      markChanged();
     } catch (err) {
       setRules(prev => prev.map(x => x.id === r.id ? { ...x, enabled: r.enabled } : x));
       toast.error(getErrorMessage(err, "Failed to toggle rule"));
@@ -119,7 +127,7 @@ export default function SecurityRulesTab() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    try { await codeAnalysisApi.deleteCustomRule(deleteId); }
+    try { await codeAnalysisApi.deleteCustomRule(deleteId); markChanged(); }
     catch (err) { toast.error(getErrorMessage(err, "Failed to delete rule")); }
     setDeleteId(null); fetchRules();
   };
@@ -156,47 +164,72 @@ export default function SecurityRulesTab() {
         </div>
       </div>
 
-      {!scanTools.customRules ? (
-        <p className="text-sm text-text-muted text-center py-12">Turn on Custom Rules above to manage its rules.</p>
-      ) : (
-        <>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <h2 className={`flex h-9 shrink-0 items-center whitespace-nowrap px-4 text-sm font-medium rounded-lg border ${segmentActiveCls}`}>
-              Custom Rules
-            </h2>
-            <div className="flex w-full min-w-0 basis-full flex-col gap-2 sm:ml-auto sm:w-auto sm:basis-auto sm:flex-row sm:items-center">
-              <Input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" className="w-full min-w-0 sm:w-[280px]" />
-              <Button onClick={openAdd} iconLeft={<PlusIcon className="size-4" />} className="w-full shrink-0 sm:w-auto">
-                Add Rule
-              </Button>
+      {(() => {
+        const sources = ([
+          { key: "custom", label: "Custom Rules", tool: "customRules" },
+          { key: "semgrep", label: "Semgrep", tool: "semgrep" },
+          { key: "sonarqube", label: "SonarQube", tool: "sonarqube" },
+        ] as const).filter(s => scanTools[s.tool]);
+        // Derived, not stored: an engine switched off above simply drops out.
+        const active = sources.find(s => s.key === source)?.key ?? sources[0]?.key;
+        if (!active) {
+          return <p className="text-sm text-text-muted text-center py-12">Turn on an engine above to manage its rules.</p>;
+        }
+        return (
+          <>
+            {rulesChanged && (
+              <Alert variant="info" className="mb-4">
+                Rule changes apply to the next scan. Scans that already ran keep their findings.
+              </Alert>
+            )}
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              {sources.map(s => (
+                <button key={s.key} type="button" onClick={() => setSource(s.key)} aria-pressed={active === s.key} className={`h-9 shrink-0 whitespace-nowrap px-4 text-sm font-medium rounded-lg border transition-all ${active === s.key ? segmentActiveCls : segmentIdleCls}`}>
+                  {s.label}
+                </button>
+              ))}
+              <div className="flex w-full min-w-0 basis-full flex-col gap-2 sm:ml-auto sm:w-auto sm:basis-auto sm:flex-row sm:items-center">
+                <Input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" className="w-full min-w-0 sm:w-[280px]" />
+                {active === "custom" && (
+                  <Button onClick={openAdd} iconLeft={<PlusIcon className="size-4" />} className="w-full shrink-0 sm:w-auto">
+                    Add Rule
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-          <CustomRulesPanel
-            rules={rules}
-            filtered={filtered}
-            counts={counts}
-            loading={loading}
-            sevTab={sevTab}
-            langFilter={langFilter}
-            showForm={showForm}
-            editingRule={editingRule}
-            form={form}
-            saving={saving}
-            error={error}
-            deleteId={deleteId}
-            onSevTabChange={setSevTab}
-            onLangFilterChange={setLangFilter}
-            onToggle={handleToggle}
-            onEdit={openEdit}
-            onDelete={setDeleteId}
-            onFormChange={setForm}
-            onSave={handleSave}
-            onCloseForm={() => setShowForm(false)}
-            onConfirmDelete={handleDelete}
-            onCloseDelete={() => setDeleteId(null)}
-          />
-        </>
-      )}
+            {active === "semgrep" ? (
+              <SemgrepRulesPanel filter={filter} onChanged={markChanged} />
+            ) : active === "sonarqube" ? (
+              <SonarQubeRulesPanel filter={filter} onChanged={markChanged} />
+            ) : (
+              <CustomRulesPanel
+                rules={rules}
+                filtered={filtered}
+                counts={counts}
+                loading={loading}
+                sevTab={sevTab}
+                langFilter={langFilter}
+                showForm={showForm}
+                editingRule={editingRule}
+                form={form}
+                saving={saving}
+                error={error}
+                deleteId={deleteId}
+                onSevTabChange={setSevTab}
+                onLangFilterChange={setLangFilter}
+                onToggle={handleToggle}
+                onEdit={openEdit}
+                onDelete={setDeleteId}
+                onFormChange={setForm}
+                onSave={handleSave}
+                onCloseForm={() => setShowForm(false)}
+                onConfirmDelete={handleDelete}
+                onCloseDelete={() => setDeleteId(null)}
+              />
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }

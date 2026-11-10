@@ -15,7 +15,7 @@ export async function registerRuleOverrideRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
       schema: {
         tags: ["code-analysis"],
-        summary: "List global rule overrides",
+        summary: "List this organization's rule overrides",
         querystring: z.object({ tool: z.enum(["semgrep", "sonarqube"]) }),
         response: {
           200: z.object({
@@ -37,7 +37,7 @@ export async function registerRuleOverrideRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
       schema: {
         tags: ["code-analysis"],
-        summary: "Upsert global rule override",
+        summary: "Turn a rule on or off for this organization",
         body: z.object({
           tool: z.enum(["semgrep", "sonarqube"]),
           ruleId: z.string().min(1),

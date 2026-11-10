@@ -2,12 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
-import { successResponseSchema } from "../../../shared/schemas/responses.js";
-import {
-  listSonarProfiles,
-  listSonarRules,
-  toggleSonarRule,
-} from "../domain/sonarqube.js";
+import { listSonarProfiles, listSonarRules } from "../domain/sonarqube.js";
 
 export async function registerSonarQubeRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -44,20 +39,4 @@ export async function registerSonarQubeRoutes(app: FastifyInstance) {
     },
   );
 
-  typed.post(
-    "/code-analysis/sonar/rules/toggle",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
-      schema: {
-        tags: ["code-analysis"],
-        summary: "Toggle SonarQube rule activation in a quality profile",
-        body: z.object({ profileKey: z.string(), ruleKey: z.string(), activate: z.boolean() }),
-        response: { 200: successResponseSchema },
-      },
-    },
-    async (request) => {
-      await toggleSonarRule(request.body);
-      return { success: true as const };
-    },
-  );
 }

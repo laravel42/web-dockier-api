@@ -16,6 +16,36 @@ vi.mock("../../../../shared/config.js", () => ({
 
 import { listSemgrepRules } from "../semgrep-rules.js";
 
+/**
+ * A rule override only works if its id equals what a scan reports: the rule's
+ * directory plus the `id` inside the YAML (see normalizeSemgrepRuleId). The
+ * previous listing used the file name, so turning some rules off did nothing.
+ */
+describe("listSemgrepRules ids", () => {
+  const ids = new Set(listSemgrepRules().rules.map((rule) => rule.id));
+
+  it("uses the YAML rule id, not the file name", () => {
+    // ocaml/lang/security/marshal.yaml holds rule `ocamllint-marshal`.
+    expect(ids.has("ocaml.lang.security.ocamllint-marshal")).toBe(true);
+    expect(ids.has("ocaml.lang.security.marshal")).toBe(false);
+  });
+
+  it("lists every rule of a file that holds several", () => {
+    expect(ids.has("python.lang.compatibility.python37-compatibility-importlib")).toBe(true);
+    expect(ids.has("python.lang.compatibility.python37-compatibility-importlib2")).toBe(true);
+  });
+
+  it("includes .yml rules", () => {
+    expect(
+      ids.has("terraform.aws.security.aws-ec2-launch-configuration-root-block-device-unencrypted"),
+    ).toBe(true);
+  });
+
+  it("skips the corpus's own test fixtures", () => {
+    expect(listSemgrepRules().rules.some((rule) => /\.test\.ya?ml$/.test(rule.path))).toBe(false);
+  });
+});
+
 describe("listSemgrepRules", () => {
   it("parses severity from rule YAML instead of defaulting to info", () => {
     const { rules } = listSemgrepRules();

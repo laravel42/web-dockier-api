@@ -84,10 +84,9 @@ scan works but leaves its scratch project behind.
    - **Create Projects** (`provisioning`)
 
    Not **Administer Quality Profiles** (`profileadmin`): it would let the
-   account change rules server-wide, and nothing in Dockier needs it. Only
-   `POST /code-analysis/sonar/rules/toggle` would, and no screen calls it; if
-   one is ever built, it also needs an editable copy of a profile, because
-   built-in profiles such as "Sonar way" cannot be changed.
+   account change rules server-wide, and nothing in Dockier needs it. Each
+   organization turns rules off in Dockier itself (Settings → Security Tools),
+   never in SonarQube's shared profiles.
 3. **Administration → Security → Permission Templates → Default template**: give
    **Project Creator** the **Administer** permission. Each scan analyses under a
    throwaway `scan-<id>` project and deletes it afterwards; this lets the

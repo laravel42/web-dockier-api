@@ -2,8 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
-import { successResponseSchema } from "../../../shared/schemas/responses.js";
-import { listSemgrepRules, getSemgrepRuleContent, updateSemgrepRuleContent } from "../domain/semgrep-rules.js";
+import { listSemgrepRules, getSemgrepRuleContent } from "../domain/semgrep-rules.js";
 
 export async function registerSemgrepRuleRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -53,20 +52,4 @@ export async function registerSemgrepRuleRoutes(app: FastifyInstance) {
     },
   );
 
-  typed.put(
-    "/code-analysis/semgrep-rules/content",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.SCAN_MANAGE),
-      schema: {
-        tags: ["code-analysis"],
-        summary: "Update semgrep rule file content",
-        body: z.object({ path: z.string().min(1), content: z.string() }),
-        response: { 200: successResponseSchema },
-      },
-    },
-    async (request) => {
-      updateSemgrepRuleContent(request.body.path, request.body.content);
-      return { success: true as const };
-    },
-  );
 }

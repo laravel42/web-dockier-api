@@ -62,8 +62,6 @@ export const codeAnalysisApi = {
   getOpengrepRuleContent: (path: string) =>
     request<{ content: string }>(`/code-analysis/semgrep-rules/content${buildQuery({ path })}`),
 
-  updateOpengrepRuleContent: (path: string, content: string) =>
-    request<{ success: true }>("/code-analysis/semgrep-rules/content", { method: "PUT", body: JSON.stringify({ path, content }) }),
 
   listSonarProfiles: () =>
     request<{ profiles: Array<{ key: string; name: string; language: string; languageName: string; isDefault: boolean; activeRuleCount: number }> }>("/code-analysis/sonar/profiles"),
@@ -73,8 +71,6 @@ export const codeAnalysisApi = {
       `/code-analysis/sonar/rules${buildQuery({ profileKey, page, query })}`
     ),
 
-  toggleSonarRule: (profileKey: string, ruleKey: string, activate: boolean) =>
-    request<{ success: true }>("/code-analysis/sonar/rules/toggle", { method: "POST", body: JSON.stringify({ profileKey, ruleKey, activate }) }),
 
   listRuleOverrides: (tool: "semgrep" | "sonarqube") =>
     request<{ overrides: Array<{ id: string; ruleId: string; enabled: boolean }> }>(`/code-analysis/rule-overrides${buildQuery({ tool })}`),
