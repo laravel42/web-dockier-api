@@ -8,7 +8,6 @@ import SummaryCards from "./sections/SummaryCards";
 import FindingsList, { ProviderFilters } from "./sections/FindingsList";
 import ScanSidebar from "./sections/ScanSidebar";
 import ScanProgressPanel from "./sections/ScanProgressPanel";
-import EngineOutcomePanel from "./sections/EngineOutcomePanel";
 import SkippedEnginesNotice from "./sections/SkippedEnginesNotice";
 import EmptyScanState from "./sections/EmptyScanState";
 import CreateIssueModal from "./sections/CreateIssueModal";
@@ -126,10 +125,6 @@ export default function ScanDetail() {
         )}
 
         <SkippedEnginesNotice engines={skippedEngines} />
-        <EngineOutcomePanel
-          scanId={core.scanId ?? ""}
-          scanStatus={core.scan?.status ?? core.liveStatus}
-        />
 
         <FindingsList
           findings={core.findings}
