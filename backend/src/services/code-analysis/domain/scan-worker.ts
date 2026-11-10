@@ -22,6 +22,7 @@ import { withElapsed, startScanHeartbeat } from "./scan-heartbeat.js";
 import { walkRepoFiles } from "./scan-files.js";
 import { runSemgrep, runCustomRules, runSensitiveDataScanner } from "./scan-strategies.js";
 import { buildSummary, persistFindings, markScanFailed } from "./scan-persistence.js";
+import type { ScanSummary } from "./mappers.js";
 
 export interface RunScanOptions {
   enableSemgrep?: boolean;
@@ -35,10 +36,7 @@ export interface RunScanOptions {
  * Used by the queue worker when a job crashes without cleaning up after itself.
  */
 export async function failScanIfStillRunning(scanId: string, err: unknown): Promise<void> {
-  const { data } = await supabaseAdmin.from("scans").select("status").eq("id", scanId).single();
-  if (data?.status !== "running") return;
-  const message = getErrMsg(err);
-  await markScanFailed(scanId, message);
+  await markScanFailed(scanId, getErrMsg(err));
 }
 
 /**
@@ -127,9 +125,8 @@ export async function executeScan(
 
     const findings: ScanFindingInput[] = [];
     let filesScanned = 0;
-    // An engine that could not run reports here. A "0" from a skipped engine is
-    // "did not look", not "looked and found nothing" — the UI must say which.
-    const skippedEngines: Array<{ engine: string; reason: string }> = [];
+    // A skipped engine's 0 means "did not look"; the UI must not show it as clean.
+    const skippedEngines: NonNullable<ScanSummary["skippedEngines"]> = [];
 
     if (enableSemgrep) {
       await logger.section("Semgrep");

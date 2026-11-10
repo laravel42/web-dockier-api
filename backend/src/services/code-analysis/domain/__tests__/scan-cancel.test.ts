@@ -113,9 +113,12 @@ describe("markScanCancelled", () => {
   });
 
   it("leaves a scan that already finished alone", async () => {
-    scanRow = { status: "completed" };
+    // The guarded UPDATE matches no row, so its findings must survive.
+    updateMatches = false;
     await markScanCancelled("scan-1");
-    expect(updatesTo("scans")).toHaveLength(0);
+
+    expect(updatesTo("scans")[0].filters).toContain('in:["status",["running","pending"]]');
+    expect(ops.some((o) => o.table === "findings" && o.op === "delete")).toBe(false);
   });
 });
 

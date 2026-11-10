@@ -27,7 +27,7 @@ export interface ScanSummary {
   filesInRepo: number;
   error?: string;
   progress?: ReturnType<typeof scanProgressSchema.parse>;
-  skippedEngines?: Array<{ engine: string; reason: string }>;
+  skippedEngines?: ReturnType<typeof summarySchema.parse>["skippedEngines"];
   cancelled?: boolean;
 }
 

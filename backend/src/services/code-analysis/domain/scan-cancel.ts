@@ -55,7 +55,5 @@ export async function isScanCancelRequested(scanId: string): Promise<boolean> {
  * scan that completed between the kill and this call keeps its result.
  */
 export async function markScanCancelled(scanId: string): Promise<void> {
-  const { data } = await supabaseAdmin.from("scans").select("status").eq("id", scanId).maybeSingle();
-  if (data?.status !== "running") return;
   await markScanFailed(scanId, SCAN_CANCELLED_MESSAGE, { cancelled: true });
 }

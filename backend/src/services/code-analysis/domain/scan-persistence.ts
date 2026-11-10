@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { logger as obsLogger } from "../../../shared/logger.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import type { Json } from "../../../shared/supabase/types.js";
+import type { Json, TableInsert } from "../../../shared/supabase/types.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { withRetry } from "../../../shared/utils/retry.js";
 import { nowIso } from "../../../shared/utils/time.js";
@@ -57,19 +57,7 @@ export function buildSummary(findings: ScanFindingInput[], filesInRepo: number, 
   };
 }
 
-type FindingRow = {
-  id: string;
-  organization_id: string;
-  scan_id: string;
-  rule_id: string;
-  severity: string;
-  message: string;
-  file_path: string;
-  start_line: number;
-  end_line: number;
-  snippet: string;
-  created_at: string;
-};
+type FindingRow = TableInsert<"findings">;
 
 async function insertOnce(rows: FindingRow[], attempts: number): Promise<void> {
   await withRetry(
@@ -117,7 +105,7 @@ async function insertRows(rows: FindingRow[], attempts: number): Promise<void> {
     }
     const [row] = rows;
     obsLogger.warn(
-      { ruleId: row.rule_id, filePath: row.file_path, line: row.start_line, snippetLength: row.snippet.length },
+      { ruleId: row.rule_id, filePath: row.file_path, line: row.start_line, snippetLength: row.snippet?.length ?? 0 },
       "[scan] Edge blocked a finding row; storing it without its snippet",
     );
     // Empty rather than a placeholder: the UI then falls back to the file from
@@ -202,15 +190,24 @@ export async function markScanFailed(
     error: message,
     ...(extra.cancelled ? { cancelled: true } : {}),
   };
-  const { error } = await supabaseAdmin
+  // The status filter is the guard: it stops this from deleting the findings of
+  // a scan that completed, and makes a check-then-write by the caller unneeded.
+  const { data: updated, error } = await supabaseAdmin
     .from("scans")
     .update({
       status: "failed",
       summary: summary as unknown as Json,
       updated_at: nowIso(),
     })
-    .eq("id", scanId);
-  if (error) obsLogger.error({ err: error.message }, `[scan] Failed to mark scan ${scanId} as failed`);
+    .eq("id", scanId)
+    .in("status", ["running", "pending"])
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    obsLogger.error({ err: error.message }, `[scan] Failed to mark scan ${scanId} as failed`);
+    return;
+  }
+  if (!updated) return;
 
   // A scan that dies mid-insert leaves its first batches behind. Nothing else
   // removes them: persistFindings deletes by scan_id, and a new scan gets a new
