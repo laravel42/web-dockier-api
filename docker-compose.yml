@@ -4,8 +4,9 @@
 #   docker compose down              stop, keeping the volumes
 #   docker compose down -v           stop and discard the analysis history
 #
-# This file covers ONLY SonarQube and its database. The backend and frontend
-# still run with `pnpm backend:dev` and `pnpm dev`; nothing here replaces them.
+# By default this starts ONLY SonarQube and its database; the backend and
+# frontend run with `pnpm backend:dev` and `pnpm dev`. The backend can also run
+# here, opt-in — see the `backend` service at the end.
 # SonarQube is a stateful service rather than a library — it carries its own
 # Postgres and an embedded Elasticsearch — so a container is the only sane way
 # to run it. The app itself just needs SONARQUBE_URL to point here.
@@ -79,6 +80,45 @@ services:
       # minutes, not seconds, hence the long start_period.
       retries: 20
       start_period: 180s
+
+  # The backend, built from the same Dockerfile Railway uses, so a scan here runs
+  # with exactly the Semgrep and sonar-scanner versions production ships.
+  #
+  #   docker compose --profile backend up -d --build --wait
+  #
+  # Behind a profile on purpose: the plain `docker compose up -d --wait` above
+  # still starts only SonarQube, so `pnpm backend:dev` (with hot reload) keeps
+  # working and the two never fight over port 4000. Run one or the other.
+  # The frontend stays on `pnpm dev`: Vite on a bind mount under Docker Desktop
+  # reloads far slower than natively, and production serves it from Cloudflare
+  # Pages, not from a container.
+  backend:
+    profiles: ["backend"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    # Same .env as `pnpm backend:dev`. Read at run time, never copied into the
+    # image (see .dockerignore).
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      # .env points at localhost:9100 for a backend running on the host. From
+      # inside the compose network SonarQube is the `sonarqube` service on its
+      # own port; localhost here is the backend container itself.
+      SONARQUBE_URL: http://sonarqube:9000
+    # Scans spawn a runner that spawns Semgrep and sonar-scanner. Without an
+    # init as PID 1, descendants orphaned by a killed scan are reparented to
+    # node, which never reaps them, and they pile up as zombies.
+    init: true
+    depends_on:
+      # Started, not healthy: SonarQube's first boot takes minutes and the
+      # backend does not need it to serve requests — a scan without it reports
+      # the engine as skipped instead of failing.
+      sonarqube:
+        condition: service_started
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
 
 volumes:
   sonarqube_db:
