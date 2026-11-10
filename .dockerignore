@@ -1,0 +1,38 @@
+# Build context for backend/Dockerfile, which is built from the repo root.
+#
+# Without this file the whole tree was sent to the builder, and
+# `COPY backend ./backend` / `COPY code-analysis ./code-analysis` baked in
+# whatever was lying in those directories: backend/.env.local (with a webhook
+# secret) and the 71 MB Python virtualenv under code-analysis/workers. Railway
+# builds from git, where neither exists, so only local builds were affected —
+# but a locally built image pushed to a registry carries its secrets with it.
+
+# Secrets. Configuration reaches the container through the environment
+# (compose `env_file`, Railway variables), never through the image.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Installed and generated artifacts: rebuilt inside the image.
+**/node_modules
+**/dist
+**/.pnpm-store
+**/.venv
+**/__pycache__
+**/*.pyc
+**/coverage
+
+# The standalone Python SAST service. The backend reads only
+# code-analysis/rules; nothing in it imports the workers.
+code-analysis/workers
+
+# Not part of any image.
+.git
+.github
+.worktrees
+.agents
+.kiro
+.idea
+.vscode
+**/.DS_Store
+docs

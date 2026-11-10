@@ -49,7 +49,15 @@ RUN corepack enable && corepack prepare pnpm@11.21.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY backend/package.json ./backend/
 
-RUN pnpm install --filter @dockier/backend-fastify --frozen-lockfile
+# Install scripts are skipped, then re-run for the backend's own dependency
+# graph only. The install also pulls in the root workspace's devDependencies —
+# the Railway, Supabase and Wrangler CLIs, tools for a developer's machine — and
+# their postinstalls download binaries from GitHub releases. @railway/cli
+# publishes no aarch64-unknown-linux-gnu build, so on Apple Silicon (and any
+# arm64 builder) the image could not be built at all; on amd64 it was a network
+# fetch the backend never uses.
+RUN pnpm install --filter @dockier/backend-fastify --frozen-lockfile --ignore-scripts \
+  && pnpm rebuild --filter @dockier/backend-fastify
 
 COPY backend ./backend
 COPY code-analysis ./code-analysis
