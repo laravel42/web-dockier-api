@@ -53,12 +53,17 @@ if [[ -n "$DB_URL" ]]; then
   else
     log "Applying migrations from supabase/migrations via pooler URL"
   fi
-  exec supabase db push --db-url "$DB_URL"
+  # Supabase CLI v3: database commands target the LOCAL stack unless told
+  # otherwise, and --db-url is deprecated in favour of --remote=<url>. The push
+  # asks for confirmation before changing a hosted database; that prompt is
+  # deliberate here — this script is run by hand and can point at production.
+  exec supabase db push --remote="$DB_URL" "$@"
 fi
 
 if [[ -f "$ROOT_DIR/supabase/.temp/project-ref" ]] || [[ -f "$ROOT_DIR/supabase/.branches/_current_branch" ]]; then
   log "Applying migrations to linked Supabase project (pnpm db:link)"
-  exec supabase db push
+  # Bare `db push` reaches the local stack on v3, never the linked project.
+  exec supabase db push --remote "$@"
 fi
 
 die "Set MIGRATE_URL (Supavisor session pooler), DATABASE_URL, or DIRECT_URL in .env, or link a project with pnpm db:link before running pnpm db:migrate"
