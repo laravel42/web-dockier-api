@@ -2,11 +2,7 @@ import { TriangleAlertIcon } from "lucide-react";
 import type { SkippedEngine } from "@/types";
 import { PROVIDER_DEFS } from "../utils/providerFilters";
 
-/**
- * Says so when a scan finished without one of its engines. The scan status is
- * a closed enum with no "degraded", so without this a stopped SonarQube looks
- * exactly like a clean repository: "completed", zero findings.
- */
+/** Without this, a scan missing an engine looks exactly like a clean one. */
 export default function SkippedEnginesNotice({ engines }: { engines: SkippedEngine[] }) {
   if (engines.length === 0) return null;
   const label = (key: string) => PROVIDER_DEFS.find((p) => p.key === key)?.label ?? key;

@@ -184,10 +184,7 @@ export async function deleteScan(scanId: string, tenantId: string) {
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to delete scan" });
 }
 
-/**
- * Ask for a running scan to be cancelled. The instance that owns the scan's
- * subprocess picks the request up on its next poll (see scan-cancel.ts).
- */
+/** Records the request only; the instance running the scan stops it on its next poll. */
 export async function cancelScan(scanId: string, tenantId: string) {
   const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
   const scan = unwrapQuery(data, error, CodeAnalysisError, { notFoundMsg: "Scan not found" });

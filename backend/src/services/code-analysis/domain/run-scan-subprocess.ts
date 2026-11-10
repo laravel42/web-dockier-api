@@ -21,37 +21,13 @@ interface ScanJobInput {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/**
- * Deadline for the whole scan subprocess.
- *
- * Must stay BELOW the job's `expireInSeconds` (3600, see domain/worker.ts).
- * Nothing used to bound this: every step has its own timeout — clone 120s,
- * semgrep 600s per batch, sonar-scanner 300s plus a 120s task poll — but a hang
- * outside them ran forever. pg-boss would expire the job at an hour and the
- * worker would report a failure, while the child kept running with its clone on
- * disk, invisible to everything. Killing it first means the scan fails through
- * the normal path, with the reason named.
- *
- * 50 minutes leaves ten for the rejection to mark the scan failed. It bounds a
- * hang rather than accommodating every repository; a legitimate scan that needs
- * longer is a signal in itself, and the log says which limit it hit.
- */
+/** Bounds a hang outside the per-step timeouts; must stay below the job's expireInSeconds (3600). */
 const SCAN_SUBPROCESS_TIMEOUT_MS = 50 * 60 * 1000;
 
-/**
- * Grace period between SIGTERM and SIGKILL.
- *
- * SIGTERM is sent first on principle, but it buys little here: the runner
- * installs no handler, so Node's default terminates it without running the
- * `finally` that removes the clone. That is why the parent cleans up below.
- */
+/** SIGTERM → SIGKILL grace. The runner has no SIGTERM handler, so the parent does its cleanup. */
 const KILL_GRACE_MS = 10_000;
 
-/**
- * How often the owner of a scan asks the database whether a cancel was
- * requested. This is the cancellation latency, and one small query per running
- * scan per interval is its whole cost.
- */
+/** Cancellation latency: one small query per running scan per interval. */
 const CANCEL_POLL_MS = 5_000;
 
 export interface RunScanSubprocessOptions {
@@ -63,13 +39,7 @@ export interface RunScanSubprocessOptions {
 /** Lowest niceness the OS offers, so the scan yields to everything else. */
 const SCAN_SUBPROCESS_NICENESS = 19;
 
-/**
- * Delete the scratch SonarQube project a killed runner may have left behind.
- *
- * The runner deletes it in a `finally` that a signal skips. Best-effort and
- * silent about "nothing to delete": a scan that never reached SonarQube, or a
- * deployment without it, has no such project and that is not worth a warning.
- */
+/** A killed runner skips the finally that deletes it. Debug-level: usually there is no project. */
 async function removeOrphanedSonarProject(scanId: string): Promise<void> {
   try {
     await deleteSonarProject(sonarProjectKeyFor(scanId));
@@ -79,14 +49,7 @@ async function removeOrphanedSonarProject(scanId: string): Promise<void> {
   }
 }
 
-/**
- * Remove clone directories left by a killed child.
- *
- * `cloneRepo` creates `<tmpdir>/build-<shortId>-XXXXXX` and deletes it in a
- * `finally` the child never reaches once signalled, so the parent has to. Scoped
- * to this scan's own prefix — never a broad sweep of the temp directory — and
- * best-effort: failing to reclaim disk must not replace the real error.
- */
+/** cloneRepo's own dir only (build-<id8>-*), never a tmpdir sweep that could hit a concurrent scan. */
 async function removeOrphanedWorkDirs(scanId: string): Promise<void> {
   const prefix = `build-${scanId.slice(0, 8)}-`;
   const root = tmpdir();
@@ -102,15 +65,7 @@ async function removeOrphanedWorkDirs(scanId: string): Promise<void> {
   }
 }
 
-/**
- * Process groups of the scans running right now.
- *
- * The runner is spawned `detached`, which makes it the leader of a new group
- * whose id is its pid. Everything it launches — Semgrep, sonar-scanner and the
- * JVM under it — inherits that group, so one signal to `-pid` reaches them all.
- * Signalling only the runner left them orphaned and burning CPU until their own
- * timeouts (600s per Semgrep batch), long after the scan had been declared dead.
- */
+/** A detached runner leads its own group, so signalling -pid also reaches Semgrep and sonar-scanner. */
 const liveGroups = new Set<number>();
 
 function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
@@ -118,8 +73,7 @@ function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
   try {
     process.kill(-child.pid, signal);
   } catch {
-    // ESRCH: the group is already gone. Anything else (no process groups on
-    // this platform) falls back to the runner alone, which is what we had.
+    // Group already gone, or no process groups here: signal the runner alone.
     try {
       child.kill(signal);
     } catch {
@@ -128,9 +82,7 @@ function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
   }
 }
 
-// Detaching also detaches the group from the terminal, so Ctrl-C in dev no
-// longer reaches a scan on its own, and a restart would orphan it. Tie the
-// groups to this process's lifetime instead.
+// Detaching drops the terminal's Ctrl-C, so the groups must die with this process.
 process.once("exit", () => {
   for (const pgid of liveGroups) {
     try {
@@ -160,13 +112,7 @@ function resolveScanRunnerSpawnArgs(): string[] {
   return ["--import", tsxLoader, tsRunner];
 }
 
-/**
- * Deliver what the child could not reach on its own.
- *
- * WebSocket subscribers and the domain event bus both live only in this
- * process. The notification case is why a completed scan used to notify nobody:
- * the child emitted onto an event bus whose listener array is empty there.
- */
+/** WebSocket subscribers and the event bus exist only in this process, not in the child. */
 function relayScanIpc(msg: unknown): void {
   if (!msg || typeof msg !== "object") return;
   const payload = msg as Partial<ScanIpcMessage>;
@@ -204,18 +150,7 @@ export function runScanInSubprocess(
     if (child.pid !== undefined) liveGroups.add(child.pid);
     const childPid = child.pid;
 
-    // A scan must lose CPU races against the process serving requests.
-    //
-    // Semgrep alone takes around six of eight cores and cannot be throttled:
-    // `--jobs` was measured and barely moves it (559% -> 520% CPU, and
-    // slightly slower). With the API, the scan and — in development — Vite and
-    // tsx on one machine, the result was a site that stopped responding for
-    // the length of a scan and recovered the moment it ended. In production the
-    // same contention means one tenant's scan degrades the API for every other.
-    //
-    // Niceness only decides who yields under contention, so this costs the scan
-    // nothing on an idle box. Best-effort: lowering priority needs no privilege,
-    // but the call is platform-dependent and must never fail a scan.
+    // Semgrep cannot be throttled and otherwise starves the API; best-effort, never fails a scan.
     try {
       os.setPriority(child.pid as number, SCAN_SUBPROCESS_NICENESS);
     } catch (err) {
@@ -225,13 +160,11 @@ export function runScanInSubprocess(
     let stopReason: "timeout" | "cancelled" | null = null;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
 
-    /** One way to end the runner, whatever the reason; the first reason wins. */
+    /** The first reason wins. */
     const terminate = (reason: "timeout" | "cancelled") => {
       if (stopReason) return;
       stopReason = reason;
       killGroup(child, "SIGTERM");
-      // The runner installs no SIGTERM handler, so this is the one that
-      // actually ends a wedged process.
       killTimer = setTimeout(() => killGroup(child, "SIGKILL"), KILL_GRACE_MS);
       killTimer.unref?.();
     };
@@ -286,17 +219,12 @@ export function runScanInSubprocess(
       clearTimers();
       if (childPid !== undefined) liveGroups.delete(childPid);
 
-      // A runner that finished on its own just as the kill went out has a
-      // result; discarding it would cancel a scan that already completed.
+      // A clean exit that raced the kill is a real result; keep it.
       const finishedCleanly = code === 0 && signal === null;
 
       if (stopReason && !finishedCleanly) {
-        // The runner may have exited on SIGTERM while a descendant did not, and
-        // the SIGKILL timer was just cleared. One more pass over the group.
+        // The runner can die on SIGTERM while a descendant ignores it.
         killGroup(child, "SIGKILL");
-        // The runner was signalled mid-clone, so its own cleanup never ran:
-        // not the clone directory, and not the scratch project it may have
-        // created on the SonarQube server.
         void Promise.all([removeOrphanedWorkDirs(input.scanId), removeOrphanedSonarProject(input.scanId)]).finally(() => {
           reject(
             stopReason === "cancelled"

@@ -42,8 +42,7 @@ function summaryFromRecord(raw: Record<string, unknown>): ScanSummary {
     filesInRepo: Number(raw.filesInRepo ?? 0),
     error: typeof raw.error === "string" ? raw.error : undefined,
     progress: raw.progress as ScanProgress | undefined,
-    // Only when present: callers spread this over the API summary, and an
-    // explicit `undefined` key would erase what the API already told us.
+    // Only when present: an explicit `undefined` would erase the API's value when spread.
     ...(raw.cancelled === true ? { cancelled: true } : {}),
     ...(Array.isArray(raw.skippedEngines) ? { skippedEngines: raw.skippedEngines as SkippedEngine[] } : {}),
   };

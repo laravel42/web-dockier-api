@@ -46,16 +46,8 @@ interface SonarApiIssue {
 }
 
 /**
- * Resolve the SonarQube server, accepting either naming.
- *
- * The standalone Python SAST service (since removed) read
- * SONAR_HOST_URL / SONAR_TOKEN, while this backend read SONARQUBE_URL /
- * SONARQUBE_TOKEN. One server under two names meant an operator could configure
- * scanning and rule browsing against different servers without either surface
- * noticing. Both pairs now work here, so a single pair configures the whole
- * platform; SONARQUBE_* wins when both are set.
- *
- * There is no per-tenant override: one server serves every tenant.
+ * One server for every tenant. SONAR_HOST_URL / SONAR_TOKEN are accepted as
+ * aliases; SONARQUBE_* wins when both are set.
  */
 export function getSonarConfig(): SonarConfig | null {
   const baseUrl = env.SONARQUBE_URL?.trim() || process.env.SONAR_HOST_URL?.trim();
@@ -299,23 +291,13 @@ export interface RunSonarScannerDeps {
   deleteProject?: (projectKey: string) => Promise<void>;
   log?: (message: string) => void;
   /**
-   * Called when the scan ends without having analysed anything. Every such exit
-   * returns `[]`, indistinguishable from "analysed and found nothing", so the
-   * caller needs this to tell the user the engine did not look.
-   *
-   * The reason is a predicate for the user ("could not be reached"), never the
-   * technical cause: it is stored on the scan and served to every member of the
-   * tenant, and a URL or a stack line is neither actionable for them nor
-   * something to hand out. The cause goes to `log`.
+   * Called when nothing was analysed, since `[]` alone reads as "found nothing".
+   * The reason is shown to every tenant member, so no URLs or scanner output: those go to `log`.
    */
   onUnavailable?: (reason: string) => void;
 }
 
-/**
- * One line saying why sonar-scanner failed, for the log. The scanner prints its
- * diagnosis (`ERROR: Failed to query server version …`) on stdout, so stderr
- * alone is usually empty and the exception message is just the command line.
- */
+/** sonar-scanner prints its ERROR line on stdout; the exception message is only the command line. */
 function scannerFailureDetail(err: unknown): string {
   const e = err as { stdout?: Buffer; stderr?: Buffer; message?: string };
   const output = `${e.stderr?.toString() ?? ""}\n${e.stdout?.toString() ?? ""}`;
@@ -324,24 +306,8 @@ function scannerFailureDetail(err: unknown): string {
   return text.slice(0, 300);
 }
 
-/**
- * Delete a per-scan scratch project from the SonarQube server.
- *
- * Every scan analyses under a fresh `scan-<id>` key, so without this the server
- * accumulates one project per scan forever, each carrying its own analysis
- * history and search indices. Community Build has no line-of-code limit, so
- * nothing bills for it — it just grows, and the project list stops being usable.
- *
- * The findings themselves are already persisted in Dockier's `findings` table
- * by the time this runs, and the SonarQube UI is not a surface this product
- * sends people to (PRODUCT.md: "One pane, no context-switching"), so there is
- * nothing to keep server-side.
- */
-/**
- * The scratch project key for a scan. One definition, because the scan runner
- * creates the project under it and the parent has to delete it by the same name
- * when the runner is killed before its own cleanup can run.
- */
+/** Each scan uses a fresh project; without this the server keeps one per scan forever. */
+/** Shared by the runner that creates the project and the parent that deletes it after a kill. */
 export function sonarProjectKeyFor(scanId: string): string {
   return `scan-${scanId}`;
 }
@@ -388,10 +354,7 @@ export async function runSonarScanner(
   ].join("\n");
   writeFileSync(join(repoDir, "sonar-project.properties"), props);
 
-  // From here on the scanner may already have created the project on the
-  // server, so every exit path has to clean it up — including the ones that
-  // give up early, which is exactly when a stale project would be left
-  // behind unnoticed.
+  // The scanner may have created the project already, so every exit below must delete it.
   try {
     const execScanner =
       deps.execScanner ??
@@ -472,8 +435,7 @@ export async function runSonarScanner(
     try {
       await deleteProject(projectKey);
     } catch (err) {
-      // Never fails the scan: the findings are already in hand by now, and a
-      // project left on the server costs disk, not correctness.
+      // A leftover project costs disk, not correctness; never fail the scan for it.
       log(`Could not delete scratch project ${projectKey}: ${getErrMsg(err)}`);
     }
   }

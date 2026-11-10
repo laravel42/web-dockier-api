@@ -31,10 +31,7 @@ export interface RunScanOptions {
   enableSensitiveData?: boolean;
 }
 
-/**
- * If a scan is still marked `running`, mark it failed with the given error.
- * Used by the queue worker when a job crashes without cleaning up after itself.
- */
+/** Fail a scan whose job crashed without cleaning up after itself. No-op once it finished. */
 export async function failScanIfStillRunning(scanId: string, err: unknown): Promise<void> {
   await markScanFailed(scanId, getErrMsg(err));
 }
@@ -276,9 +273,7 @@ export async function executeScan(
       currentRule: "database/persist",
     });
 
-    // One chokepoint for every engine, after they have all reported: a secret
-    // or plain-HTTP rule that fired on a test fixture is a false positive by
-    // construction, whichever engine found it.
+    // After every engine reported, so the filter applies whichever engine found it.
     const { kept, dropped } = dropFixtureFindingsInTests(findings, (filePath) =>
       isTestFilePath(toRepoRelativePath(filePath, cloneResult.repoDir)),
     );
@@ -306,8 +301,7 @@ export async function executeScan(
 
     broadcastScanStatus(scanId, "completed", summary);
 
-    // Not `emit` directly: this runs in a subprocess, where the in-process
-    // event bus has no listeners. See emitScanNotification.
+    // Not `emit`: in this subprocess the event bus has no listeners.
     emitScanNotification({
       tenantId,
       title: "Security scan completed",

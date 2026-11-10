@@ -27,13 +27,7 @@ export type ScanWsMessage =
   | { type: "progress"; scanId: string; progress: ScanProgressPayload }
   | { type: "status"; scanId: string; status: string; summary: Record<string, unknown> };
 
-/**
- * Messages this module sends over the scan subprocess's IPC channel.
- *
- * Both exist for the same reason: the work runs in a child process, and the
- * things it needs to reach — WebSocket subscribers and the domain event bus —
- * live only in the parent.
- */
+/** IPC from the scan subprocess: WebSocket subscribers and the event bus live only in the parent. */
 export type ScanIpcMessage =
   | { type: "scan-event"; scanId: string; message: ScanWsMessage }
   | { type: "scan-notification"; event: NotifyEvent };
@@ -77,23 +71,7 @@ export function broadcastScanEvent(scanId: string, message: ScanWsMessage): void
   }
 }
 
-/**
- * Send a scan's completion notification, from either process.
- *
- * `shared/events.ts` is an in-process bus: a module-level array of listeners.
- * The notifications service registers its handler in run-server.ts, so in the
- * scan subprocess that array is empty and `emit` returns at its first guard —
- * the notification was dropped, silently, with nothing logged, because the bus
- * is built never to fail an emitter.
- *
- * That is why a completed scan notified nobody. It regressed when the scan
- * moved into a subprocess; the emit predates that and was correct at the time.
- * Deploy notifications were unaffected, their pipeline still running in the
- * parent.
- *
- * Relayed over the same channel as progress events rather than emitted here, so
- * there is one place that knows the work is cross-process.
- */
+/** `emit` in the subprocess reaches no listener (they register in the parent), so relay it over IPC. */
 export function emitScanNotification(event: NotifyEvent): void {
   if (typeof process.send === "function") {
     process.send({ type: "scan-notification", event } satisfies ScanIpcMessage);

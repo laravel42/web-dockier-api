@@ -76,16 +76,7 @@ export function isGeneratedAssetName(name: string): boolean {
   return GENERATED_FILE_PATTERNS.some((re) => re.test(name));
 }
 
-/**
- * Paths that hold tests rather than shipped code.
- *
- * Deliberately NOT added to SCAN_SKIP_DIRS: tests are still worth scanning. A
- * test can call an unsafe API for real, and an injection or XSS finding there is
- * a genuine signal about the code under test. This classification exists for the
- * one rule family where a test is a false positive by construction — secret
- * detection, where the fixture is fake credentials on purpose. See
- * `isSecretDetectionFinding` in finding-filters.ts.
- */
+/** Test paths. Not in SCAN_SKIP_DIRS on purpose: only fixture rules ignore them (finding-filters.ts). */
 const TEST_PATH_PATTERNS: RegExp[] = [
   // Directories, in any position.
   /(^|\/)(__tests__|__mocks__|__fixtures__|tests?|spec|specs|e2e|fixtures|testdata)(\/|$)/i,
@@ -106,14 +97,7 @@ const TEST_PATH_PATTERNS: RegExp[] = [
   /(^|\/)[^/]+_(test|spec)\.rb$/i,
 ];
 
-/**
- * True when a repo-relative path is test code.
- *
- * Erring toward false positives here is the safer direction: a missed test file
- * keeps reporting fake credentials, while a source file wrongly judged a test
- * would hide real ones. Every pattern below therefore needs a test marker in the
- * name or an unambiguous directory, never a bare "contains the word test".
- */
+/** Needs an explicit test marker: misjudging a source file as a test would hide real findings. */
 export function isTestFilePath(relativePath: string): boolean {
   const normalized = relativePath.replace(/\\/g, "/");
   return TEST_PATH_PATTERNS.some((re) => re.test(normalized));

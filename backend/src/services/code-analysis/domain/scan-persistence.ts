@@ -20,12 +20,7 @@ import { broadcastScanStatus } from "./scan-progress.js";
 /** Findings are inserted in batches of this size to stay under payload limits. */
 const INSERT_BATCH_SIZE = 100;
 
-/**
- * Cloudflare sits in front of the Supabase REST API, and when it blocks a
- * request the body is an HTML error page, which supabase-js hands back as
- * `error.message` — a whole document ends up in summary.error and in the UI.
- * The Ray ID is the only actionable part: it is what Supabase support needs.
- */
+/** Cloudflare in front of Supabase answers a block with an HTML page, handed back as error.message. */
 function isEdgeBlock(message: string): boolean {
   return /^\s*<(!doctype html|html)/i.test(message);
 }
@@ -69,8 +64,7 @@ async function insertOnce(rows: FindingRow[], attempts: number): Promise<void> {
       attempts,
       backoffMs: 2_000,
       label: "findings.insert",
-      // A rejected row (constraint, bad column) fails identically forever;
-      // only an edge interception or a dropped connection is worth another try.
+      // A rejected row fails the same way forever; only the edge or the network is worth a retry.
       shouldRetry: (err) => {
         const message = getErrMsg(err);
         return isEdgeBlock(message) || /fetch failed|ECONN|socket hang up|terminated/i.test(message);
@@ -80,16 +74,8 @@ async function insertOnce(rows: FindingRow[], attempts: number): Promise<void> {
 }
 
 /**
- * Insert rows; if the edge keeps blocking the batch the block is content-driven
- * (a real scan hit the same batch twice), so bisect to the offending row. That
- * row is stored without its snippet — the finding survives, the one field that
- * trips the edge is withheld — and its rule and location are logged so the
- * trigger can be identified. Non-edge errors propagate untouched.
- *
- * The one trigger seen so far: a test asserting that `'http://2852039166/'`
- * (169.254.169.254, the cloud metadata IP, written as a decimal integer) is
- * refused. Cloudflare's SSRF rule blocks that URL in any request body, and a
- * security scanner stores exactly that kind of code.
+ * A block that survives retries is content-driven (e.g. Cloudflare's SSRF rule on
+ * 'http://2852039166/'), so bisect to the row and store it without its snippet.
  */
 async function insertRows(rows: FindingRow[], attempts: number): Promise<void> {
   try {
@@ -108,9 +94,7 @@ async function insertRows(rows: FindingRow[], attempts: number): Promise<void> {
       { ruleId: row.rule_id, filePath: row.file_path, line: row.start_line, snippetLength: row.snippet?.length ?? 0 },
       "[scan] Edge blocked a finding row; storing it without its snippet",
     );
-    // Empty rather than a placeholder: the UI then falls back to the file from
-    // the repo, and Fix with AI and issue summaries already say "snippet
-    // unavailable" — a placeholder string would be shown to the user as code.
+    // Empty, not a placeholder: every reader handles "" and would show a placeholder as code.
     await insertOnce([{ ...row, snippet: "" }], 1);
   }
 }
@@ -165,9 +149,9 @@ export async function persistFindings(
 }
 
 /**
- * Mark a scan as failed, preserving whatever file-count progress it had reached,
- * and broadcast the failure. Best-effort — a DB update failure is logged, not
- * thrown, so it never masks the original error.
+ * Mark a still-running scan as failed, keep its file counts, drop its partial
+ * findings and broadcast. A scan that already finished is left alone. Never
+ * throws, so it cannot mask the error that brought the caller here.
  */
 export async function markScanFailed(
   scanId: string,
@@ -209,9 +193,7 @@ export async function markScanFailed(
   }
   if (!updated) return;
 
-  // A scan that dies mid-insert leaves its first batches behind. Nothing else
-  // removes them: persistFindings deletes by scan_id, and a new scan gets a new
-  // id. A failed scan reporting a partial result is worse than one reporting none.
+  // A new run gets a new scan id, so nothing else would reclaim these rows.
   const { error: cleanupError } = await supabaseAdmin.from("findings").delete().eq("scan_id", scanId);
   if (cleanupError) {
     obsLogger.warn({ err: cleanupError.message }, `[scan] Could not clear partial findings of failed scan ${scanId}`);

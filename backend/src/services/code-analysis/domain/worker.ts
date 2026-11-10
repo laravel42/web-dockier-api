@@ -29,13 +29,9 @@ export interface ScanJobInput {
   correlationId?: string;
 }
 
-/**
- * A cancelled scan must END the job, not fail it: the queue retries a failed
- * job (retryLimit below), which would start the scan the user just stopped.
- */
+/** A cancelled scan ends the job: failing it would make the queue retry the scan the user stopped. */
 export async function handleScanJob(input: ScanJobInput): Promise<void> {
-  // Cancelled while still queued: there is no process to kill, only a job that
-  // must not start. `runScan` marks a scan running as soon as it enqueues it.
+  // Cancelled while queued: nothing to kill, the job just must not start.
   if (await isScanCancelRequested(input.scanId)) {
     await markScanCancelled(input.scanId);
     return;

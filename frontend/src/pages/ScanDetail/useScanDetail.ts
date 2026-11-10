@@ -120,8 +120,7 @@ export function useScanDetail() {
     return apiSummary ?? liveSummary ?? null;
   }, [scan?.summary, live?.summary, live?.progress, live?.status, scanRunning, scanMatchesUrl]);
 
-  // A cancelled scan ended the way its user asked; it is not an error to show
-  // in red, only a fact the sidebar states plainly.
+  // Cancelled is what the user asked for, not an error to show in red.
   const scanCancelled = Boolean(
     (scanMatchesUrl && scan?.summary?.cancelled) || live?.summary?.cancelled,
   );
@@ -147,13 +146,7 @@ export function useScanDetail() {
       setFindingsLoadingMore(true);
     } else {
       setFindingsLoading(true);
-      // The rows are cleared, the counts are NOT. The list changes with the
-      // filter, so stale rows would be wrong; the counts do not — the API
-      // computes them per scan and ignores severity and provider
-      // (getSecurityFindingCounts in domain/findings.ts). Blanking them made
-      // every tab's number vanish and come back on each switch, discarding a
-      // value for one identical to it. They are reset where they genuinely go
-      // stale instead: the [scanId] effect below.
+      // Rows only: counts are per scan and ignore the filters, so they reset in the [scanId] effect.
       setFindings([]);
       setHasMoreFindings(false);
     }
@@ -236,11 +229,7 @@ export function useScanDetail() {
     });
   }, [scanId, scan?.id, scan?.status, severityFilter, providerFilter, fetchFindings]);
 
-  // An engine with no findings deliberately keeps its tab selected. This used
-  // to clear the filter instead, which moved the user somewhere they had not
-  // asked to go and left them to work out why — "SonarQube found nothing" and
-  // "you are now looking at everything" are different answers to the question
-  // they asked. FindingsList says the former in its empty state.
+  // An engine with no findings keeps its tab; FindingsList's empty state answers it.
 
   useEffect(() => {
     if (scanId) {
@@ -422,23 +411,12 @@ export function useScanDetail() {
     });
   }, [findings, project, fileContents, fileFetchTick]);
 
-  /**
-   * Severity and provider are independent filters and compose.
-   *
-   * This used to clear the provider, so picking a severity while on an engine's
-   * tab threw you back to All — you could not ask for "Semgrep errors", which is
-   * the narrowing a user wants most. Nothing required it: the API applies both
-   * filters independently, and resolveFilteredCounts already switches the
-   * severity cards to the selected provider's own breakdown so they keep showing
-   * real, clickable numbers while both are active.
-   */
+  /** Severity and provider compose ("Semgrep errors"); the API applies both independently. */
   const handleSeverityFilter = (severity: string) => {
     setSeverityFilter((prev) => (prev === severity ? "" : severity));
   };
 
-  // The request only records intent; the scan stops within a few seconds, when
-  // the backend notices it. Until then the sidebar says "Cancelling…" rather
-  // than letting the user press the button again.
+  // The scan stops seconds after the request; show "Cancelling…" meanwhile, not the button.
   const [cancelRequestedFor, setCancelRequestedFor] = useState<string | null>(null);
   const cancelConfirm = useConfirmableAction(
     async () => {

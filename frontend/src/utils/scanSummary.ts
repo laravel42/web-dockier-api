@@ -1,10 +1,6 @@
 type ScanSummaryCounts = { totalFindings?: number; errors: number; warnings: number; infos: number };
 
-/**
- * A cancelled scan is stored as `failed` (the status enum has no room for
- * another value) with `summary.cancelled`. Anything that shows a status has to
- * go through here, or a scan the user stopped themselves reads as one that broke.
- */
+/** Cancelled is stored as `failed` + `summary.cancelled`; show every status through here. */
 export function effectiveScanStatus(status: string, summary?: { cancelled?: boolean } | null): string {
   return status === "failed" && summary?.cancelled ? "cancelled" : status;
 }

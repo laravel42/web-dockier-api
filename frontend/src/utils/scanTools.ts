@@ -19,9 +19,7 @@ export function loadScanTools(): Record<string, boolean> {
   if (!saved) return { ...DEFAULT_SCAN_TOOLS };
   try {
     const parsed = JSON.parse(saved) as Record<string, boolean>;
-    // The engine was briefly called `bearer`, which was only ever SonarQube
-    // under a half-finished rename. Browsers still carry that key, so honour
-    // it as `sonarqube` rather than resetting the user's choice to the default.
+    // `bearer` was SonarQube under an old name; browsers still store that key.
     if (parsed.bearer !== undefined && parsed.sonarqube === undefined) {
       parsed.sonarqube = parsed.bearer;
     }

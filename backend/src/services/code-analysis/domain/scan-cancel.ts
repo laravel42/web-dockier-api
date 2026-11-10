@@ -1,12 +1,4 @@
-/**
- * Cancelling a running scan.
- *
- * The request only records intent in the database. The process that owns the
- * scan's subprocess notices it by polling and does the killing, so this works
- * with any number of backend instances: there is no registry of subprocesses to
- * route a request to, and the instance that received the click need not be the
- * one running the scan.
- */
+/** Cancel records intent in the database; the instance owning the subprocess polls it, so any instance can serve the request. */
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { nowIso } from "../../../shared/utils/time.js";
@@ -22,12 +14,7 @@ export class ScanCancelledError extends Error {
   }
 }
 
-/**
- * Record a cancel request. Returns false when the scan is not running — it
- * finished, or never started — so the caller can tell the user instead of
- * pretending something was cancelled. The status filter is also what keeps a
- * late click from touching a scan that just completed.
- */
+/** False when the scan is not running; the status filter keeps a late click off a finished scan. */
 export async function requestScanCancel(scanId: string): Promise<boolean> {
   const { data, error } = await supabaseAdmin
     .from("scans")
@@ -50,10 +37,7 @@ export async function isScanCancelRequested(scanId: string): Promise<boolean> {
   return Boolean(data?.cancel_requested_at);
 }
 
-/**
- * Finish a cancelled scan. Only a scan still marked running is touched, so a
- * scan that completed between the kill and this call keeps its result.
- */
+/** Finish a cancelled scan; one that completed meanwhile keeps its result (see markScanFailed). */
 export async function markScanCancelled(scanId: string): Promise<void> {
   await markScanFailed(scanId, SCAN_CANCELLED_MESSAGE, { cancelled: true });
 }
