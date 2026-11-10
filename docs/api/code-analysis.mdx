@@ -8,6 +8,7 @@
 - `GET /code-analysis/scans/:scanId/findings`
 - `DELETE /code-analysis/scans/:scanId`
 - `POST /code-analysis/scans/:scanId/run`
+- `POST /code-analysis/scans/:scanId/cancel`
 - `GET /code-analysis/custom-rules`
 - `POST /code-analysis/custom-rules`
 - `PUT /code-analysis/custom-rules/:ruleDbId`
@@ -23,4 +24,6 @@
 
 ## Notes
 
-- Scan orchestration endpoints are migrated; deep scanner workers remain best-effort where TODO-marked.
+- `run` returns immediately; the scan runs in the background. Progress arrives over the scan WebSocket and in `summary.progress`.
+- `cancel` requires the same permission as `run` and answers `400` when the scan is not running. It only records the request: the scan stops within about 5 seconds, ends with status `failed` and `summary.cancelled: true`, and its partial findings are discarded.
+- `summary.skippedEngines` lists engines that did not run, as `{ engine, reason }`. An engine listed there has no results, not zero findings; the scan is still `completed`.

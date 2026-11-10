@@ -22,7 +22,7 @@ Delivery is tracked in Linear project *Dockier App — UX Parity & Hardening*; s
 - **Testing:** Vitest — tests live in `__tests__/` directories, files named `*.test.ts`
 - **AI:** OpenAI API (gpt-5.4-mini) — server-side only
 - **Infrastructure:** Pulumi (GCP), CloudFormation (AWS)
-- **Scanning:** Semgrep + custom regex rules engine
+- **Scanning:** Semgrep (curated opengrep corpus in `code-analysis/rules/opengrep`), SonarQube Community (self-hosted, see *Security scans*), and Dockier's own regex rules
 
 ## Repository structure
 
@@ -49,6 +49,7 @@ Fastify service route modules live under `backend/src/services/<domain>/routes.t
   - AI: `OPENAI_API_KEY`, `OPENAI_MODEL`, `AI_DOCKERFILE_REVIEW`
   - Deploy (Dokploy): `DOKPLOY_API_URL`, `DOKPLOY_API_TOKEN`, `DOKPLOY_SSH_KEY_ID`, `DEPLOY_PROVIDER` (`"dokploy"` | `"native"`)
   - Deploy (legacy/AWS): `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
+  - Scanning: `SONARQUBE_URL`, `SONARQUBE_TOKEN` (`SONAR_HOST_URL` / `SONAR_TOKEN` are accepted as aliases)
   - Secrets bridge: `LOAD_SECRETS_FROM` (`"cloudflare"` to pull from Cloudflare Secrets Store at boot)
   - **Two tiers, deliberately.** Variables the Fastify process itself reads are declared in the zod schema in `backend/src/shared/config.ts` and reached through the validated `env` object — that is where defaults and format rules live, and the schema is the authoritative list for the running backend. Build- and ops-only variables are consumed *outside* the validated config (`MIGRATE_URL` by `infra/setup-external-db.sh`, `GITHUB_APP_*` / `GITLAB_APP_*` and `AWS_*` by git-integration and infra tooling, `LOAD_SECRETS_FROM` by the secrets bootstrap in `backend/src/shared/env/` which runs *before* validation and therefore cannot depend on it). They are intentionally **not** in the schema; do not force them in, since the backend would then validate variables it never reads through `env`. When adding a variable, put it in the schema only if the Fastify process reads it, and list it in `.env.example` either way.
 - **Auth:** Supabase passwordless (OTP) → tenant-scoped JWT for API calls. Protected endpoints use the Fastify auth pre-handler from `backend/src/shared/auth.ts`. Optional TOTP 2FA.
@@ -270,12 +271,118 @@ not recycled while historical deploy logs still contain the marker.
 - `backend/src/services/deploy/domain/dokploy/stages/` — Individual pipeline stages
 - `supabase/migrations/0068_dokploy_integration.sql` — Schema for `dokploy_tenant_projects`, `dokploy_servers`, `dokploy_applications`
 
+### Security scans
+
+Code lives in `backend/src/services/code-analysis/`. A scan is created and run by
+`domain/scans.ts`, enqueued on the `security-scan` pg-boss queue, and executed by
+`domain/worker.ts` → `run-scan-subprocess.ts` → a child process
+(`scan-runner.ts` → `scan-worker.ts#executeScan`). Three engines, each toggleable:
+Semgrep over the opengrep corpus (1571 rules), Dockier's regex rules from the
+`custom_rules` table, and SonarQube via `sonar-scanner`.
+
+**The subprocess is load-bearing; do not inline the scan into the API process.**
+Semgrep takes most of the machine's cores and cannot be throttled (`--jobs` was
+measured and barely moves it). The child runs at nice 19 so the API wins every CPU
+race; without it the whole site stopped responding for the length of a scan.
+
+- **One process group per scan.** The runner is spawned `detached`, so it leads a
+  group that Semgrep and sonar-scanner inherit; timeouts and cancels signal
+  `-pid`, not the runner alone (which used to leave Semgrep orphaned for up to its
+  own 600 s timeout). A final SIGKILL pass runs on close. Live groups are killed
+  on parent `exit`, because detaching also drops the terminal's Ctrl-C.
+- **The parent cleans up what a killed child cannot.** The child's `finally` never
+  runs once signalled, so the parent removes the clone (`build-<scanId[0..8]>-*`
+  in tmpdir, never a broad sweep) and deletes the scratch SonarQube project
+  (`sonarProjectKeyFor(scanId)`, the single definition of that key).
+- **Deadline:** 50 min, kept below the job's `expireInSeconds` (3600) so the scan
+  fails through the normal path with its reason named.
+- **The child cannot reach the parent's in-process event bus** (`shared/events.ts`
+  has no listeners there). Notifications and WebSocket events are relayed over the
+  IPC channel (`emitScanNotification`, `relayScanIpc`); calling `emit` directly
+  from scan code notifies nobody.
+
+**Progress writes.** `updateScanProgress` is called once per file per engine, all
+un-awaited. It claims its 400 ms throttle slot *before* the Supabase round-trip —
+claiming it afterwards let every concurrent caller through, which opened
+thousands of sockets and killed a 5k-file scan with `EMFILE`. The UPDATE is
+scoped to `status in (running, pending)` so a write already in flight cannot
+erase the failure reason `markScanFailed` just stored.
+
+**Cancellation** (`domain/scan-cancel.ts`, `POST /code-analysis/scans/:id/cancel`).
+The request only stamps `scans.cancel_requested_at`; the instance that owns the
+subprocess polls it every 5 s and terminates the group. This works with any
+number of backend instances — there is deliberately no registry of
+subprocesses to route a request to. A dedicated column, not a key in
+`scans.summary`: the progress writers read-modify-write the whole summary, so a
+flag stored there is lost whenever it lands between one of their reads and
+writes. Rules that must hold:
+
+- A cancelled job **ends**, it does not fail: `retryLimit: 1` would otherwise
+  restart the scan the user stopped. A job cancelled while queued never starts.
+- `runScan` clears `cancel_requested_at`, or a re-run would start out cancelled.
+- A runner that exits 0 just as the kill goes out keeps its result.
+- A cancelled scan is stored as `failed` with `summary.cancelled = true` (the
+  status enum stays closed). Anything that shows a scan status goes through
+  `effectiveScanStatus` / `failedScanDotClass` in `frontend/src/utils/scanSummary.ts`,
+  or a scan the user stopped renders as one that broke.
+
+**An engine that did not run is not an engine that found nothing.** Every early
+exit of `runSonarScanner` used to return `[]`, so a stopped SonarQube produced a
+clean-looking `completed` with 0 findings. Exits that analysed nothing call
+`onUnavailable`, and the scan records them in `summary.skippedEngines`; the UI
+marks the tab "(did not run)" and shows an "incomplete" notice. The stored reason
+is a short user-facing phrase ("could not be reached"); the technical cause —
+server URL, scanner output — goes to the backend log only, because the summary
+is served to every member of the tenant. Semgrep failing still fails the scan.
+
+**Findings filters** (`domain/finding-filters.ts`, applied once after all engines
+report): secret-detection rules and `custom.generic.http-no-tls` are dropped in
+test files, where every hit is a fixture by construction. Every other rule keeps
+reporting in tests — a test can call an unsafe API for real — so do not exclude
+test directories from the walk instead.
+
+**Persistence and the Cloudflare edge.** Supabase's REST API sits behind a
+Cloudflare WAF, and a security scanner stores exactly the code it flags. A
+blocked request comes back as an HTML page in `error.message`. `persistFindings`
+retries a blocked batch, then bisects it to the offending row and stores that row
+with an **empty** snippet (the preview, Fix with AI and issue summaries already
+handle one). The only trigger seen so far is `'http://2852039166/'` — the cloud
+metadata IP written as a decimal integer — which Cloudflare's SSRF rule blocks in
+any request body. Do not "fix" this by escaping the payload to slip past the WAF.
+`markScanFailed` deletes a failed scan's partial findings, since a new run gets a
+new scan id and nothing else would reclaim them.
+
+**SonarQube** is a server, not a library, so it runs as a container
+(`docker-compose.yml`, image pinned, its own Postgres — never the app database).
+It listens on host port **9100, not 9000**: php-fpm binds `127.0.0.1:9000` on
+machines running PHP, Docker then gets only the IPv6 wildcard, and the scanner
+talks FastCGI to an HTTP server ("header parser received no bytes"). Railway
+cannot host it (Elasticsearch needs `vm.max_map_count`), so production needs a
+host of its own. Each scan analyses under a throwaway `scan-<id>` project,
+deleted afterwards. Community Edition processes one analysis at a time, and the
+backend waits up to 120 s for it; concurrent scans have not been measured
+against that limit.
+
+**Docker.** `backend/Dockerfile` pins Semgrep and sonar-scanner and is what
+Railway builds. The root `.dockerignore` keeps `.env*` files and virtualenvs out
+of the image — without it a local build baked in `backend/.env.local`. The image
+installs with `--ignore-scripts` and rebuilds only the backend's own
+dependencies, because the root devDependencies' postinstalls (the Railway CLI)
+download binaries that do not exist for arm64. The `backend` compose service
+reads `.env` at run time and overrides `SONARQUBE_URL` to the compose network;
+`init: true` reaps processes a killed scan orphans. It shares the pg-boss queue
+with any other backend on the same database, so never run it alongside
+`pnpm backend:dev`.
+
 ## Database
 
 - The active runtime uses `supabase/migrations/` as the canonical schema source.
 - Migrations are plain SQL files with monotonic numeric prefixes (`0001_*.sql`, `0046_*.sql`, etc.).
 - Postgres is hosted on Supabase; use Supavisor pooler URLs from the dashboard when IPv6 direct connections fail locally (`MIGRATE_URL` for DDL, `DATABASE_URL` for runtime/pg-boss).
 - When writing migrations, always use `IF NOT EXISTS` for CREATE TABLE and `CREATE INDEX CONCURRENTLY` where possible.
+- Apply them with `pnpm db:migrate` (`infra/setup-external-db.sh` → `supabase db push`), which applies only versions missing from `supabase_migrations.schema_migrations`. Run `pnpm db:migrate --dry-run` first. On Supabase CLI v3 the push asks for confirmation before changing a hosted database — kept on purpose, since the script can point at production. Do not apply a migration with `psql` and then insert its version by hand: the ledger then says applied, `db:migrate` reports "up to date", and nothing shows the step was skipped.
+- After adding a migration, regenerate the manifest `/readyz` compares the ledger against: `pnpm --filter @dockier/backend-fastify migrations:manifest`. A test fails if the two disagree.
+- A migration that drops data guards itself: it checks the data matches what you expect and `RAISE EXCEPTION`s otherwise, so a database that diverged fails instead of losing rows (see `0081_drop_sast_service_tables.sql`).
 
 ## Frontend conventions
 
@@ -330,6 +437,14 @@ pnpm backend:typecheck        # Type-check backend
 pnpm --filter @dockier/backend-fastify build
 pnpm test                     # Run root Vitest tests
 pnpm --filter @dockier/backend-fastify smoke:ai-review   # Live OpenAI smoke test for the Dockerfile AI review (needs OPENAI_API_KEY)
+pnpm --filter @dockier/backend-fastify smoke:sonar       # Live SonarQube scan of a fixture (needs SONARQUBE_URL/TOKEN and sonar-scanner)
+pnpm db:migrate --dry-run     # Show which migrations would be applied
+pnpm db:migrate               # Apply them (asks before touching a hosted database)
+
+# Docker (repo root)
+docker compose up -d --wait                           # SonarQube + its Postgres only, on localhost:9100
+docker compose --profile backend up -d --build --wait # ...plus the backend, built from backend/Dockerfile
+docker compose --profile backend stop backend         # Stop it before running pnpm backend:dev (shared queue, same port)
 
 # Frontend
 cd frontend && pnpm install   # Install frontend dependencies
