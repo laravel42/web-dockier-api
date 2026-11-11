@@ -163,7 +163,7 @@ export function useIssueModal(project: Project | null) {
       } else {
         throw new Error("No integration or git connection available");
       }
-    } catch (err: unknown) {
+    } catch (err) {
       let friendly: string;
       if (err instanceof ApiError) {
         if (err.isTimeout || err.isNetworkError) friendly = "Connection timed out — the server may be unreachable. Check your network and try again.";

@@ -469,7 +469,7 @@ export function useScanDetail() {
       seedFromScan(confirmed);
 
       await refreshAllScans(project.id, { silent: true });
-    } catch (err: unknown) {
+    } catch (err) {
       setRunScanError(getErrorMessage(err, "Scan failed"));
       if (createdScanId) clearScanState(createdScanId);
     } finally {

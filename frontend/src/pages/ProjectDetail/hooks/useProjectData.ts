@@ -78,7 +78,7 @@ export function useProjectData() {
     try {
       const updated = await projectsApi.update(projectId, { name });
       setProject(updated);
-    } catch (err: unknown) {
+    } catch (err) {
       setNameError(getErrorMessage(err, "Failed to update project name"));
       throw err;
     } finally {

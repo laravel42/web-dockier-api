@@ -63,7 +63,7 @@ export default function Login() {
         await refreshPermissions();
         navigate("/dashboard");
       }
-    } catch (err: unknown) {
+    } catch (err) {
       if (err instanceof ApiError && err.isRateLimit) {
         setCooldownSeconds((value) => (value > 0 ? value : 60));
       }
@@ -99,7 +99,7 @@ export default function Login() {
       }
       await refreshPermissions();
       navigate("/dashboard");
-    } catch (err: unknown) {
+    } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);

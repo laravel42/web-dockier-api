@@ -228,7 +228,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
         onError: setDeployError,
         onComplete: () => onDeployCompleteRef.current?.(),
       });
-    } catch (err: unknown) {
+    } catch (err) {
       setDeployError(getErrorMessage(err, "Failed to start deployment"));
       setState(prev => ({ ...prev, deployStatus: "failed" }));
     }
@@ -299,7 +299,7 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       // A user cancel is not an error — DeployWizard renders deployError in a
       // danger-toned box. StepDeploy carries the cancelled state instead.
       setDeployError("");
-    } catch (err: unknown) {
+    } catch (err) {
       setDeployError(getErrorMessage(err, "Failed to cancel deployment"));
     } finally {
       setCancellingDeploy(false);

@@ -175,7 +175,7 @@ export function useDeployDetail() {
       setDeploy(updated);
       refreshAllDeploys(updated);
       return { success: true as const, message: "Deployment cancelled" };
-    } catch (err: unknown) {
+    } catch (err) {
       return { success: false as const, message: getErrorMessage(err, "Failed to cancel deployment") };
     } finally {
       setCancelling(false);
