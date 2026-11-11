@@ -105,6 +105,13 @@ describe("live status message", () => {
     expect(status({ skippedEngines }).summary?.skippedEngines).toEqual(skippedEngines);
   });
 
+  it("carries a summary field this file does not know about", () => {
+    // The list of fields used to be closed, so each new one (cancelled, then
+    // skippedEngines) reached the page only after a reload.
+    const summary = status({ totalFindings: 3, someFutureField: "x" }).summary as unknown as Record<string, unknown>;
+    expect(summary.someFutureField).toBe("x");
+  });
+
   it("leaves both keys absent otherwise, so a merge cannot erase the API's values", () => {
     const summary = status({ totalFindings: 3 }).summary!;
     expect("cancelled" in summary).toBe(false);

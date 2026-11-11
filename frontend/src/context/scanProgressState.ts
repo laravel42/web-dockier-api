@@ -1,5 +1,5 @@
 import type { ScanWsMessage } from "../services/scan-websocket";
-import type { Scan, ScanProgress, ScanStatus, ScanSummary, SkippedEngine } from "../types";
+import type { Scan, ScanProgress, ScanStatus, ScanSummary } from "../types";
 
 export interface ScanLiveState {
   status: ScanStatus;
@@ -34,6 +34,9 @@ function emptySummaryFromProgress(progress: ScanProgress): ScanSummary {
 
 function summaryFromRecord(raw: Record<string, unknown>): ScanSummary {
   return {
+    // Copy first so a field added to the summary later reaches the page live,
+    // not only after a reload; the known fields below are then normalized.
+    ...raw,
     totalFindings: Number(raw.totalFindings ?? 0),
     errors: Number(raw.errors ?? 0),
     warnings: Number(raw.warnings ?? 0),
@@ -42,9 +45,6 @@ function summaryFromRecord(raw: Record<string, unknown>): ScanSummary {
     filesInRepo: Number(raw.filesInRepo ?? 0),
     error: typeof raw.error === "string" ? raw.error : undefined,
     progress: raw.progress as ScanProgress | undefined,
-    // Only when present: an explicit `undefined` would erase the API's value when spread.
-    ...(raw.cancelled === true ? { cancelled: true } : {}),
-    ...(Array.isArray(raw.skippedEngines) ? { skippedEngines: raw.skippedEngines as SkippedEngine[] } : {}),
   };
 }
 
