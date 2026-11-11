@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { deployApi } from "@/services/api";
+import { getErrorMessage } from "@/utils/errors";
+import { useToast } from "@/context/useToast";
 import type { AddProviderPayload, UpdateProviderPayload } from "@/services/deploy";
 import Modal from "@/components/Modal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
@@ -45,6 +47,7 @@ export default function ProvidersTab() {
     () => deployApi.listProviders().then((res) => res.providers),
     [],
   );
+  const toast = useToast();
   const providerList = providers ?? [];
   const [showForm, setShowForm] = useState(false);
   const [editingProvider, setEditingProvider] = useState<{ id: string; provider: string; label: string; createdAt?: string } | null>(null);
@@ -53,8 +56,6 @@ export default function ProvidersTab() {
   const [addProviderKind, setAddProviderKind] = useState<ProviderKind>("aws");
   const [form, setForm] = useState<CredentialForm>(EMPTY_FORM);
   const [showSecret, setShowSecret] = useState(false);
-
-  const fetch_ = reload;
 
   const {
     showModal: confirmRemove,
@@ -69,7 +70,7 @@ export default function ProvidersTab() {
     {
       onSuccess: () => {
         setEditingProvider(null);
-        fetch_();
+        reload();
       },
       errorFallback: "Failed to remove provider",
     },
@@ -87,10 +88,14 @@ export default function ProvidersTab() {
       addProviderKind === "aws"
         ? { provider: "aws", label: form.label, accessKeyId: form.accessKeyId.trim(), secretAccessKey: form.secretAccessKey.trim() }
         : { provider: "gcp", label: form.label, serviceAccountKey: form.serviceAccountKey.trim() };
-    await deployApi.addProvider(payload);
-    setShowForm(false);
-    resetAddForm();
-    fetch_();
+    try {
+      await deployApi.addProvider(payload);
+      setShowForm(false);
+      resetAddForm();
+      reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to add provider"));
+    }
   };
 
   const openEdit = (p: (typeof providerList)[number]) => {
@@ -116,9 +121,13 @@ export default function ProvidersTab() {
       payload = { provider: "gcp", label: editForm.label };
       if (editForm.serviceAccountKey.trim()) payload.serviceAccountKey = editForm.serviceAccountKey.trim();
     }
-    await deployApi.updateProvider(editingProvider.id, payload);
-    setEditingProvider(null);
-    fetch_();
+    try {
+      await deployApi.updateProvider(editingProvider.id, payload);
+      setEditingProvider(null);
+      reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update provider"));
+    }
   };
 
   const editKind = editingProvider ? normalizeProviderKind(editingProvider.provider) : "aws";

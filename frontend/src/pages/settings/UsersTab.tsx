@@ -175,7 +175,7 @@ export default function UsersTab() {
       setShowPassword(false);
       setPasswordGenerated(false);
       fetchData();
-    } catch (err: unknown) {
+    } catch (err) {
       setInviteError(getErrorMessage(err, "Failed to create user"));
     } finally { setInviting(false); }
   };

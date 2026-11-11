@@ -34,8 +34,6 @@ export default function SourceControlTab() {
   const [editForm, setEditForm] = useState({ label: "", personalToken: "", endpoint: "" });
   const [form, setForm] = useState({ provider: "github", personalToken: "", label: "", endpoint: "" });
 
-  const fetch_ = reload;
-
   const {
     showModal: confirmRemove,
     execute: removeConnection,
@@ -49,7 +47,7 @@ export default function SourceControlTab() {
     {
       onSuccess: () => {
         setEditingConn(null);
-        fetch_();
+        reload();
       },
       errorFallback: "Failed to remove connection",
     },
@@ -59,8 +57,8 @@ export default function SourceControlTab() {
     e.preventDefault();
     try {
       await gitApi.addConnection({ ...form, repoUrl: "" });
-      setShowForm(false); setForm({ provider: "github", personalToken: "", label: "", endpoint: "" }); fetch_();
-    } catch (err: unknown) {
+      setShowForm(false); setForm({ provider: "github", personalToken: "", label: "", endpoint: "" }); reload();
+    } catch (err) {
       toast.error(getErrorMessage(err, "Failed to add connection"));
     }
   };
@@ -73,11 +71,15 @@ export default function SourceControlTab() {
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingConn) return;
-    await gitApi.updateConnection(editingConn.id, {
-      label: editForm.label,
-      ...(editForm.personalToken ? { personalToken: editForm.personalToken } : {}),
-    });
-    setEditingConn(null); fetch_();
+    try {
+      await gitApi.updateConnection(editingConn.id, {
+        label: editForm.label,
+        ...(editForm.personalToken ? { personalToken: editForm.personalToken } : {}),
+      });
+      setEditingConn(null); reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update connection"));
+    }
   };
 
   return (

@@ -11,6 +11,21 @@ import Alert from "@/components/ui/Alert";
 import { getErrorMessage } from "@/utils/errors";
 import { emptyBillingDetails, type BillingDetails } from "@/types/billing";
 
+type Msg = { text: string; variant: "error" | "success" | "info" } | null;
+
+const languages = [
+  ["en", "English"], ["es", "Spanish"], ["fr", "French"], ["de", "German"], ["pt", "Portuguese"],
+  ["it", "Italian"], ["nl", "Dutch"], ["ru", "Russian"], ["zh", "Chinese"], ["ja", "Japanese"],
+  ["ko", "Korean"], ["ar", "Arabic"], ["hi", "Hindi"], ["tr", "Turkish"], ["pl", "Polish"],
+];
+
+const timezones = [
+  "UTC", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+  "America/Sao_Paulo", "Europe/London", "Europe/Paris", "Europe/Berlin", "Europe/Moscow",
+  "Asia/Dubai", "Asia/Kolkata", "Asia/Shanghai", "Asia/Tokyo", "Asia/Seoul",
+  "Australia/Sydney", "Pacific/Auckland",
+];
+
 export default function ProfileTab() {
   const { userId, email: authEmail, userProfile, setUserProfile } = useAuth();
   const { has } = usePermissions();
@@ -23,22 +38,19 @@ export default function ProfileTab() {
   const [timezone, setTimezone] = useState(userProfile?.timezone || "UTC");
   const [loading, setLoading] = useState(!userProfile);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [messageVariant, setMessageVariant] = useState<"error" | "success">("success");
+  const [message, setMessage] = useState<Msg>(null);
 
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
   const [verifyToken, setVerifyToken] = useState("");
-  const [twoFactorMessage, setTwoFactorMessage] = useState("");
-  const [twoFactorMessageVariant, setTwoFactorMessageVariant] = useState<"error" | "success" | "info">("info");
+  const [twoFactorMessage, setTwoFactorMessage] = useState<Msg>(null);
   const [twoFactorLoading, setTwoFactorLoading] = useState(false);
 
   const [billing, setBilling] = useState<BillingDetails>(emptyBillingDetails());
   const [billingLoading, setBillingLoading] = useState(canViewBilling);
   const [billingSaving, setBillingSaving] = useState(false);
-  const [billingMessage, setBillingMessage] = useState("");
-  const [billingMessageVariant, setBillingMessageVariant] = useState<"error" | "success">("success");
+  const [billingMessage, setBillingMessage] = useState<Msg>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -62,14 +74,12 @@ export default function ProfileTab() {
     Promise.all([
       loadProfile.catch((err) => {
         setEmail(authEmail || "");
-        setMessage(getErrorMessage(err, "Failed to load profile"));
-        setMessageVariant("error");
+        setMessage({ text: getErrorMessage(err, "Failed to load profile"), variant: "error" });
       }),
       authApi.getMe().then((me) => setTwoFactorEnabled(me.twoFactorEnabled)),
       canViewBilling
         ? billingApi.get().then(setBilling).catch((err) => {
-            setBillingMessage(getErrorMessage(err, "Failed to load billing details"));
-            setBillingMessageVariant("error");
+            setBillingMessage({ text: getErrorMessage(err, "Failed to load billing details"), variant: "error" });
           })
         : Promise.resolve(),
     ]).finally(() => {
@@ -82,15 +92,13 @@ export default function ProfileTab() {
     e.preventDefault();
     if (!userId) return;
     setSaving(true);
-    setMessage("");
+    setMessage(null);
     try {
       await usersApi.update(userId, { name, country, language, timezone });
       setUserProfile({ name, country, language, timezone });
-      setMessage("Profile updated successfully");
-      setMessageVariant("success");
-    } catch (err: unknown) {
-      setMessage(getErrorMessage(err, "Failed to update profile"));
-      setMessageVariant("error");
+      setMessage({ text: "Profile updated successfully", variant: "success" });
+    } catch (err) {
+      setMessage({ text: getErrorMessage(err, "Failed to update profile"), variant: "error" });
     } finally {
       setSaving(false);
     }
@@ -98,14 +106,13 @@ export default function ProfileTab() {
 
   const handleSetup2FA = async () => {
     setTwoFactorLoading(true);
-    setTwoFactorMessage("");
+    setTwoFactorMessage(null);
     try {
       const res = await authApi.setup2FA();
       setQrCode(res.qrCodeUrl);
       setSecret(res.secret);
-    } catch (err: unknown) {
-      setTwoFactorMessage(getErrorMessage(err, "Failed to set up 2FA"));
-      setTwoFactorMessageVariant("error");
+    } catch (err) {
+      setTwoFactorMessage({ text: getErrorMessage(err, "Failed to set up 2FA"), variant: "error" });
     } finally {
       setTwoFactorLoading(false);
     }
@@ -115,15 +122,13 @@ export default function ProfileTab() {
     e.preventDefault();
     if (!canManageBilling) return;
     setBillingSaving(true);
-    setBillingMessage("");
+    setBillingMessage(null);
     try {
       const updated = await billingApi.update(billing);
       setBilling(updated);
-      setBillingMessage("Billing details updated successfully");
-      setBillingMessageVariant("success");
-    } catch (err: unknown) {
-      setBillingMessage(getErrorMessage(err, "Failed to update billing details"));
-      setBillingMessageVariant("error");
+      setBillingMessage({ text: "Billing details updated successfully", variant: "success" });
+    } catch (err) {
+      setBillingMessage({ text: getErrorMessage(err, "Failed to update billing details"), variant: "error" });
     } finally {
       setBillingSaving(false);
     }
@@ -132,18 +137,16 @@ export default function ProfileTab() {
   const handleEnable2FA = async (e: React.FormEvent) => {
     e.preventDefault();
     setTwoFactorLoading(true);
-    setTwoFactorMessage("");
+    setTwoFactorMessage(null);
     try {
       await authApi.enable2FA(verifyToken);
       setTwoFactorEnabled(true);
-      setTwoFactorMessage("2FA enabled successfully");
-      setTwoFactorMessageVariant("success");
+      setTwoFactorMessage({ text: "2FA enabled successfully", variant: "success" });
       setQrCode(null);
       setSecret(null);
       setVerifyToken("");
-    } catch (err: unknown) {
-      setTwoFactorMessage(getErrorMessage(err, "Failed to enable 2FA"));
-      setTwoFactorMessageVariant("error");
+    } catch (err) {
+      setTwoFactorMessage({ text: getErrorMessage(err, "Failed to enable 2FA"), variant: "error" });
     } finally {
       setTwoFactorLoading(false);
     }
@@ -151,26 +154,13 @@ export default function ProfileTab() {
 
   if (loading) return <PageLoading />;
 
-  const languages = [
-    ["en", "English"], ["es", "Spanish"], ["fr", "French"], ["de", "German"], ["pt", "Portuguese"],
-    ["it", "Italian"], ["nl", "Dutch"], ["ru", "Russian"], ["zh", "Chinese"], ["ja", "Japanese"],
-    ["ko", "Korean"], ["ar", "Arabic"], ["hi", "Hindi"], ["tr", "Turkish"], ["pl", "Polish"],
-  ];
-
-  const timezones = [
-    "UTC", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
-    "America/Sao_Paulo", "Europe/London", "Europe/Paris", "Europe/Berlin", "Europe/Moscow",
-    "Asia/Dubai", "Asia/Kolkata", "Asia/Shanghai", "Asia/Tokyo", "Asia/Seoul",
-    "Australia/Sydney", "Pacific/Auckland",
-  ];
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
       <div className="space-y-6">
         <div className="bg-card rounded-card shadow-(--shadow-card) p-6">
           <h2 className="text-base font-semibold text-text mb-1">User Data</h2>
           <p className="text-sm text-text-secondary mb-5">Manage your personal information.</p>
-          {message && <Alert variant={messageVariant} className="mb-4">{message}</Alert>}
+          {message && <Alert variant={message.variant} className="mb-4">{message.text}</Alert>}
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <SettingsTextField id="profile-name" label="Name" type="text" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -226,7 +216,7 @@ export default function ProfileTab() {
               <PageLoading />
             ) : (
               <>
-                {billingMessage && <Alert variant={billingMessageVariant} className="mb-4">{billingMessage}</Alert>}
+                {billingMessage && <Alert variant={billingMessage.variant} className="mb-4">{billingMessage.text}</Alert>}
                 <form onSubmit={handleSaveBilling} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <SettingsTextField
@@ -332,7 +322,7 @@ export default function ProfileTab() {
       <div className="bg-card rounded-card shadow-(--shadow-card) p-6">
         <h2 className="text-base font-semibold text-text mb-1">Two-Factor Authentication</h2>
         <p className="text-sm text-text-secondary mb-5">Add an extra layer of security with an authenticator app.</p>
-        {twoFactorMessage && <Alert variant={twoFactorMessageVariant} className="mb-4">{twoFactorMessage}</Alert>}
+        {twoFactorMessage && <Alert variant={twoFactorMessage.variant} className="mb-4">{twoFactorMessage.text}</Alert>}
         {twoFactorEnabled ? (
           <Alert variant="success">Two-factor authentication is enabled on your account.</Alert>
         ) : !qrCode ? (

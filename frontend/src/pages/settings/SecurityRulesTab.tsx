@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { codeAnalysisApi } from "@/services/api";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import TechBadge from "@/components/TechBadge";
@@ -67,8 +68,6 @@ export default function SecurityRulesTab() {
   const markChanged = () => setRulesChanged(true);
 
   // ─── Custom Rules state ───
-  const [rules, setRules] = useState<CRule[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState<CRule | null>(null);
   const [form, setForm] = useState({ ruleId: "", severity: "warning", message: "", pattern: "", extensions: [] as string[] });
@@ -80,15 +79,16 @@ export default function SecurityRulesTab() {
   const [langFilter, setLangFilter] = useState<Set<string>>(new Set());
   const toast = useToast();
 
-  const fetchRules = async () => {
-    setLoading(true);
-    try { const res = await codeAnalysisApi.listCustomRules(); setRules(res.rules); }
-    catch (err) { toast.error(getErrorMessage(err, "Failed to load custom rules")); } finally { setLoading(false); }
-  };
-  // Mount-only: fetchRules is redeclared every render, so listing it would
-  // refetch the rules on each one.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchRules(); }, []);
+  const { data, loading, reload: fetchRules, setData } = useAsyncData(
+    () => codeAnalysisApi.listCustomRules().then((res) => res.rules).catch((err) => {
+      toast.error(getErrorMessage(err, "Failed to load custom rules"));
+      return [];
+    }),
+    [],
+  );
+  const rules: CRule[] = data ?? [];
+  const patchRule = (id: string, enabled: boolean) =>
+    setData((prev) => (prev ?? []).map((x) => (x.id === id ? { ...x, enabled } : x)));
 
   const openAdd = () => {
     setForm({ ruleId: "custom.", severity: "warning", message: "", pattern: "", extensions: [".php", ".js", ".ts"] });
@@ -110,17 +110,17 @@ export default function SecurityRulesTab() {
         await codeAnalysisApi.createCustomRule({ ruleId: form.ruleId, severity: form.severity, message: form.message, pattern: form.pattern, extensions: form.extensions });
       }
       setShowForm(false); markChanged(); fetchRules();
-    } catch (err: unknown) { setError((err as Error).message || "Failed to save rule"); }
+    } catch (err) { setError(getErrorMessage(err, "Failed to save rule")); }
     finally { setSaving(false); }
   };
 
   const handleToggle = async (r: CRule) => {
-    setRules(prev => prev.map(x => x.id === r.id ? { ...x, enabled: !x.enabled } : x));
+    patchRule(r.id, !r.enabled);
     try {
       await codeAnalysisApi.updateCustomRule(r.id, { enabled: !r.enabled });
       markChanged();
     } catch (err) {
-      setRules(prev => prev.map(x => x.id === r.id ? { ...x, enabled: r.enabled } : x));
+      patchRule(r.id, r.enabled);
       toast.error(getErrorMessage(err, "Failed to toggle rule"));
     }
   };

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { notificationsApi } from "@/services/api";
+import { getErrorMessage } from "@/utils/errors";
+import { useToast } from "@/context/useToast";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
 import SettingsModalFooter from "@/components/SettingsModalFooter";
@@ -24,14 +26,13 @@ export default function NotificationChannelsTab() {
     () => notificationsApi.listChannels().then((res) => res.channels),
     [],
   );
+  const toast = useToast();
   const channelList = channels ?? [];
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ type: "email", configValue: "" });
   const [editingChannel, setEditingChannel] = useState<{ id: string; type: string; config: Record<string, string>; enabled: boolean } | null>(null);
   const [editEnabled, setEditEnabled] = useState(true);
   const [editConfigValue, setEditConfigValue] = useState("");
-
-  const fetch_ = reload;
 
   const {
     showModal: confirmRemove,
@@ -46,7 +47,7 @@ export default function NotificationChannelsTab() {
     {
       onSuccess: () => {
         setEditingChannel(null);
-        fetch_();
+        reload();
       },
       errorFallback: "Failed to remove channel",
     },
@@ -58,8 +59,12 @@ export default function NotificationChannelsTab() {
     if (formData.type === "email") config.email = formData.configValue;
     else if (formData.type === "slack") config.webhookUrl = formData.configValue;
     else if (formData.type === "webhook") config.url = formData.configValue;
-    await notificationsApi.addChannel({ type: formData.type, config });
-    setShowForm(false); setFormData({ type: "email", configValue: "" }); fetch_();
+    try {
+      await notificationsApi.addChannel({ type: formData.type, config });
+      setShowForm(false); setFormData({ type: "email", configValue: "" }); reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to add channel"));
+    }
   };
 
   const openEditChannel = (ch: (typeof channelList)[number]) => {
@@ -71,13 +76,17 @@ export default function NotificationChannelsTab() {
   const handleEditChannelSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingChannel) return;
-    if (editingChannel.enabled !== editEnabled) {
-      await notificationsApi.toggleChannel(editingChannel.id, editEnabled);
-      if (editingChannel.type === "in_app") {
-        notifyInAppNotificationsChanged();
+    try {
+      if (editingChannel.enabled !== editEnabled) {
+        await notificationsApi.toggleChannel(editingChannel.id, editEnabled);
+        if (editingChannel.type === "in_app") {
+          notifyInAppNotificationsChanged();
+        }
       }
+      setEditingChannel(null); reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update channel"));
     }
-    setEditingChannel(null); fetch_();
   };
 
   const channelDescriptions: Record<string, string> = {

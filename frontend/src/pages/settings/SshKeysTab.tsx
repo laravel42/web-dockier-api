@@ -75,7 +75,7 @@ export default function SshKeysTab() {
       setShowForm(false);
       setForm({ label: "", publicKey: "" });
       reload();
-    } catch (err: unknown) {
+    } catch (err) {
       setFormError(getErrorMessage(err, "Failed to add SSH key"));
     } finally {
       setSubmitting(false);
