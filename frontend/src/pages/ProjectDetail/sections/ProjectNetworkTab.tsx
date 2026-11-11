@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useId } from "react";
+import { useState, useId } from "react";
 import { networkApi } from "@/services/network";
 import type { SecurityRule, RedirectRule } from "@/types";
 import type { Project } from "@/types";
@@ -13,6 +13,8 @@ import { EyeIcon, EyeOffIcon, PlusIcon, XIcon } from "lucide-react";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import TabSpinner from "@/components/ui/TabSpinner";
 import { cn } from "@/utils/cn";
+import { getErrorMessage } from "@/utils/errors";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { labelCls } from "@/utils/styles";
 
 interface Props {
@@ -274,8 +276,8 @@ function CreateSecurityRuleModal({
         credentials: credentials.length > 0 ? credentials : undefined,
       });
       onCreated();
-    } catch (err: unknown) {
-      setError((err as Error).message || "Failed to create rule");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to create rule"));
     } finally {
       setSaving(false);
     }
@@ -490,8 +492,8 @@ function AddCredentialModal({
         password: password.trim(),
       });
       onAdded();
-    } catch (err: unknown) {
-      setError((err as Error).message || "Failed to add credential");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to add credential"));
     } finally {
       setSaving(false);
     }
@@ -688,8 +690,8 @@ function CreateRedirectRuleModal({
         type,
       });
       onCreated();
-    } catch (err: unknown) {
-      setError((err as Error).message || "Failed to create redirect rule");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to create redirect rule"));
     } finally {
       setSaving(false);
     }
@@ -774,32 +776,23 @@ export default function ProjectNetworkTab({ project }: Props) {
   const canManage = has("project:manage");
   const canView = has("project:view");
 
-  const [securityRules, setSecurityRules] = useState<SecurityRule[]>([]);
-  const [redirectRules, setRedirectRules] = useState<RedirectRule[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  // Sync status
-  const [syncing, setSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<{ success: boolean; message: string } | null>(null);
-
-  const fetchData = useCallback(async () => {
-    if (!project.id || !canView) return;
-    setLoading(true);
-    setError("");
-    try {
+  const { data, error, reload: fetchData } = useAsyncData(
+    async () => {
       const [secRes, redRes] = await Promise.all([
         networkApi.listSecurityRules(project.id),
         networkApi.listRedirectRules(project.id),
       ]);
-      setSecurityRules(secRes.rules);
-      setRedirectRules(redRes.rules);
-    } catch {
-      setError("Failed to load network rules");
-    } finally {
-      setLoading(false);
-    }
-  }, [project.id, canView]);
+      return { security: secRes.rules, redirects: redRes.rules };
+    },
+    [project.id],
+    { enabled: !permissionsLoading && canView && !!project.id },
+  );
+  const securityRules: SecurityRule[] = data?.security ?? [];
+  const redirectRules: RedirectRule[] = data?.redirects ?? [];
+
+  // Sync status
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ success: boolean; message: string } | null>(null);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -807,20 +800,16 @@ export default function ProjectNetworkTab({ project }: Props) {
     try {
       const res = await networkApi.apply(project.id);
       setSyncStatus({ success: res.success, message: res.message });
-    } catch (err: unknown) {
-      setSyncStatus({ success: false, message: (err as Error).message || "Sync failed" });
+    } catch (err) {
+      setSyncStatus({ success: false, message: getErrorMessage(err, "Sync failed") });
     } finally {
       setSyncing(false);
     }
   };
 
-  useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canView) { setLoading(false); return; }
-    void fetchData();
-  }, [permissionsLoading, canView, fetchData]);
-
-  if (permissionsLoading || loading) {
+  // Spinner only before the first response: a refresh after add/delete keeps the tab
+  // (and any open modal) mounted instead of replacing it.
+  if (permissionsLoading || (canView && data === null && !error)) {
     return <TabSpinner label="Loading network rules…" />;
   }
 

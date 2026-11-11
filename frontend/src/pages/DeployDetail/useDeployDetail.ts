@@ -33,10 +33,13 @@ export function useDeployDetail() {
   const refreshAllDeploys = useCallback((current: Deployment) => {
     setAllDeploysLoading(true);
     setAllDeploysError("");
-    deployApi.listDeployments()
+    // Scoped server-side: unfiltered returns only the tenant's newest 20, which dropped
+    // older projects' history. shortcut: no-projectId deploys still filter the newest
+    // 100 by repo, upgrade when the API gains a repo filter.
+    deployApi.listDeployments({ projectId: current.projectId ?? undefined, limit: 100 })
       .then((res) => {
         const repoDeploys = current.projectId
-          ? (res.deployments as Deployment[]).filter((dep) => dep.projectId === current.projectId)
+          ? (res.deployments as Deployment[])
           : (res.deployments as Deployment[]).filter((dep) => dep.repo === current.repo);
         setAllDeploys(repoDeploys.sort((a, b) => compareByTime(a, b, "updated")));
       })
