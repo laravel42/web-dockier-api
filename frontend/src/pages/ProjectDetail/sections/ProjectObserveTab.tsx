@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useId } from "react";
 import { observeApi } from "@/services/observe";
+import { commandsApi } from "@/services/commands";
 import type {
   Heartbeat,
   HeartbeatFrequency,
@@ -440,8 +441,9 @@ function ActivitySection({ project }: { project: Project }) {
     }
   }, [project.id, debouncedSearch]);
 
+  // `loading` starts true and only gates the first load. Re-arming it per search term
+  // swapped the whole section for a spinner, unmounting the search input mid-typing.
   useEffect(() => {
-    setLoading(true);
     fetchActivity();
   }, [fetchActivity]);
 
@@ -453,7 +455,6 @@ function ActivitySection({ project }: { project: Project }) {
     if (entry.eventType === "command_run" && entry.metadata?.commandId) {
       setDetailLoading(true);
       try {
-        const { commandsApi } = await import("../../../services/commands");
         const cmd = await commandsApi.get(
           project.id,
           entry.metadata.commandId as string,
