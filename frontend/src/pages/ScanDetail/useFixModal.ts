@@ -2,6 +2,7 @@ import { useState } from "react";
 import { gitApi } from "@/services/api";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import type { Finding, Project, RepoMember, FixResult } from "@/types";
+import { getErrorMessage } from "@/utils/errors";
 
 export function useFixModal(project: Project | null) {
   const [fixModal, setFixModal] = useState<{ open: boolean; finding: Finding | null }>({ open: false, finding: null });
@@ -66,8 +67,8 @@ export function useFixModal(project: Project | null) {
         assignee: mrAssignee || undefined, reviewer: mrReviewer || undefined,
       });
       setFixResult(result);
-    } catch (err: unknown) {
-      setFixError((err as Error).message || "Failed to create MR");
+    } catch (err) {
+      setFixError(getErrorMessage(err, "Failed to create MR"));
     } finally {
       setFixLoading(false);
       setMrCreating(null);

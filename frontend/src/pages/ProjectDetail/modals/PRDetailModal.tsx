@@ -7,6 +7,7 @@ import { timeAgo } from "@/utils/timeAgo";
 import type { RepoPullRequest } from "@/types";
 import GitBranchIcon from "@/components/icons/outlined/GitBranchIcon";
 import Spinner from "@/components/Spinner";
+import { getErrorMessage } from "@/utils/errors";
 
 interface GeneratedReview {
   summary: string;
@@ -40,8 +41,8 @@ export default function PRDetailModal({ pr, onClose, onReviewWithAI }: Props) {
     try {
       const result = await onReviewWithAI(pr);
       setReviewResult(result);
-    } catch (err: unknown) {
-      setError((err as Error).message || "Failed to review PR");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to review PR"));
     } finally {
       setReviewing(false);
     }

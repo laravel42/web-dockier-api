@@ -4,6 +4,7 @@ import Button from "@/components/ui/Button";
 import { timeAgo } from "@/utils/timeAgo";
 import type { RepoIssue } from "@/types";
 import { CircleAlertIcon, MessageSquareTextIcon } from "lucide-react";
+import { getErrorMessage } from "@/utils/errors";
 
 interface Props {
   issue: RepoIssue | null;
@@ -45,8 +46,8 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
     try {
       await onCloseIssue(issue.number);
       onClose();
-    } catch (err: unknown) {
-      setError((err as Error).message || "Failed to close issue");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to close issue"));
     } finally {
       setClosing(false);
     }
@@ -58,8 +59,8 @@ export default function IssueDetailModal({ issue, onClose, onCloseIssue, onFixWi
     setError("");
     try {
       await onFixWithAI(issue);
-    } catch (err: unknown) {
-      setError((err as Error).message || "Failed to create fix branch");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to create fix branch"));
     } finally {
       setFixing(false);
     }

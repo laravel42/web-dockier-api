@@ -3,6 +3,7 @@ import { integrationsApi, gitApi } from "@/services/api";
 import { ApiError } from "@/services/api-error";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
 import type { Finding, Project, PMIntegration, PMTeam, PMMember } from "@/types";
+import { getErrorMessage } from "@/utils/errors";
 
 export function useIssueModal(project: Project | null) {
   const [pmIntegrations, setPmIntegrations] = useState<PMIntegration[]>([]);
@@ -172,7 +173,7 @@ export function useIssueModal(project: Project | null) {
         else if (err.isRateLimit) friendly = "Rate limited — too many requests. Wait a moment and try again.";
         else friendly = err.message || "Failed to create issue";
       } else {
-        friendly = (err as Error).message || "Failed to create issue";
+        friendly = getErrorMessage(err, "Failed to create issue");
       }
       setIssueError(friendly);
     } finally { setIssueCreating(false); }

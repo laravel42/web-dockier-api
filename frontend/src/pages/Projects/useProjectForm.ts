@@ -137,8 +137,8 @@ export function useProjectForm({ onSuccess }: UseProjectFormOptions) {
             setSelectedBranch(repo.defaultBranch);
           }
         }
-      } catch (err: unknown) {
-        if (!cancelled) setError((err as Error).message || "Failed to load branches");
+      } catch (err) {
+        if (!cancelled) setError(getErrorMessage(err, "Failed to load branches"));
       } finally {
         if (!cancelled) setLoadingBranches(false);
       }
