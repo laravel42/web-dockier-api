@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useId, useRef } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import { domainsApi, type DnsInstructions } from "@/services/domains";
 import type { Domain, SslCertificate } from "@/types";
 import type { Project } from "@/types";
 import { usePermissions } from "@/context/PermissionsContext";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { ApiError } from "@/services/api-error";
 import DomainAttachment from "./DomainAttachment";
 import Modal from "@/components/Modal";
@@ -805,33 +806,24 @@ export default function ProjectDomainsTab({ project, domainRefreshKey }: Props) 
   const canManage = has("project:manage");
   const canView = has("project:view");
 
-  const [domains, setDomains] = useState<Domain[]>([]);
-  const [certificates, setCertificates] = useState<SslCertificate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { data, error, reload: fetchData } = useAsyncData(
+    async () => {
+      const [domRes, certRes] = await Promise.all([
+        domainsApi.listDomains(project.id),
+        domainsApi.listCertificates(project.id),
+      ]);
+      return { domains: domRes.domains, certificates: certRes.certificates };
+    },
+    [project.id],
+    { enabled: !permissionsLoading && canView && !!project.id },
+  );
+  const domains: Domain[] = data?.domains ?? [];
+  const certificates: SslCertificate[] = data?.certificates ?? [];
   const [showNginxModal, setShowNginxModal] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ success: boolean; message: string } | null>(null);
   /** True once the staged attachment card is showing, so the old bar stands down. */
   const [stagedViewActive, setStagedViewActive] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    if (!project.id || !canView) return;
-    setLoading(true);
-    setError("");
-    try {
-      const [domRes, certRes] = await Promise.all([
-        domainsApi.listDomains(project.id),
-        domainsApi.listCertificates(project.id),
-      ]);
-      setDomains(domRes.domains);
-      setCertificates(certRes.certificates);
-    } catch {
-      setError("Failed to load domains and certificates");
-    } finally {
-      setLoading(false);
-    }
-  }, [project.id, canView]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -846,17 +838,13 @@ export default function ProjectDomainsTab({ project, domainRefreshKey }: Props) 
     }
   };
 
-  useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canView) { setLoading(false); return; }
-    void fetchData();
-  }, [permissionsLoading, canView, fetchData]);
-
   // Reload resets domainRefreshKey to 0 → deployedThisSession is false (banner hidden);
   // an in-session deploy bumps it above the captured initial → banner shows.
   const initialKey = useRef(domainRefreshKey ?? 0);
 
-  if (permissionsLoading || loading) {
+  // Spinner only before the first response: a refresh after add/delete keeps the tab
+  // (and the staged attachment card) mounted instead of replacing it.
+  if (permissionsLoading || (canView && data === null && !error)) {
     return <TabSpinner label="Loading domains…" />;
   }
 

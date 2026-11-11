@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useId, type ReactNode } from "react";
 import { processesApi } from "@/services/processes";
 import { deployApi } from "@/services/api";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import type {
   BackgroundProcess,
   ScheduledJob,
@@ -766,10 +767,19 @@ export default function ProjectProcessesTab({ project }: Props) {
   const [subTab, setSubTab] = useUrlSection(SUB_TAB_KEYS);
   const subTabKeys = SUB_TAB_KEYS;
   const handleSubTabKeyDown = useTabListKeyboard(subTabKeys, setSubTab);
-  const [processes, setProcesses] = useState<BackgroundProcess[]>([]);
-  const [jobs, setJobs] = useState<ScheduledJob[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { data, error, reload: fetchData } = useAsyncData(
+    async () => {
+      const [procRes, jobRes] = await Promise.all([
+        processesApi.listProcesses(project.id),
+        processesApi.listJobs(project.id),
+      ]);
+      return { processes: procRes.processes, jobs: jobRes.jobs };
+    },
+    [project.id],
+    { enabled: !permissionsLoading && canView && !!project.id },
+  );
+  const processes: BackgroundProcess[] = data?.processes ?? [];
+  const jobs: ScheduledJob[] = data?.jobs ?? [];
   const [showCreateProcess, setShowCreateProcess] = useState(false);
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [hasDeployment, setHasDeployment] = useState(false);
@@ -786,31 +796,8 @@ export default function ProjectProcessesTab({ project }: Props) {
       .catch(() => setHasDeployment(false));
   }, [project.id, canView]);
 
-  const fetchData = useCallback(async () => {
-    if (!project.id || !canView) return;
-    setLoading(true);
-    setError("");
-    try {
-      const [procRes, jobRes] = await Promise.all([
-        processesApi.listProcesses(project.id),
-        processesApi.listJobs(project.id),
-      ]);
-      setProcesses(procRes.processes);
-      setJobs(jobRes.jobs);
-    } catch {
-      setError("Failed to load processes");
-    } finally {
-      setLoading(false);
-    }
-  }, [project.id, canView]);
-
-  useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canView) { setLoading(false); return; }
-    void fetchData();
-  }, [permissionsLoading, canView, fetchData]);
-
-  if (permissionsLoading || loading) {
+  // Spinner only before the first response: a refresh after an action keeps the lists mounted.
+  if (permissionsLoading || (canView && data === null && !error)) {
     return <TabSpinner label="Loading processes…" />;
   }
 
