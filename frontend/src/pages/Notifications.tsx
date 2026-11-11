@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { notificationsApi } from "../services/api";
 import { useInAppNotificationsEnabled } from "../hooks/useInAppNotificationsEnabled";
@@ -13,6 +13,7 @@ import NotificationContent from "../components/NotificationContent";
 import NotificationTitleLink from "../components/NotificationTitleLink";
 import type { Notification } from "../types";
 import { getErrorMessage } from "../utils/errors";
+import { useAsyncData } from "../hooks/useAsyncData";
 
 const PAGE_SIZE = 30;
 
@@ -20,28 +21,14 @@ export default function Notifications() {
   const navigate = useNavigate();
   const toast = useToast();
   const { enabled: inAppEnabled, loading: inAppLoading } = useInAppNotificationsEnabled();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [pagination, setPagination] = useState({ total: 0, limit: PAGE_SIZE, offset: 0 });
-
-  const fetchNotifications = useCallback(async (offset = 0) => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await notificationsApi.list({ limit: PAGE_SIZE, offset });
-      setNotifications(res.notifications);
-      setPagination(res.pagination);
-    } catch {
-      setError("Failed to load notifications");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (inAppEnabled) fetchNotifications();
-  }, [inAppEnabled, fetchNotifications]);
+  const [offset, setOffset] = useState(0);
+  const { data, error, reload } = useAsyncData(
+    () => notificationsApi.list({ limit: PAGE_SIZE, offset }),
+    [offset],
+    { enabled: inAppEnabled },
+  );
+  const notifications: Notification[] = data?.notifications ?? [];
+  const pagination = data?.pagination ?? { total: 0, limit: PAGE_SIZE, offset };
 
   useEffect(() => {
     if (!inAppLoading && !inAppEnabled) {
@@ -56,7 +43,7 @@ export default function Notifications() {
   const markRead = async (id: string) => {
     try {
       await notificationsApi.markRead(id);
-      await fetchNotifications(pagination.offset);
+      await reload();
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to mark notification as read"));
     }
@@ -65,7 +52,7 @@ export default function Notifications() {
   const markAllRead = async () => {
     try {
       await notificationsApi.markAllRead();
-      await fetchNotifications(pagination.offset);
+      await reload();
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to mark all notifications as read"));
     }
@@ -74,7 +61,7 @@ export default function Notifications() {
   const hasUnread = notifications.some((n) => !n.read);
 
   const goToPage = (page: number) => {
-    fetchNotifications((page - 1) * PAGE_SIZE);
+    setOffset((page - 1) * PAGE_SIZE);
   };
 
   return (
@@ -91,10 +78,11 @@ export default function Notifications() {
         }
       />
 
-      {loading ? (
+      {/* Spinner only before the first response, so marking read or paging keeps the list. */}
+      {error ? (
+        <PageError message={error} onRetry={reload} />
+      ) : !data ? (
         <PageLoading />
-      ) : error ? (
-        <PageError message={error} onRetry={() => fetchNotifications(pagination.offset)} />
       ) : !notifications.length ? (
         <EmptyMessage>No notifications</EmptyMessage>
       ) : (

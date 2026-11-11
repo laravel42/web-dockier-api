@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { notificationsApi } from "../services/api";
 import type { Notification } from "../types";
@@ -15,6 +15,10 @@ import {
 import Button from "./ui/Button";
 import Pagination from "./ui/Pagination";
 import PageLoading from "./ui/PageLoading";
+import PageError from "./ui/PageError";
+import { useAsyncData } from "../hooks/useAsyncData";
+import { useToast } from "../context/useToast";
+import { getErrorMessage } from "../utils/errors";
 
 const PAGE_SIZE = 20;
 
@@ -95,34 +99,28 @@ function NotificationDrawerItem({
 }
 
 export default function NotificationDrawer({ open, onOpenChange }: NotificationDrawerProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({ total: 0, limit: PAGE_SIZE, offset: 0 });
+  const toast = useToast();
+  const [offset, setOffset] = useState(0);
+  const { data, error, reload } = useAsyncData(
+    () => notificationsApi.list({ limit: PAGE_SIZE, offset }),
+    [offset],
+    { enabled: open },
+  );
+  const notifications: Notification[] = data?.notifications ?? [];
+  const pagination = data?.pagination ?? { total: 0, limit: PAGE_SIZE, offset };
 
-  const fetchNotifications = useCallback(async (offset = 0) => {
-    setLoading(true);
-    try {
-      const res = await notificationsApi.list({ limit: PAGE_SIZE, offset });
-      setNotifications(res.notifications);
-      setPagination(res.pagination);
-    } catch {
-      // Silently degrade
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Reopen on the first page, as the drawer always did.
   useEffect(() => {
-    if (open) fetchNotifications(0);
-  }, [open, fetchNotifications]);
+    if (!open) setOffset(0);
+  }, [open]);
 
   const markRead = async (id: string) => {
     try {
       await notificationsApi.markRead(id);
       notifyNotificationsRead();
-      await fetchNotifications(pagination.offset);
-    } catch {
-      // Silently degrade
+      await reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to mark notification as read"));
     }
   };
 
@@ -130,14 +128,14 @@ export default function NotificationDrawer({ open, onOpenChange }: NotificationD
     try {
       await notificationsApi.markAllRead();
       notifyNotificationsRead();
-      await fetchNotifications(pagination.offset);
-    } catch {
-      // Silently degrade
+      await reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to mark all notifications as read"));
     }
   };
 
   const goToPage = (page: number) => {
-    fetchNotifications((page - 1) * PAGE_SIZE);
+    setOffset((page - 1) * PAGE_SIZE);
   };
 
   const hasUnread = notifications.some((n) => !n.read);
@@ -164,7 +162,9 @@ export default function NotificationDrawer({ open, onOpenChange }: NotificationD
         )}
 
         <DrawerBody>
-          {loading ? (
+          {error ? (
+            <PageError message={error} onRetry={reload} />
+          ) : !data ? (
             <PageLoading />
           ) : notifications.length === 0 ? (
             <div className="flex items-center justify-center py-12 text-sm text-text-muted">

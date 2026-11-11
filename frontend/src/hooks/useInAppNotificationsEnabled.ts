@@ -31,13 +31,15 @@ export function useInAppNotificationsEnabled(): { enabled: boolean; loading: boo
       return;
     }
 
-    setLoading(true);
+    // `loading` starts true and only covers the first load: re-arming it on each poll
+    // made consumers (the Notifications page) flash a spinner every minute.
     try {
       const res = await notificationsApi.listChannels();
       const inApp = res.channels.find((ch) => ch.type === "in_app");
       setEnabled(inApp?.enabled ?? false);
     } catch {
-      setEnabled(false);
+      // Keep the last known value: a failed poll must not read as "disabled", which
+      // sends the user off the Notifications page.
     } finally {
       setLoading(false);
     }
