@@ -75,8 +75,8 @@ export function useProjectForm({ onSuccess }: UseProjectFormOptions) {
         // Use the cache when it's warm — only the first page is fetched.
         const res = await gitApi.listRepos(selectedConnectionId);
         if (!cancelled) { setRepos(res.repos); setHasMoreRepos(res.hasMore); }
-      } catch (err: unknown) {
-        if (!cancelled) setError((err as Error).message || "Failed to load repositories");
+      } catch (err) {
+        if (!cancelled) setError(getErrorMessage(err, "Failed to load repositories"));
       } finally {
         if (!cancelled) setLoadingRepos(false);
       }
@@ -92,7 +92,9 @@ export function useProjectForm({ onSuccess }: UseProjectFormOptions) {
       const res = await gitApi.listRepos(selectedConnectionId, { refresh: true });
       setRepos(res.repos);
       setHasMoreRepos(res.hasMore);
-    } catch { /* ignore */ } finally {
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to refresh repositories"));
+    } finally {
       setRefreshingRepos(false);
     }
   };
@@ -105,7 +107,10 @@ export function useProjectForm({ onSuccess }: UseProjectFormOptions) {
       const res = await gitApi.listRepos(selectedConnectionId, { search: term || undefined });
       setRepos(res.repos);
       setHasMoreRepos(res.hasMore);
-    } catch { /* non-fatal: keep the current list */ } finally {
+    } catch (err) {
+      // Keeps the current list; without the toast an unfiltered list reads as "no match".
+      toast.error(getErrorMessage(err, "Failed to search repositories"));
+    } finally {
       setSearchingRepos(false);
     }
   };

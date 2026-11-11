@@ -168,10 +168,13 @@ export function GitRepositoryModal({
       const res = await gitApi.listRepos(selectedConnectionId, { search: term || undefined });
       setRepos(res.repos);
       setHasMoreRepos(res.hasMore);
-    } catch { /* non-fatal: keep the current list */ } finally {
+    } catch (err) {
+      // Keeps the current list; without the toast an unfiltered list reads as "no match".
+      toast.error(getErrorMessage(err, "Failed to search repositories"));
+    } finally {
       setSearchingRepos(false);
     }
-  }, [selectedConnectionId]);
+  }, [selectedConnectionId, toast]);
 
   /** Bypass the repo cache — picks up renames, deletions, and brand-new repos. */
   const refreshRepos = useCallback(async () => {
