@@ -71,8 +71,8 @@ function DomainRow({
     setInstructionsError("");
     try {
       setInstructions(await domainsApi.dnsInstructions(projectId, domain.id));
-    } catch (err: unknown) {
-      setInstructionsError((err as Error).message || "Could not load DNS records");
+    } catch (err) {
+      setInstructionsError(getErrorMessage(err, "Could not load DNS records"));
     }
   };
 
@@ -89,8 +89,8 @@ function DomainRow({
     try {
       const result = await domainsApi.verifyDns(projectId, domain.id);
       setDnsStatus(result);
-    } catch (err: unknown) {
-      setDnsStatus({ verified: false, message: (err as Error).message || "Verification failed" });
+    } catch (err) {
+      setDnsStatus({ verified: false, message: getErrorMessage(err, "Verification failed") });
     } finally {
       setVerifying(false);
     }
@@ -287,8 +287,8 @@ function DomainsSection({
       setApexAck(false);
       setAdvisory(created.warning ?? "");
       onRefresh();
-    } catch (err: unknown) {
-      setError((err as Error).message || "Failed to add domain");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to add domain"));
       // Keep the typed name in the field so the user only has to tick the box
       // and resubmit, rather than retyping the domain.
       if (err instanceof ApiError && err.code === "apex_requires_ack") {
@@ -665,8 +665,8 @@ function CreateCertificateModal({
         domainName: domainName.trim(),
       });
       onCreated();
-    } catch (err: unknown) {
-      setError((err as Error).message || "Failed to create certificate");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to create certificate"));
     } finally {
       setSaving(false);
     }
@@ -747,7 +747,7 @@ function NginxConfigModal({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setError((err as Error).message || "Failed to load configuration");
+        setError(getErrorMessage(err, "Failed to load configuration"));
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -839,8 +839,8 @@ export default function ProjectDomainsTab({ project, domainRefreshKey }: Props) 
     try {
       const res = await domainsApi.apply(project.id);
       setSyncStatus({ success: res.success, message: res.message });
-    } catch (err: unknown) {
-      setSyncStatus({ success: false, message: (err as Error).message || "Sync failed" });
+    } catch (err) {
+      setSyncStatus({ success: false, message: getErrorMessage(err, "Sync failed") });
     } finally {
       setSyncing(false);
     }

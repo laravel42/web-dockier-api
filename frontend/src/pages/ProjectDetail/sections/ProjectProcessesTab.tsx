@@ -9,6 +9,7 @@ import type {
   Project,
 } from "@/types";
 import type { CreateProcessBody, CreateJobBody } from "@/services/processes";
+import { getErrorMessage } from "@/utils/errors";
 import { usePermissions } from "@/context/PermissionsContext";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { getFrameworkById } from "@/config/frameworks";
@@ -505,8 +506,8 @@ function CreateProcessModal({
         await processesApi.createProcess(projectId, body);
       }
       onCreated();
-    } catch (err: unknown) {
-      setError((err as Error).message || "Failed to save process");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to save process"));
     } finally {
       setSaving(false);
     }
@@ -685,8 +686,8 @@ function CreateJobModal({
         await processesApi.createJob(projectId, body);
       }
       onCreated();
-    } catch (err: unknown) {
-      setError((err as Error).message || "Failed to save job");
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to save job"));
     } finally {
       setSaving(false);
     }
@@ -776,7 +777,9 @@ export default function ProjectProcessesTab({ project }: Props) {
   // Check if the project has an active deployment
   useEffect(() => {
     if (!project.id || !canView) return;
-    deployApi.listDeployments({ projectId: project.id, limit: 5 })
+    // Newest first with no status filter: a small page of recent failures hid an older live deploy.
+    // shortcut: 100 is the API max, upgrade when the API gains a status filter.
+    deployApi.listDeployments({ projectId: project.id, limit: 100 })
       .then((res) => {
         setHasDeployment(res.deployments.some((d) => d.status === "success"));
       })

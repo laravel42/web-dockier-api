@@ -94,7 +94,7 @@ function CommandsPanel({ project, canManage }: { project: Project; canManage: bo
 
   // Check if the project has an active (successful) deployment
   useEffect(() => {
-    deployApi.listDeployments({ projectId: project.id, limit: 5 })
+    deployApi.listDeployments({ projectId: project.id, limit: 100 })
       .then((res) => {
         const hasActive = res.deployments.some((d) => d.status === "success");
         setHasDeployment(hasActive);
