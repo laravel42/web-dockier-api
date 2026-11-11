@@ -56,8 +56,9 @@ infra/                      DB setup scripts, Pulumi/AWS helpers
 
 ## Prerequisites
 
-- Node.js 18+
-- pnpm 10+ (repo pins pnpm 11 via `packageManager`)
+- Node.js 22 (what CI and the backend image use; newer versions also work)
+- pnpm 11 (pinned via `packageManager`; `corepack enable` picks it up)
+- Docker, only for SonarQube or for running the backend in a container (see [Running with Docker](#running-with-docker))
 
 ---
 
@@ -90,6 +91,36 @@ Seed an admin user (optional):
 ```bash
 pnpm backend:seed:admin
 ```
+
+---
+
+## Running with Docker
+
+Security scans use SonarQube, which runs as a container. Without it, scans
+still complete but report SonarQube as not run. From the repo root:
+
+```bash
+# SonarQube + its Postgres only (UI on http://localhost:9100), backend stays on pnpm backend:dev
+docker compose up -d --wait
+
+# ...or SonarQube + the backend, built from backend/Dockerfile like production
+docker compose --profile backend up -d --build --wait
+
+docker compose --profile backend logs -f backend   # backend logs
+docker compose --profile backend stop backend      # stop it before going back to pnpm backend:dev
+docker compose --profile backend down              # stop everything, keeping data
+```
+
+- The first SonarQube start takes a few minutes. Log in once as `admin` /
+  `admin`, change the password, and generate a token (My Account → Security).
+  Put it in `.env` as `SONARQUBE_TOKEN`, with `SONARQUBE_URL=http://localhost:9100`.
+  Use a token of this local server only — never production's.
+- **Never run the Docker backend and `pnpm backend:dev` at the same time.** Both
+  use port 4000 and the same job queue, so they would take each other's scans.
+- The frontend always runs with `pnpm frontend:dev`.
+
+Production SonarQube runs on its own host: see
+[`docs/operations/sonarqube.mdx`](docs/operations/sonarqube.mdx).
 
 ---
 
