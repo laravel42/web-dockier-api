@@ -232,6 +232,9 @@ export function useScanDetail() {
   // An engine with no findings keeps its tab; FindingsList's empty state answers it.
 
   useEffect(() => {
+    // Leaving a scan mid-load must not let its late response overwrite the next one:
+    // the scan stays unrelated to the URL and nothing refetches it.
+    let cancelled = false;
     if (scanId) {
       if (scanRef.current?.id === scanId) {
         setLoading(false);
@@ -240,10 +243,12 @@ export function useScanDetail() {
       setLoading(true);
       codeAnalysisApi.getScan(scanId)
         .then(async (s) => {
+          if (cancelled) return s;
           setScan(s);
           seedFromScan(s);
           try {
             const p = await projectsApi.get(s.projectId);
+            if (cancelled) return s;
             setProject(p);
             await refreshAllScans(s.projectId);
           } catch {
@@ -251,16 +256,18 @@ export function useScanDetail() {
           }
           return s;
         })
-        .catch((err: unknown) => setPageError(getErrorMessage(err, "Failed to load scan")))
-        .finally(() => setLoading(false));
+        .catch((err: unknown) => { if (!cancelled) setPageError(getErrorMessage(err, "Failed to load scan")); })
+        .finally(() => { if (!cancelled) setLoading(false); });
     } else if (routeProjectId) {
       setLoading(true);
       projectsApi.get(routeProjectId)
         .then(async (p) => {
+          if (cancelled) return;
           setProject(p);
           setAllScansLoading(true);
           try {
             const res = await codeAnalysisApi.listScans(routeProjectId);
+            if (cancelled) return;
             setAllScans(res.scans);
             if (res.scans.length > 0) {
               const latest = [...res.scans].sort(
@@ -274,9 +281,10 @@ export function useScanDetail() {
             setAllScansLoading(false);
           }
         })
-        .catch((err: unknown) => setPageError(getErrorMessage(err, "Failed to load project")))
-        .finally(() => setLoading(false));
+        .catch((err: unknown) => { if (!cancelled) setPageError(getErrorMessage(err, "Failed to load project")); })
+        .finally(() => { if (!cancelled) setLoading(false); });
     }
+    return () => { cancelled = true; };
   }, [scanId, routeProjectId, seedFromScan, fetchFindings, refreshAllScans, navigate]);
 
   useEffect(() => {

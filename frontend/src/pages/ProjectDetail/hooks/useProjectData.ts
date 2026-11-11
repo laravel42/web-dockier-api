@@ -19,6 +19,10 @@ export function useProjectData() {
   const [error, setError] = useState("");
   const projectRef = useRef(project);
   projectRef.current = project;
+  // The project the URL points at now. A response for any other one arrived after a
+  // project switch and must not overwrite the page.
+  const currentIdRef = useRef(projectId);
+  currentIdRef.current = projectId;
 
   // Inline name edit
   const [nameSaving, setNameSaving] = useState(false);
@@ -34,11 +38,13 @@ export function useProjectData() {
     if (opts?.showLoading) setLoading(true);
     return projectsApi.get(projectId)
       .then((p) => {
+        if (currentIdRef.current !== projectId) return null;
         setProject(p);
         setError("");
         return p;
       })
       .catch((err: unknown) => {
+        if (currentIdRef.current !== projectId) return null;
         // Only a load the page is waiting on may raise the page-level error:
         // ProjectDetail renders PageError whenever `error` is set, so letting a
         // background refresh (the post-deploy poll runs five of them) set it
@@ -48,7 +54,7 @@ export function useProjectData() {
         }
         return null;
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (currentIdRef.current === projectId) setLoading(false); });
   }, [projectId]);
 
   useEffect(() => {
