@@ -22,6 +22,7 @@ export function useDeployDetail() {
 
   const [allDeploys, setAllDeploys] = useState<Deployment[]>([]);
   const [allDeploysLoading, setAllDeploysLoading] = useState(false);
+  const [allDeploysError, setAllDeploysError] = useState("");
   const [cancelling, setCancelling] = useState(false);
 
   const [showDeployWizard, setShowDeployWizard] = useState(false);
@@ -31,6 +32,7 @@ export function useDeployDetail() {
 
   const refreshAllDeploys = useCallback((current: Deployment) => {
     setAllDeploysLoading(true);
+    setAllDeploysError("");
     deployApi.listDeployments()
       .then((res) => {
         const repoDeploys = current.projectId
@@ -38,7 +40,8 @@ export function useDeployDetail() {
           : (res.deployments as Deployment[]).filter((dep) => dep.repo === current.repo);
         setAllDeploys(repoDeploys.sort((a, b) => compareByTime(a, b, "updated")));
       })
-      .catch(() => {})
+      // An empty history otherwise reads as "No deploys yet" and re-enables New deploy.
+      .catch((err: unknown) => setAllDeploysError(getErrorMessage(err, "Failed to load deploy history")))
       .finally(() => setAllDeploysLoading(false));
   }, []);
 
@@ -206,7 +209,7 @@ export function useDeployDetail() {
     deployId, navigate,
     deploy, project, providers,
     loading, error,
-    allDeploys, allDeploysLoading,
+    allDeploys, allDeploysLoading, allDeploysError,
     cancelling,
     redeploying,
     prov, provKey,

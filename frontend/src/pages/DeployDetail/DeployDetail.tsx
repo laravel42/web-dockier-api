@@ -16,7 +16,7 @@ export default function DeployDetail() {
     deployId, navigate,
     deploy, project, providers,
     loading, error,
-    allDeploys, allDeploysLoading,
+    allDeploys, allDeploysLoading, allDeploysError,
     cancelling,
     redeploying,
     provKey,
@@ -101,6 +101,7 @@ export default function DeployDetail() {
         providers={providers}
         activeDeployId={deployId}
         loading={allDeploysLoading}
+        error={allDeploysError}
         fallbackCommitHash={project?.lastCommitHash}
         canLaunchDeploy={canLaunchDeploy}
         liveDeploy={hasLiveDeploy}

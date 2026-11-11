@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useId } from "react";
+import { useState, useId } from "react";
 import { usersApi, rolesApi } from "@/services/api";
 import Modal from "@/components/Modal";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -16,6 +16,7 @@ import { getErrorMessage } from "@/utils/errors";
 import { useToast } from "@/context/useToast";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
+import { useAsyncData } from "@/hooks/useAsyncData";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { CheckIcon, ClipboardIcon, EyeIcon, EyeOffIcon, UserRoundPlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
@@ -47,16 +48,48 @@ interface RoleItem {
   permissions: string[];
 }
 
+const tzToCountry: Record<string, string> = {
+  "UTC": "", "America/New_York": "US", "America/Chicago": "US", "America/Denver": "US",
+  "America/Los_Angeles": "US", "America/Sao_Paulo": "BR", "America/Mexico_City": "MX",
+  "America/Toronto": "CA", "America/Vancouver": "CA", "America/Buenos_Aires": "AR",
+  "America/Santiago": "CL", "America/Bogota": "CO", "America/Lima": "PE",
+  "Europe/London": "GB", "Europe/Paris": "FR", "Europe/Berlin": "DE", "Europe/Rome": "IT",
+  "Europe/Madrid": "ES", "Europe/Moscow": "RU", "Europe/Amsterdam": "NL",
+  "Europe/Stockholm": "SE", "Europe/Oslo": "NO", "Europe/Copenhagen": "DK",
+  "Europe/Helsinki": "FI", "Europe/Warsaw": "PL", "Europe/Lisbon": "PT",
+  "Europe/Istanbul": "TR", "Europe/Zurich": "CH", "Europe/Vienna": "AT",
+  "Europe/Brussels": "BE", "Europe/Dublin": "IE", "Europe/Prague": "CZ",
+  "Europe/Bucharest": "RO", "Europe/Athens": "GR", "Europe/Budapest": "HU",
+  "Asia/Dubai": "AE", "Asia/Kolkata": "IN", "Asia/Shanghai": "CN",
+  "Asia/Tokyo": "JP", "Asia/Seoul": "KR", "Asia/Singapore": "SG",
+  "Asia/Hong_Kong": "HK", "Asia/Taipei": "TW", "Asia/Bangkok": "TH",
+  "Asia/Jakarta": "ID", "Asia/Manila": "PH", "Asia/Tel_Aviv": "IL",
+  "Australia/Sydney": "AU", "Australia/Melbourne": "AU", "Australia/Perth": "AU",
+  "Pacific/Auckland": "NZ", "Africa/Johannesburg": "ZA", "Africa/Lagos": "NG",
+  "Africa/Cairo": "EG",
+};
+
+const timezoneOptions = Object.keys(tzToCountry)
+  .filter((tz) => tz !== "UTC")
+  .concat(["UTC"])
+  .sort((a, b) => a.localeCompare(b))
+  .map((tz) => ({ value: tz, label: tz.replace(/_/g, " ") }));
+
+// Passwords are credentials: CSPRNG, not Math.random. Modulo bias is ~1e-8 for n < 64.
+const randomInt = (n: number) => crypto.getRandomValues(new Uint32Array(1))[0] % n;
+
 export default function UsersTab() {
   const fid = useId();
   const { userId } = useAuth();
   const toast = useToast();
   const { has, refresh: refreshPermissions } = usePermissions();
   const canManage = has("user:manage");
-  const [users, setUsers] = useState<UserItem[]>([]);
-  const [roles, setRoles] = useState<RoleItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const { data, loading, error: loadError, reload: fetchData } = useAsyncData(async () => {
+    const [usersRes, rolesRes] = await Promise.all([usersApi.list(), rolesApi.list()]);
+    return { users: usersRes.users as UserItem[], roles: rolesRes.roles as RoleItem[] };
+  }, []);
+  const users = data?.users ?? [];
+  const roles = data?.roles ?? [];
   const [showInvite, setShowInvite] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: "", name: "", password: "", language: "en", timezone: "", roleId: "" });
   const [showPassword, setShowPassword] = useState(false);
@@ -73,39 +106,18 @@ export default function UsersTab() {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const [usersRes, rolesRes] = await Promise.all([
-        usersApi.list(),
-        rolesApi.list(),
-      ]);
-      setUsers(usersRes.users);
-      setRoles(rolesRes.roles);
-    } catch (err) {
-      setLoadError(getErrorMessage(err, "Failed to load users"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
-
   const generatePassword = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*";
     let pw = "";
     // Ensure at least one of each required type
-    pw += "ABCDEFGHJKLMNPQRSTUVWXYZ"[Math.floor(Math.random() * 24)];
-    pw += "abcdefghijkmnpqrstuvwxyz"[Math.floor(Math.random() * 23)];
-    pw += "23456789"[Math.floor(Math.random() * 8)];
-    pw += "!@#$%&*"[Math.floor(Math.random() * 7)];
-    for (let i = 4; i < 16; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+    pw += "ABCDEFGHJKLMNPQRSTUVWXYZ"[randomInt(24)];
+    pw += "abcdefghijkmnpqrstuvwxyz"[randomInt(23)];
+    pw += "23456789"[randomInt(8)];
+    pw += "!@#$%&*"[randomInt(7)];
+    for (let i = 4; i < 16; i++) pw += chars[randomInt(chars.length)];
     // Shuffle
     const arr = pw.split("");
-    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    for (let i = arr.length - 1; i > 0; i--) { const j = randomInt(i + 1); [arr[i], arr[j]] = [arr[j], arr[i]]; }
     setInviteForm(f => ({ ...f, password: arr.join("") }));
     setShowPassword(true);
     setPasswordGenerated(true);
@@ -124,34 +136,6 @@ export default function UsersTab() {
     special: /[^A-Za-z0-9]/.test(inviteForm.password),
   };
   const passwordValid = !inviteForm.password || Object.values(passwordChecks).every(Boolean);
-
-  const tzToCountry: Record<string, string> = {
-    "UTC": "", "America/New_York": "US", "America/Chicago": "US", "America/Denver": "US",
-    "America/Los_Angeles": "US", "America/Sao_Paulo": "BR", "America/Mexico_City": "MX",
-    "America/Toronto": "CA", "America/Vancouver": "CA", "America/Buenos_Aires": "AR",
-    "America/Santiago": "CL", "America/Bogota": "CO", "America/Lima": "PE",
-    "Europe/London": "GB", "Europe/Paris": "FR", "Europe/Berlin": "DE", "Europe/Rome": "IT",
-    "Europe/Madrid": "ES", "Europe/Moscow": "RU", "Europe/Amsterdam": "NL",
-    "Europe/Stockholm": "SE", "Europe/Oslo": "NO", "Europe/Copenhagen": "DK",
-    "Europe/Helsinki": "FI", "Europe/Warsaw": "PL", "Europe/Lisbon": "PT",
-    "Europe/Istanbul": "TR", "Europe/Zurich": "CH", "Europe/Vienna": "AT",
-    "Europe/Brussels": "BE", "Europe/Dublin": "IE", "Europe/Prague": "CZ",
-    "Europe/Bucharest": "RO", "Europe/Athens": "GR", "Europe/Budapest": "HU",
-    "Asia/Dubai": "AE", "Asia/Kolkata": "IN", "Asia/Shanghai": "CN",
-    "Asia/Tokyo": "JP", "Asia/Seoul": "KR", "Asia/Singapore": "SG",
-    "Asia/Hong_Kong": "HK", "Asia/Taipei": "TW", "Asia/Bangkok": "TH",
-    "Asia/Jakarta": "ID", "Asia/Manila": "PH", "Asia/Tel_Aviv": "IL",
-    "Australia/Sydney": "AU", "Australia/Melbourne": "AU", "Australia/Perth": "AU",
-    "Pacific/Auckland": "NZ", "Africa/Johannesburg": "ZA", "Africa/Lagos": "NG",
-    "Africa/Cairo": "EG",
-  };
-
-  // Built once instead of inline in each of the four pickers that need it.
-  const timezoneOptions = Object.keys(tzToCountry)
-    .filter((tz) => tz !== "UTC")
-    .concat(["UTC"])
-    .sort((a, b) => a.localeCompare(b))
-    .map((tz) => ({ value: tz, label: tz.replace(/_/g, " ") }));
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,16 +198,16 @@ export default function UsersTab() {
   };
 
   const openEdit = async (u: UserItem) => {
-    setEditUser(u);
-    setEditRoleId(u.roleId || "");
-    setEditName(u.name || "");
     try {
       const full = await usersApi.get(u.id);
+      setEditRoleId(u.roleId || "");
+      setEditName(u.name || "");
       setEditLanguage(full.language || "en");
       setEditTimezone(full.timezone || "UTC");
-    } catch {
-      setEditLanguage("en");
-      setEditTimezone("UTC");
+      setEditUser(u);
+    } catch (err) {
+      // Opening with fallback defaults would overwrite the user's real language/timezone on save.
+      toast.error(getErrorMessage(err, "Failed to load user"));
     }
   };
 

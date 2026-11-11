@@ -47,17 +47,25 @@ export default function RolesTab() {
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   const handleCreateRole = async (data: { name: string; description: string; permissions: string[] }) => {
-    await rolesApi.create(data);
-    setShowRoleModal(false);
-    reload();
+    try {
+      await rolesApi.create(data);
+      setShowRoleModal(false);
+      reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to create role"));
+    }
   };
 
   const handleEditRole = async (data: { name: string; description: string; permissions: string[] }) => {
     if (!editingRole) return;
-    await rolesApi.update(editingRole.id, data);
-    setEditingRole(null);
-    reload();
-    if (editingRole.id === currentRoleId) refreshPermissions();
+    try {
+      await rolesApi.update(editingRole.id, data);
+      setEditingRole(null);
+      reload();
+      if (editingRole.id === currentRoleId) refreshPermissions();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update role"));
+    }
   };
 
   const handleDeleteRole = async () => {

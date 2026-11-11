@@ -13,6 +13,8 @@ import Button from "@/components/ui/Button";
 import ListSearchBar from "@/components/ui/ListSearchBar";
 import { usePermissions } from "@/context/PermissionsContext";
 import { integrationsApi } from "@/services/api";
+import { useToast } from "@/context/useToast";
+import { getErrorMessage } from "@/utils/errors";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
@@ -51,6 +53,7 @@ interface Integration {
 export default function IntegrationsTab() {
   const { has } = usePermissions();
   const canManage = has("credential:manage");
+  const toast = useToast();
   const { data: pmData, loading, error, reload } = useAsyncData(
     () => integrationsApi.listPMIntegrations().then((res) => res.integrations),
     [],
@@ -106,6 +109,8 @@ export default function IntegrationsTab() {
       setShowAdd(false);
       setSelectedType(null);
       setFormConfig({});
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to add integration"));
     } finally {
       setSaving(false);
     }
@@ -120,35 +125,43 @@ export default function IntegrationsTab() {
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingIntg) return;
-    if (isPMType(editingIntg.type)) {
-      const hasConfig = Object.values(editConfig).some((v) => v.trim() !== "");
-      await integrationsApi.updatePMIntegration(editingIntg.id, {
-        config: hasConfig ? { ...editConfig } : undefined,
-        enabled: editEnabled,
-      });
-      await reload();
-    } else {
-      const next = localIntegrations.map(i =>
-        i.id === editingIntg.id ? { ...i, config: { ...editConfig }, enabled: editEnabled } : i,
-      );
-      setLocalIntegrations(next);
-      persistLocalIntegrations(next);
+    try {
+      if (isPMType(editingIntg.type)) {
+        const hasConfig = Object.values(editConfig).some((v) => v.trim() !== "");
+        await integrationsApi.updatePMIntegration(editingIntg.id, {
+          config: hasConfig ? { ...editConfig } : undefined,
+          enabled: editEnabled,
+        });
+        await reload();
+      } else {
+        const next = localIntegrations.map(i =>
+          i.id === editingIntg.id ? { ...i, config: { ...editConfig }, enabled: editEnabled } : i,
+        );
+        setLocalIntegrations(next);
+        persistLocalIntegrations(next);
+      }
+      setEditingIntg(null);
+      setEditConfig({});
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update integration"));
     }
-    setEditingIntg(null);
-    setEditConfig({});
   };
 
   const handleRemove = async () => {
     if (!editingIntg) return;
-    if (isPMType(editingIntg.type)) {
-      await integrationsApi.deletePMIntegration(editingIntg.id);
-      await reload();
-    } else {
-      const next = localIntegrations.filter(i => i.id !== editingIntg.id);
-      setLocalIntegrations(next);
-      persistLocalIntegrations(next);
+    try {
+      if (isPMType(editingIntg.type)) {
+        await integrationsApi.deletePMIntegration(editingIntg.id);
+        await reload();
+      } else {
+        const next = localIntegrations.filter(i => i.id !== editingIntg.id);
+        setLocalIntegrations(next);
+        persistLocalIntegrations(next);
+      }
+      setEditingIntg(null);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to remove integration"));
     }
-    setEditingIntg(null);
     setConfirmRemove(false);
   };
 

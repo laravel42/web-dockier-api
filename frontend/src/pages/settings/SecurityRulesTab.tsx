@@ -53,13 +53,12 @@ export default function SecurityRulesTab() {
   const [toolMessage, setToolMessage] = useState("");
 
   const toggleTool = (key: string) => {
-    setScanTools(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      saveScanTools(next);
-      setToolMessage("Saved");
-      setTimeout(() => setToolMessage(""), 1500);
-      return next;
-    });
+    // Side effects stay out of the state updater: StrictMode runs updaters twice.
+    const next = { ...scanTools, [key]: !scanTools[key] };
+    setScanTools(next);
+    saveScanTools(next);
+    setToolMessage("Saved");
+    setTimeout(() => setToolMessage(""), 1500);
   };
 
   const [source, setSource] = useState<"custom" | "semgrep" | "sonarqube">("custom");
@@ -206,7 +205,7 @@ export default function SecurityRulesTab() {
                 rules={rules}
                 filtered={filtered}
                 counts={counts}
-                loading={loading}
+                loading={loading && data === null}
                 sevTab={sevTab}
                 langFilter={langFilter}
                 showForm={showForm}

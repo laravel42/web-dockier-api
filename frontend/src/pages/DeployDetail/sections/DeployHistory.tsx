@@ -19,6 +19,7 @@ interface Props {
   providers: Provider[];
   activeDeployId: string | undefined;
   loading: boolean;
+  error?: string;
   fallbackCommitHash?: string;
   canLaunchDeploy?: boolean;
   /** A deploy for this project is running right now. */
@@ -32,6 +33,7 @@ export default function DeployHistory({
   providers,
   activeDeployId,
   loading,
+  error,
   fallbackCommitHash,
   canLaunchDeploy = false,
   liveDeploy = false,
@@ -70,6 +72,8 @@ export default function DeployHistory({
             <div className="flex justify-center py-4">
               <Spinner className="size-3.5" />
             </div>
+          ) : error && deploys.length === 0 ? (
+            <p role="alert" className="text-xs text-danger-500 text-center py-3">{error}</p>
           ) : deploys.length === 0 ? (
             <p className="text-xs text-text-muted text-center py-3">No deploys yet</p>
           ) : (
