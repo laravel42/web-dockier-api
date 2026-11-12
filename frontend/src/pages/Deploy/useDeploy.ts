@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { deployApi } from "@/services/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
@@ -6,10 +7,10 @@ import { useViewMode } from "@/hooks/useViewMode";
 import type { Deployment, Project } from "@/types";
 import { compareByTime } from "@/utils/sortByTime";
 
-async function fetchDeployments(): Promise<Deployment[]> {
-  const res = await deployApi.listDeployments();
-  return res.deployments;
-}
+// The API max. Large on purpose: rows are grouped by project, and a group only
+// spans pages when a page boundary cuts through it.
+// shortcut: grouping and search cover the current page only, upgrade with server-side grouping.
+const PAGE_SIZE = 100;
 
 /**
  * The only project fields a deployment row can supply. Deliberately not a
@@ -23,9 +24,15 @@ export type DeployListProject = Pick<
 export function useDeploy() {
   const navigate = useNavigate();
   const { viewMode, changeViewMode } = useViewMode("deployments-view");
-  const { data: deployments, loading, error, reload } = useAsyncData(fetchDeployments, []);
+  const [offset, setOffset] = useState(0);
+  const { data, loading, error, reload } = useAsyncData(
+    () => deployApi.listDeployments({ limit: PAGE_SIZE, offset }),
+    [offset],
+  );
 
-  const allDeployments = deployments ?? [];
+  const allDeployments: Deployment[] = data?.deployments ?? [];
+  const pagination = data?.pagination ?? { total: 0, limit: PAGE_SIZE, offset };
+  const goToPage = (page: number) => setOffset((page - 1) * PAGE_SIZE);
 
   // Build a lightweight project lookup from deployment data for badges/display
   const projectById: Record<string, DeployListProject> = {};
@@ -58,7 +65,10 @@ export function useDeploy() {
   return {
     navigate,
     deployments: allDeployments,
-    loading,
+    // Only the first load blanks the page; paging keeps the toolbar and list mounted.
+    loading: loading && data === null,
+    pagination,
+    goToPage,
     error,
     reload,
     projectLangs,

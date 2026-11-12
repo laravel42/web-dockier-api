@@ -7,6 +7,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
 import ListToolbar from "@/components/ui/ListToolbar";
+import Pagination from "@/components/ui/Pagination";
 import { EmptyMessage } from "@/components/ui/PageError";
 import { compareByTime } from "@/utils/sortByTime";
 import { cardGridCls } from "@/utils/styles";
@@ -19,6 +20,8 @@ export default function Deploy() {
     loading,
     error,
     reload,
+    pagination,
+    goToPage,
     projectLangs,
     projectBadgeLoading,
     projectById,
@@ -59,7 +62,7 @@ export default function Deploy() {
 
   return (
     <div>
-      <PageHeader title="Deployments" description={`${deployments.length} total deployments`} />
+      <PageHeader title="Deployments" description={`${pagination.total} total deployments`} />
 
       {deployments.length === 0 ? (
         <DeployEmptyState onGoToProjects={() => navigate("/projects")} />
@@ -102,6 +105,15 @@ export default function Deploy() {
               })}
             </div>
           )}
+
+          <div className="mt-4">
+            <Pagination
+              total={pagination.total}
+              limit={pagination.limit}
+              offset={pagination.offset}
+              onPageChange={goToPage}
+            />
+          </div>
         </>
       )}
     </div>
