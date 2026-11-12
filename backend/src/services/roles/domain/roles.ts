@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapList, unwrapQuery, type PostgrestError } from "../../../shared/supabase/query.js";
+import { selectAllRows, throwOnError, unwrapList, unwrapQuery, type PostgrestError } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { ALL_PERMISSIONS, withBaselinePermissions, type PermissionKey } from "../../../shared/permissions/constants.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
@@ -41,10 +41,16 @@ export async function listRoles(tenantId: string): Promise<{ roles: RoleResponse
   const roleIds = roleRows.map((r) => r.id);
   if (roleIds.length === 0) return { roles: [] };
 
-  const { data: allPerms, error: permsError } = await supabaseAdmin
-    .from("role_permissions")
-    .select("role_id,permission_id")
-    .in("role_id", roleIds);
+  // roles × permissions passes PostgREST's 1000-row cap at ~34 full roles; past it a
+  // role was listed with permissions missing. (role_id, permission_id) is the PK.
+  const { data: allPerms, error: permsError } = await selectAllRows(() =>
+    supabaseAdmin
+      .from("role_permissions")
+      .select("role_id,permission_id")
+      .in("role_id", roleIds)
+      .order("role_id", { ascending: true })
+      .order("permission_id", { ascending: true }),
+  );
   const permRows = unwrapList(allPerms, permsError, RolesError, { internalMsg: "Failed to fetch role permissions" });
 
   const permsByRole = new Map<string, string[]>();
