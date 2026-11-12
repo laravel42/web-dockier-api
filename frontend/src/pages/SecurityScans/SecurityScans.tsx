@@ -1,4 +1,3 @@
-import { useMemo, useState } from "react";
 import { useSecurityScans } from "./useSecurityScans";
 import ScanProjectCard from "./sections/ScanProjectCard";
 import ScanProjectTable from "./sections/ScanProjectTable";
@@ -8,12 +7,12 @@ import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
 import EmptyState from "@/components/ui/EmptyState";
 import ListToolbar from "@/components/ui/ListToolbar";
+import Pagination from "@/components/ui/Pagination";
 import { EmptyMessage } from "@/components/ui/PageError";
 import { ShieldCheckIcon } from "lucide-react";
 import { cardGridCls } from "@/utils/styles";
 
 export default function SecurityScans() {
-  const [search, setSearch] = useState("");
   const {
     navigate,
     loading,
@@ -21,6 +20,11 @@ export default function SecurityScans() {
     reload,
     projects,
     grouped,
+    scanCounts,
+    pagination,
+    goToPage,
+    search,
+    handleSearch,
     sortedProjectIds,
     projectLangs,
     projectBadgeLoading,
@@ -28,16 +32,8 @@ export default function SecurityScans() {
     changeViewMode,
   } = useSecurityScans();
 
-  const filteredProjectIds = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return sortedProjectIds;
-    return sortedProjectIds.filter((id) => {
-      const name = (projects[id]?.name || id).toLowerCase();
-      return name.includes(q);
-    });
-  }, [sortedProjectIds, projects, search]);
-
-  if (loading) {
+  // Search and paging keep the toolbar mounted; only the very first load blanks the page.
+  if (loading && sortedProjectIds.length === 0 && !search) {
     return (
       <div>
         <PageHeader title="Security Scans" />
@@ -55,7 +51,7 @@ export default function SecurityScans() {
     );
   }
 
-  if (sortedProjectIds.length === 0) {
+  if (pagination.total === 0 && !search && !loading) {
     return (
       <div>
         <PageHeader title="Security Scans" />
@@ -72,23 +68,26 @@ export default function SecurityScans() {
     <div>
       <PageHeader
         title="Security Scans"
-        description={`${sortedProjectIds.length} ${sortedProjectIds.length === 1 ? "project" : "projects"}`}
+        description={`${pagination.total} ${pagination.total === 1 ? "project" : "projects"}`}
       />
 
       <ListToolbar
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={handleSearch}
         searchPlaceholder="Search by project name"
         viewMode={viewMode}
         onViewModeChange={changeViewMode}
       />
 
-      {filteredProjectIds.length === 0 ? (
+      {loading ? (
+        <PageLoading />
+      ) : sortedProjectIds.length === 0 ? (
         <EmptyMessage>No projects match your search.</EmptyMessage>
       ) : viewMode === "table" ? (
         <ScanProjectTable
-          sortedProjectIds={filteredProjectIds}
+          sortedProjectIds={sortedProjectIds}
           grouped={grouped}
+          scanCounts={scanCounts}
           projects={projects}
           projectLangs={projectLangs}
           projectBadgeLoading={projectBadgeLoading}
@@ -97,7 +96,7 @@ export default function SecurityScans() {
         />
       ) : (
         <div className={cardGridCls}>
-          {filteredProjectIds.map((projectId) => {
+          {sortedProjectIds.map((projectId) => {
             const projectScans = grouped[projectId];
             if (!projectScans || projectScans.length === 0) {
               return (
@@ -117,6 +116,7 @@ export default function SecurityScans() {
                 project={projects[projectId]}
                 projectId={projectId}
                 scans={projectScans}
+                scanCount={scanCounts[projectId] ?? projectScans.length}
                 badges={projectLangs[projectId]}
                 badgeLoading={projectBadgeLoading.has(projectId)}
                 onSelect={(scanId) => navigate(`/security/${scanId}`)}
@@ -125,6 +125,15 @@ export default function SecurityScans() {
           })}
         </div>
       )}
+
+      <div className="mt-4">
+        <Pagination
+          total={pagination.total}
+          limit={pagination.limit}
+          offset={pagination.offset}
+          onPageChange={goToPage}
+        />
+      </div>
     </div>
   );
 }

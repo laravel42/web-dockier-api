@@ -12,12 +12,14 @@ interface Props {
   project: Project | undefined;
   projectId: string;
   scans: Scan[];
+  /** All of the project's scans; `scans` is only the newest page. */
+  scanCount: number;
   badges: TechBadgeInfo[] | undefined;
   badgeLoading?: boolean;
   onSelect: (scanId: string) => void;
 }
 
-export default function ScanProjectCard({ project, projectId, scans, badges, badgeLoading, onSelect }: Props) {
+export default function ScanProjectCard({ project, projectId, scans, scanCount, badges, badgeLoading, onSelect }: Props) {
   const sorted = [...scans].sort((a, b) => compareByTime(a, b, "updated"));
   const latest = sorted[0];
   const latestCompleted = sorted.find((s) => s.status === "completed");
@@ -37,7 +39,7 @@ export default function ScanProjectCard({ project, projectId, scans, badges, bad
       <div className="flex items-center gap-3 min-w-0">
         <ShieldCheckIcon className="size-5 shrink-0 text-primary-500" />
         <span className={`${typeCardMeta} truncate`}>
-          {sorted.length} scan{sorted.length !== 1 ? "s" : ""}
+          {scanCount} scan{scanCount !== 1 ? "s" : ""}
         </span>
       </div>
 

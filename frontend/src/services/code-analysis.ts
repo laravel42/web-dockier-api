@@ -9,6 +9,11 @@ export const codeAnalysisApi = {
   listScans: (projectId?: string, branch?: string) =>
     request<{ scans: Scan[]; pagination: PaginationMeta }>(`/code-analysis/scans${buildQuery({ projectId, branch })}`),
 
+  /** Per project: newest scan, newest completed scan and scan count, in one request. */
+  latestScans: (projectIds: string[]) =>
+    request<{ projects: { projectId: string; scanCount: number; latest: Scan | null; latestCompleted: Scan | null }[] }>(
+      `/code-analysis/scans/latest${buildQuery({ projectIds: projectIds.join(",") })}`,
+    ),
   getScan: (scanId: string) =>
     request<Scan>(`/code-analysis/scans/${scanId}`),
 

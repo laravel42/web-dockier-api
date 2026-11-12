@@ -11,6 +11,8 @@ import { failedScanDotClass, scanFindingSeverityDotClass, scanSecurityFindingCou
 interface Props {
   sortedProjectIds: string[];
   grouped: Record<string, Scan[]>;
+  /** All of each project's scans; `grouped` holds only the newest page. */
+  scanCounts: Record<string, number>;
   projects: Record<string, Project>;
   projectLangs: Record<string, TechBadgeInfo[]>;
   projectBadgeLoading: ReadonlySet<string>;
@@ -28,6 +30,7 @@ function getScanStatusDot(latest: Scan, summary: Scan["summary"] | undefined): s
 export default function ScanProjectTable({
   sortedProjectIds,
   grouped,
+  scanCounts,
   projects,
   projectLangs,
   projectBadgeLoading,
@@ -106,7 +109,7 @@ export default function ScanProjectTable({
                 <span className="text-ui-sm text-text-muted">—</span>
               )}
             </td>
-            <td className={tableCellMutedCls}>{sorted.length}</td>
+            <td className={tableCellMutedCls}>{scanCounts[projectId] ?? sorted.length}</td>
             <td className={`${tableCellMutedCls} tabular-nums`} title={findingsTitle}>
               {summary != null ? scanSecurityFindingCount(summary) : "—"}
             </td>
