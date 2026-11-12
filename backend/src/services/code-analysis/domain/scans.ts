@@ -108,13 +108,19 @@ export async function listScans(params: ListScansParams) {
     finalRows = unwrapList(refreshData, refreshError, CodeAnalysisError, { internalMsg: "Failed to list scans" });
   }
 
-  // Enrich terminal scans with finding severity counts
-  const terminalIds = finalRows
+  return { scans: await mapScansWithCounts(finalRows), total };
+}
+
+type ScanRowForMapping = Parameters<typeof rowToScan>[0];
+
+/** Map rows to scans, with terminal scans' summaries carrying their finding severity counts. */
+async function mapScansWithCounts(rows: ScanRowForMapping[]) {
+  const terminalIds = rows
     .filter((row) => row.status === "completed" || row.status === "failed")
     .map((row) => row.id);
   const severityByScan = await getSecurityFindingCountsForScans(terminalIds);
 
-  const scans = finalRows.map((row) => {
+  return rows.map((row) => {
     const mapped = rowToScan(row);
     const counts = severityByScan.get(row.id);
     if (!counts) return mapped;
@@ -129,8 +135,41 @@ export async function listScans(params: ListScansParams) {
       },
     };
   });
+}
 
-  return { scans, total };
+/**
+ * Per project: its scan count, newest scan and newest completed scan, in one query
+ * (`latest_scans_for_projects`, migration 0085). Projects outside the tenant come
+ * back with a count of 0 and no scans.
+ */
+export async function listLatestScansByProject(tenantId: string, projectIds: string[]) {
+  const load = async () => {
+    const { data, error } = await supabaseAdmin.rpc("latest_scans_for_projects", {
+      p_organization_id: tenantId,
+      p_project_ids: projectIds,
+    });
+    return unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list latest scans" });
+  };
+
+  let rows = await load();
+  // Same as listScans: a scan stuck in running/pending is reconciled, or it would
+  // read as in progress forever. Only a project's newest scan can be one.
+  const stale = rows.flatMap((r) =>
+    r.latest && (r.latest.status === "running" || r.latest.status === "pending") ? [r.latest.id] : [],
+  );
+  if (stale.length > 0) {
+    const results = await Promise.allSettled(stale.map((id) => reconcileStaleScanById(id)));
+    if (results.some((r) => r.status === "fulfilled" && r.value)) rows = await load();
+  }
+
+  const scanRows = rows.flatMap((r) => [r.latest, r.latest_completed].filter((s) => s !== null));
+  const byId = new Map((await mapScansWithCounts(scanRows)).map((s) => [s.id, s]));
+  return rows.map((r) => ({
+    projectId: r.project_id,
+    scanCount: Number(r.scan_count),
+    latest: r.latest ? byId.get(r.latest.id) ?? null : null,
+    latestCompleted: r.latest_completed ? byId.get(r.latest_completed.id) ?? null : null,
+  }));
 }
 
 export async function getScan(scanId: string, tenantId: string) {

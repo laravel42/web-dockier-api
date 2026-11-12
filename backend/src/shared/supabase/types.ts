@@ -837,6 +837,15 @@ export type Database = {
           created_at: string;
         }[];
       };
+      latest_scans_for_projects: {
+        Args: { p_organization_id: string; p_project_ids: string[] };
+        Returns: {
+          project_id: string;
+          scan_count: number;
+          latest: Database["public"]["Tables"]["scans"]["Row"] | null;
+          latest_completed: Database["public"]["Tables"]["scans"]["Row"] | null;
+        }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

@@ -6,7 +6,7 @@ import { scanSchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema, paginatedResponse } from "../../../shared/schemas/responses.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
-import { createScan, listScans, getScan, deleteScan, runScan, cancelScan } from "../domain/scans.js";
+import { createScan, listScans, listLatestScansByProject, getScan, deleteScan, runScan, cancelScan } from "../domain/scans.js";
 
 export async function registerScanRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -70,6 +70,40 @@ export async function registerScanRoutes(app: FastifyInstance) {
         offset,
       });
       return paginatedResponse("scans", result.scans, result.total, limit, offset);
+    },
+  );
+
+  typed.get(
+    "/code-analysis/scans/latest",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
+      schema: {
+        tags: ["code-analysis"],
+        summary: "Newest scan, newest completed scan and scan count per project",
+        querystring: z.object({
+          // Comma-separated; capped at the projects API's page maximum.
+          projectIds: z
+            .string()
+            .transform((v) => [...new Set(v.split(",").map((id) => id.trim()).filter(Boolean))])
+            .pipe(z.array(z.uuid()).min(1).max(100)),
+        }),
+        response: {
+          200: z.object({
+            projects: z.array(
+              z.object({
+                projectId: z.string(),
+                scanCount: z.number().int(),
+                latest: scanSchema.nullable(),
+                latestCompleted: scanSchema.nullable(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      return { projects: await listLatestScansByProject(auth.tenantId, request.query.projectIds) };
     },
   );
 
