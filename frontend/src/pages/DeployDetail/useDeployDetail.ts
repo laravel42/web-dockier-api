@@ -7,6 +7,21 @@ import type { RepoAnalysis } from "@/components/DeployWizard";
 import type { Deployment, Provider, Project } from "@/types";
 import { compareByTime } from "@/utils/sortByTime";
 
+/**
+ * First project matching `match`, across every page of the project list. Reading
+ * only the first page (50) left a deploy of any later project with no project
+ * at all: no name, no infra state, no fallback commit.
+ */
+export async function findProject(match: (p: Project) => boolean): Promise<Project | undefined> {
+  const PAGE = 100; // the API max
+  for (let offset = 0; ; offset += PAGE) {
+    const res = await projectsApi.list({ limit: PAGE, offset });
+    const hit = res.projects.find(match);
+    if (hit) return hit;
+    if (res.projects.length === 0 || offset + res.projects.length >= res.pagination.total) return undefined;
+  }
+}
+
 const IN_PROGRESS_STATUSES = new Set(["pending", "building", "deploying"]);
 const POLL_INTERVAL_MS = 2_000;
 
@@ -66,18 +81,17 @@ export function useDeployDetail() {
             if (!cancelled) setProject(proj);
           } catch {
             try {
-              const projRes = await projectsApi.list();
+              // Same preference as before: the project itself, else one on the same repo.
+              const match = (await findProject((p) => p.id === d.projectId))
+                ?? (await findProject((p) => getRepoKey(p.repository) === d.repo));
               if (cancelled) return;
-              const match = projRes.projects.find((p: Project) => p.id === d.projectId)
-                ?? projRes.projects.find((p: Project) => getRepoKey(p.repository) === d.repo);
               if (match) setProject(match);
             } catch { /* ignore */ }
           }
         } else {
           try {
-            const projRes = await projectsApi.list();
+            const match = await findProject((p) => getRepoKey(p.repository) === d.repo);
             if (cancelled) return;
-            const match = projRes.projects.find((p: Project) => getRepoKey(p.repository) === d.repo);
             if (match) setProject(match);
           } catch { /* ignore */ }
         }
