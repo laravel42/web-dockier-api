@@ -17,6 +17,7 @@
  *   API handler → fetchRules → generateConfig → resolveTarget → applyToServer
  */
 
+import { randomBytes } from "node:crypto";
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { getCfn, getEc2, getSsm } from "../../../lib/aws-sdk.js";
@@ -293,29 +294,32 @@ async function buildHtpasswdContent(ruleId: string): Promise<string> {
  *
  * Uses heredocs for multi-line content injection.
  */
-function buildApplyScript(
+export function buildApplyScript(
   appName: string,
   config: NginxGeneratorOutput,
   htpasswdContents: Map<string, string>,
 ): string {
   const commands: string[] = ["#!/bin/bash", "set -eu"];
+  // Random per run: rule text stored before input validation existed must not be
+  // able to end a heredoc by containing its delimiter line (the rest would run as root).
+  const tag = randomBytes(8).toString("hex");
 
   // Write htpasswd files
   for (const htFile of config.htpasswdFiles) {
     const content = htpasswdContents.get(htFile.ruleId) || "";
     if (!content) continue;
 
-    commands.push(`cat > ${htFile.path} << 'HTPASSWD'`);
+    commands.push(`cat > ${htFile.path} << 'HTPASSWD_${tag}'`);
     commands.push(content);
-    commands.push("HTPASSWD");
+    commands.push(`HTPASSWD_${tag}`);
     commands.push(`chmod 640 ${htFile.path}`);
     commands.push(`chown root:www-data ${htFile.path} 2>/dev/null || true`);
   }
 
   // Write nginx config
-  commands.push(`cat > /etc/nginx/sites-available/${appName} << 'NGINXCONF'`);
+  commands.push(`cat > /etc/nginx/sites-available/${appName} << 'NGINXCONF_${tag}'`);
   commands.push(config.serverConfig);
-  commands.push("NGINXCONF");
+  commands.push(`NGINXCONF_${tag}`);
 
   // Ensure symlink exists
   commands.push(`ln -sf /etc/nginx/sites-available/${appName} /etc/nginx/sites-enabled/default`);
