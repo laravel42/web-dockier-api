@@ -62,4 +62,34 @@ describe("useScanDetail scan switching", () => {
     expect(result.current.scan?.id).toBe("B");
     expect(result.current.loading).toBe(false);
   });
+
+  it("keeps the sidebar on the current scan's project when the previous one's list lands late", async () => {
+    params.current = { scanId: "A" };
+    const inProject = (id: string, projectId: string) => ({ ...scan(id), projectId });
+    api.codeAnalysisApi.getScan.mockImplementation((id: string) =>
+      Promise.resolve(id === "A" ? inProject("A", "p1") : inProject("B", "p2")),
+    );
+    api.projectsApi.get.mockImplementation((id: string) =>
+      Promise.resolve({ id, repository: "o/r", connectionId: "c1", branch: "main" }),
+    );
+    api.codeAnalysisApi.listFindings.mockResolvedValue({ findings: [], counts: null, hasMore: false });
+    let resolveP1!: (v: unknown) => void;
+    api.codeAnalysisApi.listScans.mockImplementation((projectId: string) =>
+      projectId === "p1"
+        ? new Promise((res) => { resolveP1 = res; })
+        : Promise.resolve({ scans: [inProject("B", "p2")] }),
+    );
+
+    const { result, rerender } = renderHook(() => useScanDetail());
+    await waitFor(() => expect(api.codeAnalysisApi.listScans).toHaveBeenCalledWith("p1"));
+    params.current = { scanId: "B" };
+    rerender();
+    await waitFor(() => expect(result.current.allScans.map((s) => s.id)).toEqual(["B"]));
+
+    resolveP1({ scans: [inProject("A", "p1"), inProject("A2", "p1")] });
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(result.current.allScans.map((s) => s.id)).toEqual(["B"]);
+    expect(result.current.allScansLoading).toBe(false);
+  });
 });

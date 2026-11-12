@@ -46,6 +46,12 @@ export function useScanDetail() {
 
   const [allScans, setAllScans] = useState<Scan[]>([]);
   const [allScansLoading, setAllScansLoading] = useState(false);
+  /** Bumped per scan-list request: only the newest may write the sidebar, or a
+   *  slow response for the previous scan's project replaces the current one's. */
+  const allScansRequestRef = useRef(0);
+  /** Bumped when the scan changes, so a preview fetched for the previous scan
+   *  cannot land in (or, on a 404, remove findings from) the next one. */
+  const previewGenRef = useRef(0);
 
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const fetchingFiles = useRef(new Set<string>());
@@ -192,16 +198,18 @@ export function useScanDetail() {
   }, [scanId, findingsLoading, findingsLoadingMore, hasMoreFindings, fetchFindings, severityFilter, providerFilter]);
 
   const refreshAllScans = useCallback(async (projectId: string, options?: { silent?: boolean }) => {
+    const id = ++allScansRequestRef.current;
     if (!options?.silent) setAllScansLoading(true);
     try {
       const res = await codeAnalysisApi.listScans(projectId);
-      setAllScans(res.scans);
+      if (id === allScansRequestRef.current) setAllScans(res.scans);
     } catch {
       /* ignore */
     } finally {
-      // A silent refresh never raised the flag, so it must not lower one that a
-      // visible load is still holding.
-      if (!options?.silent) setAllScansLoading(false);
+      // Only the newest request lowers the flag: an older one finishing must not
+      // drop the spinner of a visible load still in flight. A silent refresh that
+      // is the newest may, since its list is the one now on screen.
+      if (id === allScansRequestRef.current) setAllScansLoading(false);
     }
   }, []);
 
@@ -217,6 +225,7 @@ export function useScanDetail() {
     fetchingFiles.current.clear();
     missingFiles.current.clear();
     previewUnavailable.current.clear();
+    previewGenRef.current += 1;
     setFileContents({});
   }, [scanId]);
 
@@ -265,9 +274,10 @@ export function useScanDetail() {
           if (cancelled) return;
           setProject(p);
           setAllScansLoading(true);
+          const requestId = ++allScansRequestRef.current;
           try {
             const res = await codeAnalysisApi.listScans(routeProjectId);
-            if (cancelled) return;
+            if (cancelled || requestId !== allScansRequestRef.current) return;
             setAllScans(res.scans);
             if (res.scans.length > 0) {
               const latest = [...res.scans].sort(
@@ -278,7 +288,7 @@ export function useScanDetail() {
           } catch {
             /* ignore */
           } finally {
-            setAllScansLoading(false);
+            if (requestId === allScansRequestRef.current) setAllScansLoading(false);
           }
         })
         .catch((err: unknown) => { if (!cancelled) setPageError(getErrorMessage(err, "Failed to load project")); })
@@ -392,13 +402,16 @@ export function useScanDetail() {
       )
       .slice(0, Math.max(0, MAX_PARALLEL_FILE_FETCHES - fetchingFiles.current.size));
     if (toFetch.length === 0) return;
+    const gen = previewGenRef.current;
     toFetch.forEach((fp) => {
       fetchingFiles.current.add(fp);
       gitApi.getFileContent(project.connectionId, parsed.owner, parsed.repo, project.branch || "main", fp)
         .then((res) => {
+          if (gen !== previewGenRef.current) return;
           setFileContents((prev) => ({ ...prev, [fp]: res.content }));
         })
         .catch((err: unknown) => {
+          if (gen !== previewGenRef.current) return;
           // A 404 means the file is genuinely gone at this ref, so the finding is
           // stale and comes out of the list. Anything else (rate limit, network,
           // expired token) says nothing about the finding — never drop a real
@@ -413,6 +426,8 @@ export function useScanDetail() {
           previewUnavailable.current.add(fp);
         })
         .finally(() => {
+          // The scan change already cleared the queue; this slot is not ours to free.
+          if (gen !== previewGenRef.current) return;
           fetchingFiles.current.delete(fp);
           setFileFetchTick((t) => t + 1);
         });
