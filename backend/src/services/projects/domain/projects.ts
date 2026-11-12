@@ -5,7 +5,7 @@ import { throwOnError, unwrapQuery, normalizePagination, paginatedRows } from ".
 import { nowIso } from "../../../shared/utils/time.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import type { Json } from "../../../shared/supabase/types.js";
-import { escapePostgrestLike } from "../../../shared/http/security.js";
+import { postgrestIlikeContains } from "../../../shared/http/security.js";
 import { generateDeployHookToken } from "../../deploy/domain/deploy-hook.js";
 import { rowToProject } from "./mappers.js";
 import { saveWpConfig, generateWpConfig } from "./wp-config.js";
@@ -229,7 +229,9 @@ export async function listProjects(tenantId: string, params?: { limit?: number; 
     .order("created_at", { ascending: false });
 
   if (params?.search) {
-    query = query.ilike("name", `%${escapePostgrestLike(params.search)}%`);
+    // The UI promises "Search by name or repository".
+    const pattern = postgrestIlikeContains(params.search);
+    query = query.or(`name.ilike.${pattern},repository.ilike.${pattern}`);
   }
 
   const { rows, count } = await paginatedRows(query, { limit, offset }, ProjectsError, {

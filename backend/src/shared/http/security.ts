@@ -38,31 +38,29 @@ function allowUnverifiedRequest(request: FastifyRequest, guard: string, secretNa
 // ─── Search Input Sanitization ─────────────────────────────────────
 
 /**
- * Escape special characters in a PostgREST filter value.
- *
- * PostgREST uses `%` and `_` as wildcards in LIKE/ILIKE filters,
- * and `.`, `(`, `)`, `,` have structural meaning in filter expressions.
- * This function escapes them so user input is treated as literal text.
+ * Escape LIKE/ILIKE wildcards (`%`, `_`) and the escape character itself, so
+ * user input is matched literally by a single `.ilike()` filter. For an `.or()`
+ * expression use {@link postgrestIlikeContains}, which also quotes the value.
  */
 export function escapePostgrestLike(input: string): string {
   return input
+    // Backslash first: it is LIKE's escape character, so a trailing one swallowed the closing %.
+    .replace(/\\/g, "\\\\")
     .replace(/%/g, "\\%")
     .replace(/_/g, "\\_");
 }
 
 /**
- * Escape characters that have structural meaning in PostgREST filter strings.
- * Use this when interpolating user input into `.or()` or `.filter()` expressions.
+ * An `ilike` "contains" value for a PostgREST `.or()` expression that matches
+ * `term` literally: `query.or(`name.ilike.${postgrestIlikeContains(term)}`)`.
+ *
+ * Double-quoted because `,` `(` `)` split an `.or()` string, and PostgREST only
+ * honours them inside quotes. The previous backslash-escaped form made a search
+ * containing a comma fail outright (checked against the hosted PostgREST).
  */
-export function escapePostgrestFilter(input: string): string {
-  return input
-    .replace(/\\/g, "\\\\")
-    .replace(/%/g, "\\%")
-    .replace(/_/g, "\\_")
-    .replace(/\./g, "\\.")
-    .replace(/,/g, "\\,")
-    .replace(/\(/g, "\\(")
-    .replace(/\)/g, "\\)");
+export function postgrestIlikeContains(term: string): string {
+  const quoted = escapePostgrestLike(term).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"%${quoted}%"`;
 }
 
 // ─── Webhook Secret Verification ───────────────────────────────────

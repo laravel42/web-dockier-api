@@ -3,7 +3,7 @@ import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, normalizePagination, paginatedRows, type PostgrestError } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
-import { escapePostgrestFilter } from "../../../shared/http/security.js";
+import { postgrestIlikeContains } from "../../../shared/http/security.js";
 import { logger } from "../../../shared/logger.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { rowToUser } from "./mappers.js";
@@ -126,8 +126,8 @@ export async function listUsers(params: ListUsersParams) {
     .order("created_at", { ascending: false });
 
   if (search) {
-    const escaped = escapePostgrestFilter(search);
-    query = query.or(`name.ilike.%${escaped}%,email.ilike.%${escaped}%`);
+    const pattern = postgrestIlikeContains(search);
+    query = query.or(`name.ilike.${pattern},email.ilike.${pattern}`);
   }
 
   const { rows: data, count } = await paginatedRows(query, { limit, offset }, UsersError, {
