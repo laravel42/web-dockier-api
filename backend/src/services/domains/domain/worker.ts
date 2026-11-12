@@ -64,7 +64,8 @@ export function registerDomainHandlers(): void {
       certificateId: input.certificateId,
       domainName: input.domainName,
     });
-    if (!result.success) {
+    // Same rule as domain-apply: certbot failures come back retryable: false.
+    if (!result.success && isRetryableFailure(result)) {
       throw new Error(`Certificate issue failed for ${input.domainName}: ${result.message}`);
     }
   });

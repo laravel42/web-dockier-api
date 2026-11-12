@@ -300,6 +300,7 @@ export async function issueCertificate(params: {
       await updateCertificateStatus(certificateId, "failed");
       return {
         success: false,
+        retryable: false,
         message: "Wildcard certificates require DNS-01 challenge. Configure a DNS TXT record for validation.",
       };
     }
@@ -307,8 +308,12 @@ export async function issueCertificate(params: {
     if (!certResult.output.includes("CERTBOT_DONE") && certResult.exitCode !== 0) {
       await updateCertificateStatus(certificateId, "failed");
       logger.error(`[domains] Certbot failed for ${domainName}: ${certResult.output}`);
+      // Not retryable: certbot fails for reasons a retry cannot fix (DNS not
+      // pointing here yet), and each attempt's standalone fallback stops nginx,
+      // taking the site down, and spends Let's Encrypt's failed-validation limit.
       return {
         success: false,
+        retryable: false,
         message: `Certificate issuance failed: ${certResult.output.slice(0, 500)}`,
       };
     }
@@ -318,6 +323,7 @@ export async function issueCertificate(params: {
       logger.error(`[domains] Certbot did not complete for ${domainName}. Output: ${certResult.output}`);
       return {
         success: false,
+        retryable: false,
         message: `Certificate issuance did not complete. Output: ${certResult.output.slice(0, 500)}`,
       };
     }

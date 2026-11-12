@@ -100,3 +100,21 @@ describe("domain-apply retry decision", () => {
     await expect(handlers.get("domain-apply")!(input)).rejects.toThrow(/Domain apply failed/);
   });
 });
+
+describe("certificate-issue retry decision", () => {
+  const certInput = { ...input, certificateId: "c1", domainName: "app.example.com" };
+
+  it("does not retry a certbot failure", async () => {
+    // Each attempt's standalone fallback stops nginx (site down) and spends
+    // Let's Encrypt's failed-validation limit, for a cause a retry cannot fix.
+    issueCertificate.mockResolvedValue({ success: false, retryable: false, message: "Certificate issuance failed: DNS problem" });
+
+    await expect(handlers.get("certificate-issue")!(certInput)).resolves.toBeUndefined();
+  });
+
+  it("still retries an unflagged failure, such as a Dokploy outage", async () => {
+    issueCertificate.mockResolvedValue({ success: false, message: "Error applying domains: fetch failed" });
+
+    await expect(handlers.get("certificate-issue")!(certInput)).rejects.toThrow(/Certificate issue failed/);
+  });
+});
