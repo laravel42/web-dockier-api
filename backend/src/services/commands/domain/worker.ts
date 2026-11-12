@@ -453,10 +453,19 @@ async function updateCommandStatus(
 
 // ─── Worker Instance ───────────────────────────────────────────────
 
+/**
+ * Above the worst case (30 s SSH connect + 120 s exec, or ~130 s of Cloud Run/ECS
+ * polling). At 180 s a slow command expired mid-run and was retried.
+ */
+export const COMMAND_JOB_EXPIRE_SECONDS = 600;
+
 const commandWorker = createWorker<CommandJobInput>(
   COMMAND_EXEC_QUEUE,
   processCommandJob,
-  { retryLimit: 1, expireInSeconds: 180 },
+  // Never retried: processCommandJob records every failure itself, so a retry only
+  // ever followed an expiry or a crash — and ran the user's command a second time
+  // (a migration, an rm), possibly alongside the first.
+  { retryLimit: 0, expireInSeconds: COMMAND_JOB_EXPIRE_SECONDS },
 );
 
 export const registerCommandWorker = commandWorker.register;

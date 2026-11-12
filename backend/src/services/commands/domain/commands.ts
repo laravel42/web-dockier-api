@@ -2,7 +2,8 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { unwrapQuery, paginatedQuery, deleteOrThrow } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
-import { enqueueCommand } from "./worker.js";
+import { enqueueCommand, COMMAND_JOB_EXPIRE_SECONDS } from "./worker.js";
+import { logger } from "../../../shared/logger.js";
 import { safeRecordActivity } from "../../../shared/service-clients/activity.js";
 import type { CommandRow } from "../schemas.js";
 import { rowToCommand, type CommandResponse, type CommandStatus } from "./mappers.js";
@@ -69,6 +70,28 @@ export async function runCommand(params: {
   return rowToCommand(row as CommandRow);
 }
 
+/** Past the job's expiry (plus a margin) nothing will ever write a result. */
+const STALE_RUNNING_MS = (COMMAND_JOB_EXPIRE_SECONDS + 60) * 1000;
+export const STALE_COMMAND_OUTPUT =
+  "No result was recorded: the server running this command stopped before it finished. "
+  + "It may or may not have completed in your container, and it was not run again.";
+
+/**
+ * A worker that dies mid-command never records a result, which left the row — and
+ * the Commands tab's poll — on "running" forever. Best-effort: listing still works
+ * if this update fails.
+ */
+async function failStaleCommands(tenantId: string, projectId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("commands")
+    .update({ status: "failed", output: STALE_COMMAND_OUTPUT, finished_at: nowIso() })
+    .eq("organization_id", tenantId)
+    .eq("project_id", projectId)
+    .eq("status", "running")
+    .lt("started_at", new Date(Date.now() - STALE_RUNNING_MS).toISOString());
+  if (error) logger.warn({ err: error, projectId }, "[commands] Failed to close stale running commands");
+}
+
 export async function listCommands(params: {
   tenantId: string;
   projectId: string;
@@ -76,6 +99,8 @@ export async function listCommands(params: {
   offset?: number;
 }): Promise<{ commands: CommandResponse[]; total: number }> {
   const { tenantId, projectId, limit = 20, offset = 0 } = params;
+
+  await failStaleCommands(tenantId, projectId);
 
   const query = supabaseAdmin
     .from("commands")
