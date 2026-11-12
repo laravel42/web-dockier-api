@@ -14,14 +14,11 @@ export default function Dashboard() {
   const {
     navigate,
     projects,
-    deploys,
-    scans,
     providers,
     loading,
     error,
     reload,
-    successDeploys,
-    failedDeploys,
+    totals,
     totalFindings,
     recentDeploys,
     recentScans,
@@ -64,11 +61,11 @@ export default function Dashboard() {
       />
 
       <KpiGrid
-        projects={projects.length}
-        deploys={deploys.length}
-        successDeploys={successDeploys}
-        failedDeploys={failedDeploys}
-        scans={scans.length}
+        projects={totals.projects}
+        deploys={totals.deploys}
+        successDeploys={totals.successDeploys}
+        failedDeploys={totals.failedDeploys}
+        scans={totals.scans}
         totalFindings={totalFindings}
         showDeploys={canViewDeploys}
       />

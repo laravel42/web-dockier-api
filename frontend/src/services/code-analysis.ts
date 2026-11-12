@@ -1,13 +1,13 @@
 import { request } from "./request";
 import { buildQuery } from "./query";
-import type { ScanSummary, Scan, Finding, SecurityFindingCounts } from "../types";
+import type { ScanSummary, Scan, Finding, SecurityFindingCounts, PaginationMeta } from "../types";
 
 export const codeAnalysisApi = {
   createScan: (data: { projectId: string; connectionId: string; repo: string; branch: string }) =>
     request<Scan>("/code-analysis/scans", { method: "POST", body: JSON.stringify(data) }),
 
   listScans: (projectId?: string, branch?: string) =>
-    request<{ scans: Scan[] }>(`/code-analysis/scans${buildQuery({ projectId, branch })}`),
+    request<{ scans: Scan[]; pagination: PaginationMeta }>(`/code-analysis/scans${buildQuery({ projectId, branch })}`),
 
   getScan: (scanId: string) =>
     request<Scan>(`/code-analysis/scans/${scanId}`),
