@@ -367,3 +367,28 @@ export async function paginatedRows<TRow, E extends Error>(
 
   return { rows, count };
 }
+
+/** Rows asked for per request by {@link selectAllRows}: Supabase's default `max_rows`. */
+const SELECT_ALL_PAGE = 1000;
+
+/**
+ * Every row a query matches. PostgREST answers at most `max_rows` (1000) rows per
+ * request and reports no error past that, so an unpaged select that the caller
+ * then iterates or counts silently loses the rest.
+ *
+ * `buildQuery` is called once per page and must return a fresh query with a TOTAL
+ * order (end with a unique column), or rows can repeat or be skipped between pages.
+ * Stops on an empty page rather than a short one, so a server cap lower than the
+ * page size still reads everything. Returns the first error, like a single select.
+ */
+export async function selectAllRows<TRow>(
+  buildQuery: () => { range: (from: number, to: number) => PromiseLike<{ data: TRow[] | null; error: PostgrestError | null }> },
+): Promise<{ data: TRow[]; error: PostgrestError | null }> {
+  const all: TRow[] = [];
+  for (;;) {
+    const { data, error } = await buildQuery().range(all.length, all.length + SELECT_ALL_PAGE - 1);
+    if (error) return { data: all, error };
+    if (!data || data.length === 0) return { data: all, error: null };
+    all.push(...data);
+  }
+}

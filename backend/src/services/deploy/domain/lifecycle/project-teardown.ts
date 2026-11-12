@@ -9,6 +9,7 @@
  */
 
 import { supabaseAdmin } from "../../../../shared/supabase/client.js";
+import { selectAllRows } from "../../../../shared/supabase/query.js";
 import { logger } from "../../../../shared/logger.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { env } from "../../../../shared/config.js";
@@ -63,13 +64,18 @@ interface DeploymentStackRow {
  * deduped by `(provider, stackName)`, keeping the most recent occurrence.
  */
 export async function resolveProjectStacks(projectId: string, tenantId: string): Promise<ResolvedStack[]> {
-  const { data, error } = await supabaseAdmin
-    .from("deployments")
-    .select("id,provider_id,deploy_strategy,repo,tofu_script,infra,status")
-    .eq("project_id", projectId)
-    .eq("organization_id", tenantId)
-    .neq("status", "destroyed")
-    .order("created_at", { ascending: false });
+  // Every row, not the first 1000: a stack seen only in older deployments would
+  // otherwise never be torn down and would keep billing on the user's cloud account.
+  const { data, error } = await selectAllRows(() =>
+    supabaseAdmin
+      .from("deployments")
+      .select("id,provider_id,deploy_strategy,repo,tofu_script,infra,status")
+      .eq("project_id", projectId)
+      .eq("organization_id", tenantId)
+      .neq("status", "destroyed")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true }),
+  );
 
   if (error) {
     logger.error({ err: error, projectId }, "[teardown] Failed to query deployments for stack resolution");

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
+import { selectAllRows, throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { CodeAnalysisError } from "./scans.js";
 
 export type OverrideTool = "semgrep" | "sonarqube";
@@ -13,11 +13,16 @@ export interface RuleOverride {
 
 export async function listRuleOverrides(tenantId: string, tool: OverrideTool): Promise<RuleOverride[]> {
   const table = tool === "semgrep" ? "opengrep_rules" : "sonarqube_rules";
-  const { data, error } = await supabaseAdmin
-    .from(table)
-    .select("id,rule_id,enabled")
-    .eq("organization_id", tenantId)
-    .order("rule_id", { ascending: true });
+  // All of them: the scan worker builds its disabled-rule set from this list, so an
+  // override past the 1000-row cap would let a disabled rule run again. rule_id is
+  // unique per organization (the upsert's conflict key), so the order is total.
+  const { data, error } = await selectAllRows(() =>
+    supabaseAdmin
+      .from(table)
+      .select("id,rule_id,enabled")
+      .eq("organization_id", tenantId)
+      .order("rule_id", { ascending: true }),
+  );
   const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to list rule overrides" });
   return rows.map((row) => ({
     id: row.id,
