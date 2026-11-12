@@ -46,50 +46,54 @@ function emptyCounts(): SecurityFindingCounts {
   };
 }
 
-function bumpCount(bucket: ProviderSeverityCounts, severity: string): void {
-  bucket.total++;
-  if (severity === "error") bucket.errors++;
-  else if (severity === "warning") bucket.warnings++;
-  else if (severity === "info") bucket.infos++;
+function bumpCount(bucket: ProviderSeverityCounts, severity: string, n: number): void {
+  bucket.total += n;
+  if (severity === "error") bucket.errors += n;
+  else if (severity === "warning") bucket.warnings += n;
+  else if (severity === "info") bucket.infos += n;
 }
 
-function applyFindingRow(
+function applyFindingGroup(
   counts: SecurityFindingCounts,
-  row: { severity: string; rule_id: string },
+  group: { severity: string; rule_id: string; n: number },
 ): void {
-  bumpCount(counts, row.severity);
-  const provider = findingProvider(row.rule_id);
-  counts[provider]++;
-  bumpCount(counts.byProvider[provider], row.severity);
+  bumpCount(counts, group.severity, group.n);
+  const provider = findingProvider(group.rule_id);
+  counts[provider] += group.n;
+  bumpCount(counts.byProvider[provider], group.severity, group.n);
 }
 
-/** Actionable security findings: not LLM-suppressed, not sensitive-data. */
-function restrictToActionableFindings<T extends { eq: (column: "suppressed_by_llm", value: boolean) => T; not: (column: "rule_id", op: string, value: string) => T }>(
-  query: T,
-): T {
-  return query.eq("suppressed_by_llm", false).not("rule_id", "like", "sensitive-data.%");
+interface ScanFindingTally {
+  counts: SecurityFindingCounts;
+  distinctFiles: number;
+}
+
+/**
+ * Actionable findings (not LLM-suppressed, not sensitive-data) counted in the database
+ * by `actionable_finding_counts` (migration 0086). Tallying the rows here instead hit
+ * PostgREST's 1000-row cap and silently reported a scan with findings as clean.
+ * A scan with no actionable findings is absent from the map.
+ */
+async function tallyActionableFindings(scanIds: string[]): Promise<Map<string, ScanFindingTally>> {
+  const result = new Map<string, ScanFindingTally>();
+  if (scanIds.length === 0) return result;
+
+  const { data, error } = await supabaseAdmin.rpc("actionable_finding_counts", { p_scan_ids: scanIds });
+  const rows = unwrapList(data, error, CodeAnalysisError, { internalMsg: "Failed to count findings" });
+  for (const row of rows) {
+    const counts = emptyCounts();
+    for (const group of row.counts) applyFindingGroup(counts, { ...group, n: Number(group.n) });
+    result.set(row.scan_id, { counts, distinctFiles: Number(row.distinct_files) });
+  }
+  return result;
 }
 
 export async function getSecurityFindingCounts(scanId: string): Promise<SecurityFindingCounts> {
-  const { data, error } = await restrictToActionableFindings(
-    supabaseAdmin.from("findings").select("severity,rule_id").eq("scan_id", scanId),
-  );
-  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to count findings" });
-
-  const counts = emptyCounts();
-  for (const row of data ?? []) {
-    applyFindingRow(counts, row);
-  }
-  return counts;
+  return (await tallyActionableFindings([scanId])).get(scanId)?.counts ?? emptyCounts();
 }
 
 export async function countDistinctFindingFiles(scanId: string): Promise<number> {
-  const { data, error } = await restrictToActionableFindings(
-    supabaseAdmin.from("findings").select("file_path").eq("scan_id", scanId),
-  );
-  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to count finding files" });
-
-  return new Set((data ?? []).map((row) => row.file_path).filter(Boolean)).size;
+  return (await tallyActionableFindings([scanId])).get(scanId)?.distinctFiles ?? 0;
 }
 
 export type ScanSeveritySummary = Pick<SecurityFindingCounts, "total" | "errors" | "warnings" | "infos">;
@@ -98,26 +102,10 @@ export type ScanSeveritySummary = Pick<SecurityFindingCounts, "total" | "errors"
 export async function getSecurityFindingCountsForScans(
   scanIds: string[],
 ): Promise<Map<string, ScanSeveritySummary>> {
+  const tallies = await tallyActionableFindings(scanIds);
   const result = new Map<string, ScanSeveritySummary>();
-  if (scanIds.length === 0) return result;
-
-  const { data, error } = await restrictToActionableFindings(
-    supabaseAdmin.from("findings").select("scan_id,severity,rule_id").in("scan_id", scanIds),
-  );
-  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to count findings" });
-
-  const byScan = new Map<string, SecurityFindingCounts>();
-  for (const row of data ?? []) {
-    let counts = byScan.get(row.scan_id);
-    if (!counts) {
-      counts = emptyCounts();
-      byScan.set(row.scan_id, counts);
-    }
-    applyFindingRow(counts, row);
-  }
-
   for (const scanId of scanIds) {
-    const counts = byScan.get(scanId) ?? emptyCounts();
+    const counts = tallies.get(scanId)?.counts ?? emptyCounts();
     result.set(scanId, {
       total: counts.total,
       errors: counts.errors,

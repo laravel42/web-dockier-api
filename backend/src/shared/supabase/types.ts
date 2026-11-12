@@ -837,6 +837,14 @@ export type Database = {
           created_at: string;
         }[];
       };
+      actionable_finding_counts: {
+        Args: { p_scan_ids: string[] };
+        Returns: {
+          scan_id: string;
+          counts: { rule_id: string; severity: string; n: number }[];
+          distinct_files: number;
+        }[];
+      };
       latest_scans_for_projects: {
         Args: { p_organization_id: string; p_project_ids: string[] };
         Returns: {
