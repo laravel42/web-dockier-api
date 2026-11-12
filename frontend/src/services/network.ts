@@ -57,9 +57,11 @@ export const networkApi = {
     ),
 
   // Apply rules to server
+  // The apply waits for the server (SSM polls up to ~60 s, plus target lookup), so the
+  // 30 s default reported a timeout while the rules were still being applied.
   apply: (projectId: string) =>
     request<{ success: boolean; message: string; generatedConfig?: string }>(
       `/projects/${encodeURIComponent(projectId)}/network/apply`,
-      { method: "POST" },
+      { method: "POST", timeout: 120_000 },
     ),
 };
