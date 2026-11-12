@@ -33,6 +33,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
             <button
               key={env}
               type="button"
+              aria-pressed={state.environment === env}
               onClick={() => {
                 const newPlans = getPlans(state.selectedProvider, env, state.servicesModes, templateId);
                 // Default to Standard plan (index 0 if Starter is filtered, index 1 otherwise)
@@ -61,6 +62,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
               <button
                 key={r.id}
                 type="button"
+                aria-pressed={state.tofuRegion === r.id}
                 onClick={() => onRegionChange(r.id)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-xs transition-all ${
                   state.tofuRegion === r.id
@@ -90,6 +92,7 @@ export default function StepEnvironment({ state, templateId, onChange, onRegionC
               <button
                 key={plan.tier}
                 type="button"
+                aria-pressed={selected}
                 onClick={() => onChange(state.environment, i)}
                 className={`flex flex-col p-4 rounded-xl border-2 text-left transition-all ${
                   selected ? "border-primary-500 bg-primary/10 shadow-(--shadow-xs)" : "border-border bg-card hover:border-primary-300"

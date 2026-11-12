@@ -194,7 +194,7 @@ export default function ComposeServices({
       {routable.length >= 3 && state.selectedPlan === 0 && (
         <p className="text-xs text-warning-ink">
           This stack runs {routable.length} containers on one machine. The smallest plan may not have
-          enough memory — consider a larger one below.
+          enough memory — consider a larger one in the Plan step.
         </p>
       )}
 

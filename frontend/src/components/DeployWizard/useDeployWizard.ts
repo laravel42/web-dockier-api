@@ -24,7 +24,7 @@ import { getErrorMessage } from "@/utils/errors";
  */
 function normalizeEnvVars(envVars: unknown): string[] {
   if (Array.isArray(envVars)) return envVars.filter((v): v is string => typeof v === "string");
-  if (envVars && typeof envVars === "object" && !Array.isArray(envVars)) {
+  if (envVars && typeof envVars === "object") {
     return Object.entries(envVars as Record<string, unknown>).map(([k, v]) => `${k}=${v ?? ""}`);
   }
   return [];
@@ -59,7 +59,6 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
   const { start: startStandardDeploy, cleanup: cleanupStandardDeploy } = useStandardDeploy();
 
   const prevOpenRef = useRef(false);
-  const configLoadedRef = useRef(false);
   const analysisSyncedKeyRef = useRef<string | null>(null);
   /** Compose path already used to pre-select the Docker Compose target. */
   const composeDefaultedForRef = useRef<string | null>(null);
@@ -74,7 +73,6 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     prevOpenRef.current = open;
 
     if (justClosed) {
-      configLoadedRef.current = false;
       analysisSyncedKeyRef.current = null;
       composeDefaultedForRef.current = null;
       cleanupStandardDeployRef.current();
@@ -85,7 +83,6 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
 
     setStep(STEP.PROVIDER);
     setDeployError("");
-    configLoadedRef.current = false;
     analysisSyncedKeyRef.current = null;
 
     const defaultProvider = getDefaultProviderSelection(providers);
@@ -104,13 +101,6 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
       return { ...prev, ...defaultProvider };
     });
   }, [open, providers]);
-
-  // ─── Load saved post-deploy commands (once per open) ─────────────
-
-  useEffect(() => {
-    if (!open || !project.id || configLoadedRef.current) return;
-    configLoadedRef.current = true;
-  }, [open, project.id]);
 
   // ─── Sync Analysis ───────────────────────────────────────────────
 
@@ -309,7 +299,6 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
   // ─── Derived State ───────────────────────────────────────────────
 
   const isDeploying = ["pending", "building", "deploying"].includes(state.deployStatus);
-  const isFinished = state.deployStatus === "success" || state.deployStatus === "failed" || state.deployStatus === "cancelled";
 
   return {
     step,
@@ -323,6 +312,5 @@ export function useDeployWizard({ open, project, analysis, analysisLoading, prov
     cancelDeploy,
     cancellingDeploy,
     isDeploying,
-    isFinished,
   };
 }

@@ -49,6 +49,7 @@ export default function StepProvider({ state, providers, onChange }: {
             <button
               key={slug}
               type="button"
+              aria-pressed={selected}
               onClick={() => {
                 if (matching.length === 1) {
                   onChange(slug, matching[0].id);

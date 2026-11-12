@@ -39,7 +39,8 @@ export default function StepDeploy({ state, onClose }: { state: WizardState; onC
       {/* Overall status */}
       <div className="flex items-center gap-3">
         <span className="text-xs text-text-muted uppercase tracking-wide">Status:</span>
-        <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${
+        {/* role="status": the only progress signal a screen reader gets on this step. */}
+        <span role="status" className={`px-2.5 py-1 rounded-md text-xs font-medium ${
           isSuccess ? "bg-success-50 text-success-500" :
           isFailed ? "bg-danger-50 text-danger-500" :
           isCancelled ? "bg-warning-surface text-warning-ink" :
