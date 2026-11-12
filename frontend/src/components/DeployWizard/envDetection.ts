@@ -83,7 +83,7 @@ const SELF_HOSTED_PATTERNS = [
   /^::1$/,
   /^\[::1\]$/,
   /^host\.docker\.internal$/i,
-  /^172\.\d+\.\d+\.\d+$/,  // Docker network
+  /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/, // 172.16.0.0/12 (Docker networks); the rest of 172.x is public
   /^10\.\d+\.\d+\.\d+$/,   // Private network
   /^192\.168\.\d+\.\d+$/,  // Private network
   /^mysql$/i,               // Docker service name
@@ -91,6 +91,10 @@ const SELF_HOSTED_PATTERNS = [
   /^redis$/i,               // Docker service name
   /^mariadb$/i,             // Docker service name
 ];
+
+/** Keys that NAME a driver or database rather than point at a server. "mysql" or
+ *  "redis" here says which engine, not that one is running somewhere external. */
+const DRIVER_SELECTOR_KEYS = /^(DB_CONNECTION|DB_DATABASE|CACHE_DRIVER|CACHE_STORE|QUEUE_CONNECTION|QUEUE_DRIVER|FILESYSTEM_DISK|MAIL_MAILER)$/i;
 
 /** Display names for DB connection drivers */
 const DB_DRIVER_NAMES: Record<string, string> = {
@@ -173,10 +177,12 @@ function isSelfHostedValue(value: string): boolean {
     if (host.includes("://")) {
       host = new URL(host).hostname;
     } else {
-      // Strip port from host:port (but handle IPv6 brackets like [::1]:5432)
+      // Strip port from host:port and [::1]:5432. A bare IPv6 address (::1) has
+      // several colons and no brackets, so its last group is not a port.
       const lastColon = host.lastIndexOf(":");
       const lastBracket = host.lastIndexOf("]");
-      if (lastColon > lastBracket && lastColon !== -1) {
+      const isHostPort = lastBracket !== -1 || host.indexOf(":") === lastColon;
+      if (lastColon > lastBracket && lastColon !== -1 && isHostPort) {
         host = host.slice(0, lastColon);
       }
     }
@@ -306,7 +312,8 @@ export function detectServiceModes(
 
     // Key exists but value is empty/placeholder or doesn't match a known provider
     const hasRealValue = matchingVars.some(
-      (ev) => ev.value && ev.value !== "null" && ev.value !== "your-value-here" && ev.value.length > 3
+      (ev) => !DRIVER_SELECTOR_KEYS.test(ev.name)
+        && ev.value && ev.value !== "null" && ev.value !== "your-value-here" && ev.value.length > 3
     );
 
     if (hasRealValue) {
