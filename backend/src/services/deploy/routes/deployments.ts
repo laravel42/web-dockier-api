@@ -101,6 +101,7 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
         querystring: paginationQuerySchema.extend({
           providerId: z.uuid().optional(),
           projectId: z.uuid().optional(),
+          status: deploymentStatusSchema.optional(),
         }),
         response: {
           200: z.object({
@@ -116,6 +117,7 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
       const result = await listDeployments(auth.tenantId, {
         providerId: request.query.providerId,
         projectId: request.query.projectId,
+        status: request.query.status,
         limit,
         offset,
       });

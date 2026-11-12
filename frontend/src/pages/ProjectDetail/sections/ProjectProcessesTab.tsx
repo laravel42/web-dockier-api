@@ -787,12 +787,8 @@ export default function ProjectProcessesTab({ project }: Props) {
   // Check if the project has an active deployment
   useEffect(() => {
     if (!project.id || !canView) return;
-    // Newest first with no status filter: a small page of recent failures hid an older live deploy.
-    // shortcut: 100 is the API max, upgrade when the API gains a status filter.
-    deployApi.listDeployments({ projectId: project.id, limit: 100 })
-      .then((res) => {
-        setHasDeployment(res.deployments.some((d) => d.status === "success"));
-      })
+    deployApi.listDeployments({ projectId: project.id, status: "success", limit: 1 })
+      .then((res) => setHasDeployment(res.pagination.total > 0))
       .catch(() => setHasDeployment(false));
   }, [project.id, canView]);
 

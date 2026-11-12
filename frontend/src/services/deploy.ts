@@ -1,6 +1,6 @@
 import { request } from "./request";
 import { buildQuery } from "./query";
-import type { Deployment, Provider, PaginationMeta } from "../types";
+import type { Deployment, DeploymentStatus, Provider, PaginationMeta } from "../types";
 
 // Credential fields differ per provider, so the create/update payloads are a
 // discriminated union on `provider`, mirroring the backend contract.
@@ -50,6 +50,7 @@ export const deployApi = {
   listDeployments: (params?: {
     providerId?: string;
     projectId?: string;
+    status?: DeploymentStatus;
     limit?: number;
     offset?: number;
   }) =>

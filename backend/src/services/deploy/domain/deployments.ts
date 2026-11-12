@@ -13,6 +13,7 @@ import { getProviderCredentialsSafe, hasUsableCredential } from "../../../lib/pr
 export interface ListDeploymentsFilters {
   providerId?: string;
   projectId?: string;
+  status?: DeploymentStatus;
   limit?: number;
   offset?: number;
 }
@@ -36,6 +37,7 @@ export async function listDeployments(
 
   if (filters?.providerId) query = query.eq("provider_id", filters.providerId);
   if (filters?.projectId) query = query.eq("project_id", filters.projectId);
+  if (filters?.status) query = query.eq("status", filters.status);
 
   const result = await paginatedQuery(query, { limit, offset }, DeployError, {
     internalMsg: "Failed to list deployments",

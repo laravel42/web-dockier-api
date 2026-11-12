@@ -440,6 +440,30 @@ describe("GET /deploy/deployments", () => {
       offset: 0,
     });
   });
+
+  it("filters by status, and rejects an unknown one", async () => {
+    setupPermissionMocks({ permissions: [PERMISSIONS.DEPLOY_VIEW] });
+    mockListDeployments.mockResolvedValue({ deployments: [], total: 0 });
+
+    const ok = await app.inject({
+      method: "GET",
+      url: "/deploy/deployments?status=success&limit=1",
+      headers: { authorization: authHeader() },
+    });
+
+    expect(ok.statusCode).toBe(200);
+    expect(mockListDeployments).toHaveBeenCalledWith(TEST_TENANT_ID, expect.objectContaining({
+      status: "success",
+      limit: 1,
+    }));
+
+    const bad = await app.inject({
+      method: "GET",
+      url: "/deploy/deployments?status=nope",
+      headers: { authorization: authHeader() },
+    });
+    expect(bad.statusCode).toBe(400);
+  });
 });
 
 describe("GET /deploy/deployments/:deploymentId", () => {
