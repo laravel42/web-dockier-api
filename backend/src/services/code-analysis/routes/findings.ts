@@ -5,7 +5,7 @@ import { getAuth } from "../../../shared/auth/auth.js";
 import { findingSchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { paginationQuerySchema } from "../../../shared/schemas/responses.js";
-import { listFindings } from "../domain/findings.js";
+import { getOpenFindingsTotal, listFindings } from "../domain/findings.js";
 
 /** Shared by the top-level counts and every per-provider bucket. */
 const providerSeverityCountsSchema = z.object({
@@ -17,6 +17,19 @@ const providerSeverityCountsSchema = z.object({
 
 export async function registerFindingRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+
+  typed.get(
+    "/code-analysis/findings/open-total",
+    {
+      preHandler: app.requirePermission(PERMISSIONS.SCAN_VIEW),
+      schema: {
+        tags: ["code-analysis"],
+        summary: "Open findings: each project's latest completed scan, summed",
+        response: { 200: z.object({ total: z.number().int().nonnegative() }) },
+      },
+    },
+    async (request) => ({ total: await getOpenFindingsTotal(getAuth(request).tenantId) }),
+  );
 
   typed.get(
     "/code-analysis/scans/:scanId/findings",

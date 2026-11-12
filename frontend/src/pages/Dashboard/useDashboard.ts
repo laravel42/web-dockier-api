@@ -14,11 +14,11 @@ interface DashboardData {
   /** Projects of the recent rows that are not on the first page of `projects`. */
   extraProjects: Project[];
   /** Tenant-wide totals. The lists above are only the newest page (20 by default). */
-  totals: { projects: number; deploys: number; successDeploys: number; failedDeploys: number; scans: number };
+  totals: { projects: number; deploys: number; successDeploys: number; failedDeploys: number; scans: number; openFindings: number };
 }
 
 async function fetchDashboardData(): Promise<DashboardData> {
-  const [projRes, depRes, scanRes, provRes, successRes, failedRes] = await Promise.all([
+  const [projRes, depRes, scanRes, provRes, successRes, failedRes, openRes] = await Promise.all([
     projectsApi.list(),
     deployApi.listDeployments(),
     codeAnalysisApi.listScans(),
@@ -26,6 +26,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     // limit 1: only `pagination.total` is read.
     deployApi.listDeployments({ status: "success", limit: 1 }),
     deployApi.listDeployments({ status: "failed", limit: 1 }),
+    codeAnalysisApi.openFindingsTotal(),
   ]);
 
   // The project list is only its first page (50), so a recent deploy or scan can belong
@@ -53,6 +54,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
       successDeploys: successRes.pagination.total,
       failedDeploys: failedRes.pagination.total,
       scans: scanRes.pagination.total,
+      openFindings: openRes.total,
     },
   };
 }
@@ -66,9 +68,8 @@ export function useDashboard() {
   const scans = data?.scans ?? [];
   const providers = data?.providers ?? [];
 
-  const totals = data?.totals ?? { projects: 0, deploys: 0, successDeploys: 0, failedDeploys: 0, scans: 0 };
-  // shortcut: summed over the newest page of scans only, upgrade when the API exposes a findings total.
-  const totalFindings = scans.reduce((sum, s) => sum + (s.summary?.totalFindings || 0), 0);
+  const totals = data?.totals ?? { projects: 0, deploys: 0, successDeploys: 0, failedDeploys: 0, scans: 0, openFindings: 0 };
+  const totalFindings = totals.openFindings;
   const recentDeploys = deploys.slice(0, RECENT_ROWS);
   const recentScans = scans.slice(0, RECENT_ROWS);
 

@@ -44,7 +44,7 @@ export default function KpiGrid({
     {
       label: "Findings",
       value: totalFindings,
-      delta: totalFindings > 0 ? "In recent scans" : "No issues detected",
+      delta: totalFindings > 0 ? "Open in latest scans" : "No issues detected",
       icon: <TriangleAlertIcon className={iconCls} />,
     },
   ];

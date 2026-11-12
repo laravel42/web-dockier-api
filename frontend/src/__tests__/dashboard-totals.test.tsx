@@ -12,7 +12,10 @@ const listDeployments = vi.hoisted(() => vi.fn());
 const getProject = vi.hoisted(() => vi.fn());
 vi.mock("@/services/api", () => ({
   projectsApi: { list: () => Promise.resolve(page("projects", [{ id: "p1" }], 42)), get: getProject },
-  codeAnalysisApi: { listScans: () => Promise.resolve(page("scans", [], 77)) },
+  codeAnalysisApi: {
+    listScans: () => Promise.resolve(page("scans", [{ id: "s1", summary: { totalFindings: 5 } }], 77)),
+    openFindingsTotal: () => Promise.resolve({ total: 733 }),
+  },
   deployApi: { listDeployments, listProviders: () => Promise.resolve({ providers: [] }) },
 }));
 
@@ -27,7 +30,9 @@ describe("useDashboard totals", () => {
     const { result } = renderHook(() => useDashboard());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.totals).toEqual({ projects: 42, deploys: 50, successDeploys: 30, failedDeploys: 9, scans: 77 });
+    expect(result.current.totals).toEqual({ projects: 42, deploys: 50, successDeploys: 30, failedDeploys: 9, scans: 77, openFindings: 733 });
+    // From the server's per-project total, not a sum over the scans on the page (5).
+    expect(result.current.totalFindings).toBe(733);
     expect(listDeployments).toHaveBeenCalledWith({ status: "success", limit: 1 });
   });
 

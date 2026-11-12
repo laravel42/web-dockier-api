@@ -116,6 +116,17 @@ export async function getSecurityFindingCountsForScans(
   return result;
 }
 
+/**
+ * Actionable findings in each project's latest completed scan, summed over the
+ * tenant (`open_findings_total`, migration 0087): what is open right now, with a
+ * re-scanned finding counted once.
+ */
+export async function getOpenFindingsTotal(tenantId: string): Promise<number> {
+  const { data, error } = await supabaseAdmin.rpc("open_findings_total", { p_organization_id: tenantId });
+  throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to count open findings" });
+  return Number(data ?? 0);
+}
+
 export const FINDINGS_PAGE_SIZE_DEFAULT = 40;
 export const FINDINGS_PAGE_SIZE_MAX = 100;
 

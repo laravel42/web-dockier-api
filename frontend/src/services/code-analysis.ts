@@ -9,6 +9,8 @@ export const codeAnalysisApi = {
   listScans: (projectId?: string, branch?: string) =>
     request<{ scans: Scan[]; pagination: PaginationMeta }>(`/code-analysis/scans${buildQuery({ projectId, branch })}`),
 
+  /** Actionable findings in each project's latest completed scan, summed over the tenant. */
+  openFindingsTotal: () => request<{ total: number }>("/code-analysis/findings/open-total"),
   /** Per project: newest scan, newest completed scan and scan count, in one request. */
   latestScans: (projectIds: string[]) =>
     request<{ projects: { projectId: string; scanCount: number; latest: Scan | null; latestCompleted: Scan | null }[] }>(

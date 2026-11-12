@@ -845,6 +845,10 @@ export type Database = {
           distinct_files: number;
         }[];
       };
+      open_findings_total: {
+        Args: { p_organization_id: string };
+        Returns: number;
+      };
       latest_scans_for_projects: {
         Args: { p_organization_id: string; p_project_ids: string[] };
         Returns: {
