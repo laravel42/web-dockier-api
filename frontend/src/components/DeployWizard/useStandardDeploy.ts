@@ -20,8 +20,6 @@ interface StandardDeployParams {
     connectionId: string;
     sourceType?: string;
     template?: string;
-    /** Merged with the compose choices before saving, so nothing else is lost. */
-    settings?: Record<string, unknown>;
   };
   analysis: RepoAnalysis | null;
   repo: string;
@@ -33,10 +31,13 @@ interface StandardDeployParams {
 
 export function useStandardDeploy() {
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountedRef = useRef(true);
+  /** Bumped by every start and cleanup. A run may only write state while it is the
+   *  current one: a status request in flight when the user cancelled used to land
+   *  afterwards and put the wizard back to "deploying", with no poll left to fix it. */
+  const runRef = useRef(0);
 
   const cleanup = useCallback(() => {
-    mountedRef.current = false;
+    runRef.current += 1;
     if (pollRef.current) {
       clearTimeout(pollRef.current);
       pollRef.current = null;
@@ -53,16 +54,17 @@ export function useStandardDeploy() {
     onError,
     onComplete,
   }: StandardDeployParams) => {
-    mountedRef.current = true;
+    const run = ++runRef.current;
+    const isCurrent = () => run === runRef.current;
 
     // Persist the compose choices BEFORE creating the deployment: the pipeline
     // reads them from project settings rather than the deploy request, so they
     // survive a redeploy and a rollback and stay editable afterwards. Creating
     // the deployment first risks the worker picking it up before they land.
     if (state.deployStrategy === "compose" && state.compose.path) {
+      // The backend merges `settings` into the stored ones, so only compose is sent.
       await projectsApi.update(project.id, {
         settings: {
-          ...project.settings,
           compose: {
             path: state.compose.path,
             entryService: state.compose.entryService,
@@ -94,13 +96,17 @@ export function useStandardDeploy() {
         : undefined,
     });
 
+    // Closed (or reopened) while creating: the deployment runs anyway, but it is no
+    // longer this wizard's to follow.
+    if (!isCurrent()) return;
     onStateUpdate(prev => ({ ...prev, deploymentId: deployment.id }));
 
     // Poll deployment status
     const poll = async () => {
-      if (!mountedRef.current) return;
+      if (!isCurrent()) return;
       try {
         const d = await deployApi.getDeployment(deployment.id);
+        if (!isCurrent()) return;
         onStateUpdate(prev => ({
           ...prev,
           deployStatus: d.status,
@@ -119,12 +125,12 @@ export function useStandardDeploy() {
         pollRef.current = setTimeout(poll, 1500);
       } catch (err) {
         console.warn("[deploy] Status poll error:", err);
-        if (mountedRef.current) pollRef.current = setTimeout(poll, 2000);
+        if (isCurrent()) pollRef.current = setTimeout(poll, 2000);
       }
     };
 
     pollRef.current = setTimeout(poll, 1000);
   }, []);
 
-  return { start, cleanup, pollRef };
+  return { start, cleanup };
 }
