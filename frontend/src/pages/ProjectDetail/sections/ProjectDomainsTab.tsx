@@ -626,14 +626,12 @@ function CertificatesSection({
 // ─── Create Certificate Modal ───
 
 /**
- * The certificate types a client may request.
+ * Requests a Let's Encrypt certificate, the only type a client can create.
  *
- * `acm` and `gcp_managed` are deliberately excluded: they are issued and
- * renewed by the cloud provider for static (CDN) deployments, so there is
- * nothing to create by hand.
+ * "Existing certificate" and "Clone certificate" used to be offered here with no
+ * upload or source behind them: the server stored an "active" certificate that
+ * did not exist. `acm` and `gcp_managed` are issued by the cloud provider.
  */
-type ClientCertificateType = "lets_encrypt" | "custom" | "clone";
-
 function CreateCertificateModal({
   projectId,
   onClose,
@@ -644,16 +642,9 @@ function CreateCertificateModal({
   onCreated: () => void;
 }) {
   const fid = useId();
-  const [type, setType] = useState<ClientCertificateType>("lets_encrypt");
   const [domainName, setDomainName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
-  const typeOptions: Array<{ value: ClientCertificateType; label: string; description: string }> = [
-    { value: "lets_encrypt", label: "Let's Encrypt", description: "Free automated certificate" },
-    { value: "custom", label: "Existing certificate", description: "Upload your own certificate" },
-    { value: "clone", label: "Clone certificate", description: "Clone from another site" },
-  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -662,7 +653,7 @@ function CreateCertificateModal({
     setError("");
     try {
       await domainsApi.createCertificate(projectId, {
-        type,
+        type: "lets_encrypt",
         domainName: domainName.trim(),
       });
       onCreated();
@@ -675,29 +666,11 @@ function CreateCertificateModal({
 
   return (
     <Modal open onClose={onClose} title="New SSL certificate">
-      <p className="text-xs text-text-muted mb-4">Add a certificate to your site.</p>
+      <p className="text-xs text-text-muted mb-4">
+        Request a free Let&apos;s Encrypt certificate for one of this project&apos;s domains. It is
+        issued once the domain&apos;s DNS points at your server.
+      </p>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="rounded-lg border border-border divide-y divide-border">
-          {typeOptions.map((opt) => (
-            <label
-              key={opt.value}
-              className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-card/60 transition-colors"
-            >
-              <input
-                type="radio"
-                name="cert-type"
-                value={opt.value}
-                checked={type === opt.value}
-                onChange={() => setType(opt.value)}
-                className="accent-primary-500"
-              />
-              <div>
-                <span className="text-sm font-medium text-text">{opt.label}</span>
-                <span className="ml-2 text-xs text-text-muted">{opt.description}</span>
-              </div>
-            </label>
-          ))}
-        </div>
 
         <div>
           <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-domain`}>Domain</label>

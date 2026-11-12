@@ -257,23 +257,22 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
+      const validated = validateDomainName(request.body.domainName);
+      if (!validated.ok) {
+        throw new DomainsError(validated.message, "bad_request");
+      }
       const cert = await createCertificate({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,
         type: request.body.type,
-        domainName: request.body.domainName,
+        domainName: validated.name,
       });
-      // For Let's Encrypt, trigger certificate issuance in background
-      if (request.body.type === "lets_encrypt") {
-        await enqueueCertificateIssue({
-          tenantId: auth.tenantId,
-          projectId: request.params.projectId,
-          certificateId: cert.id,
-          domainName: request.body.domainName,
-        });
-      } else {
-        await enqueueDomainApply(auth.tenantId, request.params.projectId);
-      }
+      await enqueueCertificateIssue({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        certificateId: cert.id,
+        domainName: validated.name,
+      });
       return cert;
     },
   );

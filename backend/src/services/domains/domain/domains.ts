@@ -232,29 +232,35 @@ export async function listCertificates(params: {
 export async function createCertificate(params: {
   tenantId: string;
   projectId: string;
-  type: "lets_encrypt" | "custom" | "clone";
+  type: "lets_encrypt";
+  /** Already normalized by validateDomainName, the form domains are stored in. */
   domainName: string;
 }): Promise<SslCertificateResponse> {
   const { tenantId, projectId, type, domainName } = params;
 
-  // Try to link to existing domain
-  const { data: domainRow } = await supabaseAdmin
+  // The domain must be one this project serves: certbot runs on the project's
+  // server, and a certificate for a name nginx does not serve can never be used.
+  const { data: domainRow, error: domainError } = await supabaseAdmin
     .from("domains")
     .select("id")
     .eq("organization_id", tenantId)
     .eq("project_id", projectId)
     .eq("name", domainName)
     .maybeSingle();
+  throwOnError(domainError, DomainsError, { internalMsg: "Failed to look up the domain" });
+  if (!domainRow) {
+    throw new DomainsError(`Add "${domainName}" to this project's domains before requesting a certificate for it.`, "bad_request");
+  }
 
   const { data, error } = await supabaseAdmin
     .from("ssl_certificates")
     .insert({
       organization_id: tenantId,
       project_id: projectId,
-      domain_id: domainRow?.id ?? null,
+      domain_id: domainRow.id,
       type,
       domain_name: domainName,
-      status: type === "lets_encrypt" ? "pending" : "active",
+      status: "pending",
     })
     .select()
     .single();

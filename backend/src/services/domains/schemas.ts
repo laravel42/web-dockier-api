@@ -88,13 +88,15 @@ export const sslCertificateSchema = z.object({
 });
 
 export const createCertificateBodySchema = z.object({
-  // Deliberately NOT widened: the two platform-owned types are issued by the
-  // provider, so a client must not be able to create one.
-  type: z.enum(["lets_encrypt", "custom", "clone"]),
-  domainName: z.string().min(1).max(253).regex(
-    /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/,
-    "Invalid domain name format",
-  ),
+  // Only Let's Encrypt can be created. "custom" and "clone" had no upload or
+  // source behind them: the row was stored "active" for a certificate that did
+  // not exist, which showed HTTPS as configured and, on the nginx path, pointed
+  // the config at missing files so every later domain apply failed `nginx -t`.
+  // The platform-owned types (acm, gcp_managed) are issued by the provider.
+  // Existing custom/clone rows still list through sslCertificateSchema.
+  type: z.literal("lets_encrypt"),
+  // Shape is checked by validateDomainName in the route, like a domain add.
+  domainName: z.string().min(1).max(253),
 });
 
 // ─── Response Schemas ───

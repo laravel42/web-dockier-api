@@ -75,7 +75,7 @@ export const domainsApi = {
 
   createCertificate: (
     projectId: string,
-    data: { type: "lets_encrypt" | "custom" | "clone"; domainName: string },
+    data: { type: "lets_encrypt"; domainName: string },
   ) =>
     request<SslCertificate>(
       `/projects/${encodeURIComponent(projectId)}/certificates`,
@@ -110,9 +110,11 @@ export const domainsApi = {
     ),
 
   // Apply domain config to server
+  // Waits for the server (SSM), so the 30 s default reported a timeout while the
+  // config was still being applied.
   apply: (projectId: string) =>
     request<{ success: boolean; message: string; generatedConfig?: string }>(
       `/projects/${encodeURIComponent(projectId)}/domains/apply`,
-      { method: "POST" },
+      { method: "POST", timeout: 120_000 },
     ),
 };

@@ -25,7 +25,7 @@ vi.mock("../../../../shared/supabase/client.js", () => ({
   },
 }));
 
-const { updateDomain, createDomain, DomainsError } = await import("../domains.js");
+const { updateDomain, createDomain, createCertificate, DomainsError } = await import("../domains.js");
 
 // ─── Chainable + thenable query builder ────────────────────────────
 
@@ -75,5 +75,37 @@ describe("createDomain", () => {
     await expect(
       createDomain({ tenantId: "t1", projectId: "p1", name: "ex.com" }),
     ).rejects.toThrow("Failed to check existing domains");
+  });
+});
+
+describe("createCertificate", () => {
+  it("refuses a domain this project does not serve, before storing anything", async () => {
+    // Certbot runs on the project's server; a certificate for a name nginx does
+    // not serve could never be used.
+    const lookup = qb({ data: null, error: null });
+    mockFrom.mockReturnValue(lookup);
+
+    await expect(
+      createCertificate({ tenantId: "t1", projectId: "p1", type: "lets_encrypt", domainName: "other.example.com" }),
+    ).rejects.toThrow(/Add "other.example.com" to this project's domains/);
+    expect(lookup.insert).not.toHaveBeenCalled();
+  });
+
+  it("stores a requested certificate as pending, linked to its domain", async () => {
+    const lookup = qb({ data: { id: "dom-1" }, error: null });
+    const insert = qb({
+      data: {
+        id: "c1", organization_id: "t1", project_id: "p1", domain_id: "dom-1", type: "lets_encrypt",
+        status: "pending", domain_name: "app.example.com", expires_at: null, issued_at: null,
+        created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z",
+      },
+      error: null,
+    });
+    mockFrom.mockReturnValueOnce(lookup).mockReturnValueOnce(insert);
+
+    const cert = await createCertificate({ tenantId: "t1", projectId: "p1", type: "lets_encrypt", domainName: "app.example.com" });
+
+    expect(insert.insert).toHaveBeenCalledWith(expect.objectContaining({ domain_id: "dom-1", status: "pending" }));
+    expect(cert.status).toBe("pending");
   });
 });
