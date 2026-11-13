@@ -19,6 +19,7 @@ import { getProjectDeployConfig } from "../../../../../shared/service-clients/pr
 import { getErrMsg } from "../../../../../shared/utils/error-message.js";
 import { DOKPLOY_STAGE, stageMarker } from "../../../../../lib/logging.js";
 import { type Advisory, migrationsNotConfiguredAdvisory } from "../advisories.js";
+import { restoreProcessesAfterDeploy } from "../../../../../shared/service-clients/processes.js";
 
 /**
  * Stage marker prefix for every line this stage writes. Built from the shared
@@ -231,6 +232,45 @@ function artisanSubCommand(line: string): string | null {
   // Match: (optional path)php  artisan  <subcommand>
   const m = line.match(/(?:^|\s)php\s+artisan\s+([^\s]+)/i);
   return m ? m[1].toLowerCase() : null;
+}
+
+/**
+ * Start the project's background processes and reinstall its scheduled jobs in
+ * the container this deploy just created. A deploy replaces the container, so
+ * queue workers and cron entries are otherwise gone until the user notices.
+ * The native pipeline has always done this; the Dokploy one never did.
+ *
+ * Best-effort and non-fatal, like the post-deploy commands. Waits for the new
+ * container only when there is something to restore.
+ */
+export async function stageRestoreProcesses(params: {
+  tenantId: string;
+  projectId: string;
+  log: (line: string) => Promise<void>;
+  sleep?: (ms: number) => Promise<void>;
+  readinessTimeoutMs?: number;
+}): Promise<void> {
+  const { tenantId, projectId, log } = params;
+  const sleep = params.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  try {
+    const restored = await restoreProcessesAfterDeploy({
+      tenantId,
+      projectId,
+      waitUntilReady: async () => {
+        const { target } = await resolveDokployCommandTarget(projectId);
+        return target ? waitForContainer(target, params.readinessTimeoutMs ?? 120_000, sleep, log) : false;
+      },
+    });
+    if (restored.skipped) {
+      await log(`${MARKER} Background processes and scheduled jobs were not restarted: ${restored.skipped}.`);
+    } else if (restored.processes > 0 || restored.jobs > 0) {
+      await log(
+        `${MARKER} Restarted ${restored.processes} background process(es) and reinstalled ${restored.jobs} scheduled job(s).`,
+      );
+    }
+  } catch (err) {
+    await log(`${MARKER} Skipped restarting background processes and scheduled jobs: ${getErrMsg(err)}`);
+  }
 }
 
 /**

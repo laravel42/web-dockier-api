@@ -13,6 +13,11 @@ vi.mock("../command-exec.js", () => ({
   execInDokployContainer: (...a: unknown[]) => mockExecInContainer(...a),
 }));
 
+// The same module now also restores processes (restore-processes-stage.test.ts).
+vi.mock("../../../../../shared/service-clients/processes.js", () => ({
+  restoreProcessesAfterDeploy: vi.fn(),
+}));
+
 const { stageRunPostDeploy } = await import("../stages/run-post-deploy.js");
 
 const TARGET = { serverIp: "1.2.3.4", sshPrivateKey: "k", appName: "myapp-abc" };

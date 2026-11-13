@@ -93,8 +93,10 @@ vi.mock("../stages/trigger-deploy.js", () => ({
   stageDeployWithRetry: (...args: unknown[]) => mockDeployWithRetry(...args),
 }));
 const mockRunPostDeploy = vi.fn().mockResolvedValue(undefined);
+const mockRestoreProcesses = vi.fn().mockResolvedValue(undefined);
 vi.mock("../stages/run-post-deploy.js", () => ({
   stageRunPostDeploy: (...args: unknown[]) => mockRunPostDeploy(...args),
+  stageRestoreProcesses: (...args: unknown[]) => mockRestoreProcesses(...args),
 }));
 // Runtime resolution + URL verification both reach the network; mock them so
 // this orchestration test stays offline and fast. Their logic is covered by
@@ -234,6 +236,15 @@ describe("executeDokployPipeline", () => {
     expect(typeof args.fetchBuildLog).toBe("function");
   });
 
+  it("restarts the project's processes and cron jobs in the new container, after the post-deploy commands", async () => {
+    await executeDokployPipeline(basePipelineInput);
+
+    expect(mockRestoreProcesses).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-1", projectId: "project-1" }),
+    );
+    expect(mockRunPostDeploy.mock.invocationCallOrder[0]).toBeLessThan(mockRestoreProcesses.mock.invocationCallOrder[0]);
+  });
+
   it("transitions status: pending → building → deploying → success", async () => {
     await executeDokployPipeline(basePipelineInput);
 
@@ -307,6 +318,7 @@ describe("executeDokployPipeline", () => {
     expect(mockEmitSuccess).not.toHaveBeenCalled();
     expect(mockEmitFailure).not.toHaveBeenCalled();
     expect(mockRunPostDeploy).not.toHaveBeenCalled();
+    expect(mockRestoreProcesses).not.toHaveBeenCalled();
     expect(mockVerifyDeploy).not.toHaveBeenCalled();
     // Tear Down is gated on infra_state === "live", so it must still light up.
     expect(mockMarkInfraLive).toHaveBeenCalled();

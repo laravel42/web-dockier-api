@@ -38,7 +38,7 @@ import { stageDeployWithRetry } from "./stages/trigger-deploy.js";
 import { fetchBuildLogTail } from "./stages/build-log.js";
 import { stageVerifyDeploy } from "./stages/verify-deploy.js";
 import { createAdvisoryCollector, renderAdvisories } from "./advisories.js";
-import { stageRunPostDeploy } from "./stages/run-post-deploy.js";
+import { stageRunPostDeploy, stageRestoreProcesses } from "./stages/run-post-deploy.js";
 import { revealEnv } from "../../../projects/domain/env.js";
 
 // Real builds (dependency install + framework build + image build) commonly
@@ -282,6 +282,9 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
         log,
         advise: advisories.add,
       });
+      await checkpoint();
+      // After the post-deploy commands (a migration a worker depends on runs first).
+      await stageRestoreProcesses({ tenantId, projectId, log });
       await checkpoint();
     }
 
