@@ -171,11 +171,12 @@ export async function registerBackgroundProcessRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      await deleteProcess({
-        tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-        processId: request.params.processId,
-      });
+      const { projectId, processId } = request.params;
+      // Stop it first, or it keeps running in the container with nothing left to
+      // stop it. Best-effort, like removing a job's cron entry: a deployment
+      // that is gone must not block the delete.
+      await stopProcess({ tenantId: auth.tenantId, projectId, processId }).catch(() => undefined);
+      await deleteProcess({ tenantId: auth.tenantId, projectId, processId });
       return { success: true as const };
     },
   );

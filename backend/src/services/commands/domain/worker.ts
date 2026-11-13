@@ -20,7 +20,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { nowIso } from "../../../shared/utils/time.js";
-import { executeCommand, type ExecutionTarget } from "./executor.js";
+import { executeCommand, type ExecutionTarget, type ExecutionResult } from "./executor.js";
 import { deriveContainerName, deriveRepoName, stackNameFor } from "../../../lib/naming.js";
 import { getProviderCredentialsSafe, toAwsCredentials, type ProviderCredential } from "../../../lib/provider-credentials.js";
 import { getActiveDeployment } from "../../../shared/service-clients/deployments.js";
@@ -375,6 +375,40 @@ function inferAwsRegionFromUrl(url: string): string | null {
   return null;
 }
 
+// ─── Where a project's commands run ────────────────────────────────
+
+export type ProjectCommandRunner = (command: string) => Promise<ExecutionResult>;
+
+/**
+ * Where a project's commands run — the one routing rule for the Commands panel,
+ * background processes, cron jobs and the post-deploy restore.
+ *
+ * Dokploy-deployed projects run inside the app container over SSH (any stack).
+ * They are detected by their Dokploy server mapping rather than a global flag,
+ * so a workspace mixing deploy backends routes each project correctly. When that
+ * server exists but cannot run commands yet (not ready, no key, a compose stack),
+ * its reason is returned instead of falling through to the native target.
+ * Processes and cron jobs used to skip this and always took the native path, so
+ * on Dokploy they never reached the container.
+ */
+export async function resolveProjectRunner(
+  projectId: string,
+  tenantId: string,
+): Promise<{ run: ProjectCommandRunner } | { run: null; errorMessage: string }> {
+  const dokploy = await resolveDokployCommandTarget(projectId);
+  if (dokploy.target) {
+    const target = dokploy.target;
+    return { run: (command) => execInDokployContainer(target, command) };
+  }
+  if (await projectHasDokployServer(projectId)) {
+    return { run: null, errorMessage: dokploy.errorMessage || "Cannot run command on this deployment yet." };
+  }
+
+  const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
+  if (!target) return { run: null, errorMessage: errorMessage || "Cannot resolve execution target." };
+  return { run: (command) => executeCommand(target, command) };
+}
+
 // ─── Job Processor ─────────────────────────────────────────────────
 
 async function processCommandJob(input: CommandJobInput): Promise<void> {
@@ -383,34 +417,14 @@ async function processCommandJob(input: CommandJobInput): Promise<void> {
   logger.info(`[command-exec] Processing command ${commandId}: ${command.slice(0, 80)}`);
 
   try {
-    // Dokploy-deployed projects run commands over SSH into the running
-    // container (works for any stack). We detect these by the presence of a
-    // Dokploy server mapping rather than a global flag, so a workspace that
-    // mixes deploy backends still routes each project correctly.
-    const dokployTarget = await resolveDokployCommandTarget(projectId);
-    if (dokployTarget.target) {
-      const result = await execInDokployContainer(dokployTarget.target, command);
-      const status = result.timedOut ? "timed_out" : result.exitCode === 0 ? "finished" : "failed";
-      await updateCommandStatus(commandId, status, result.output);
-      logger.info(`[command-exec] Command ${commandId} completed with status: ${status}`);
-      return;
-    }
-    // If a Dokploy server exists but isn't runnable (not ready / missing key),
-    // surface that reason instead of falling through to native resolution.
-    if (await projectHasDokployServer(projectId)) {
-      await updateCommandStatus(commandId, "failed", dokployTarget.errorMessage || "Cannot run command on this deployment yet.");
-      return;
-    }
-
-    const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
-
-    if (!target) {
-      await updateCommandStatus(commandId, "failed", errorMessage || "Cannot resolve execution target.");
+    const runner = await resolveProjectRunner(projectId, tenantId);
+    if (!runner.run) {
+      await updateCommandStatus(commandId, "failed", runner.errorMessage);
       return;
     }
 
     // Execute the command
-    const result = await executeCommand(target, command);
+    const result = await runner.run(command);
 
     // Update the command record with the result
     const status = result.timedOut ? "timed_out" : result.exitCode === 0 ? "finished" : "failed";

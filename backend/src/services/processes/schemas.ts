@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { TableRow } from "../../shared/supabase/types.js";
+import { SAFE_CRON_USER, isValidCronExpression } from "./domain/scripts.js";
 
 // ─── Background Processes ───
 
@@ -90,10 +91,15 @@ export const scheduledJobSchema = z.object({
 
 export const createJobBodySchema = z.object({
   name: z.string().min(1).max(200),
-  command: z.string().min(1).max(2000),
-  user: z.string().max(100).default("root"),
+  // One crontab line: a line break would split it into two entries.
+  command: z.string().min(1).max(2000).regex(/^[^\r\n]*$/, "A scheduled command must fit on one line."),
+  // Checked here as well as at install, so a bad value is refused when saved,
+  // not when it is first run on the server.
+  user: z.string().regex(SAFE_CRON_USER, "Must be a valid Unix user name, such as root or www-data.").default("root"),
   frequency: jobFrequencySchema.default("weekly"),
-  customCron: z.string().max(100).optional(),
+  customCron: z.string().max(100)
+    .refine(isValidCronExpression, "Use five cron fields (for example 30 2 * * 1) or a macro such as @daily.")
+    .optional(),
   monitorHeartbeat: z.boolean().default(false),
 });
 

@@ -10,29 +10,33 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { nowIso } from "../../../shared/utils/time.js";
-import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
+import { resolveProjectRunner } from "../../../shared/service-clients/command-execution.js";
 import type { BackgroundProcessRow, ScheduledJobRow } from "../schemas.js";
+import { SAFE_CRON_USER, installCronScript, startProcessScript } from "./scripts.js";
+import { jobCronExpression } from "./scheduler-executor.js";
 
 const db = supabaseAdmin;
 
-const FREQUENCY_TO_CRON: Record<string, string> = {
-  every_minute: "* * * * *",
-  hourly: "0 * * * *",
-  nightly: "0 0 * * *",
-  weekly: "0 0 * * 0",
-  monthly: "0 0 1 * *",
-  on_reboot: "@reboot",
-};
+export interface RestoreResult {
+  processes: number;
+  jobs: number;
+  /** Set when nothing could be restored, for the deploy log. */
+  skipped?: string;
+}
 
 /**
  * Restore all active processes and installed jobs after a deploy.
  * Non-blocking: failures are logged but don't fail the deployment.
+ *
+ * `waitUntilReady` lets the Dokploy pipeline wait for the NEW container before
+ * anything is started in it; it runs only when there is something to restore.
  */
 export async function restoreProcessesAfterDeploy(params: {
   tenantId: string;
   projectId: string;
-}): Promise<void> {
-  const { tenantId, projectId } = params;
+  waitUntilReady?: () => Promise<boolean>;
+}): Promise<RestoreResult> {
+  const { tenantId, projectId, waitUntilReady } = params;
 
   // Fetch active processes and installed jobs
   const [procResult, jobResult] = await Promise.all([
@@ -51,30 +55,34 @@ export async function restoreProcessesAfterDeploy(params: {
   const processes = (procResult.data || []) as BackgroundProcessRow[];
   const jobs = (jobResult.data || []) as ScheduledJobRow[];
 
-  if (processes.length === 0 && jobs.length === 0) return;
+  if (processes.length === 0 && jobs.length === 0) return { processes: 0, jobs: 0 };
 
   logger.info(`[processes] Restoring ${processes.length} process(es) and ${jobs.length} job(s) after deploy`);
 
-  // Resolve execution target
-  const { target } = await resolveExecutionTarget(projectId, tenantId);
-  if (!target) {
-    logger.warn(`[processes] Cannot restore processes — no execution target available`);
-    return;
+  // Inside the Dokploy container when the project has one, as Commands does.
+  const runner = await resolveProjectRunner(projectId, tenantId);
+  if (!runner.run) {
+    logger.warn(`[processes] Cannot restore processes: ${runner.errorMessage}`);
+    return { processes: 0, jobs: 0, skipped: runner.errorMessage };
+  }
+  const run = runner.run;
+  if (waitUntilReady && !(await waitUntilReady())) {
+    const skipped = "the application container did not become ready in time";
+    logger.warn(`[processes] Cannot restore processes: ${skipped}`);
+    return { processes: 0, jobs: 0, skipped };
   }
 
-  // Restore background processes
+  // Restore background processes — the same script Start runs, so a restored
+  // process can be stopped (it used to be started in a form Stop never found).
+  let restoredProcesses = 0;
   for (const proc of processes) {
     try {
-      const marker = `DOCKIER_PROC_${proc.id.slice(0, 8)}`;
-      const numProcs = proc.num_processes || 1;
-      const startCmds: string[] = [];
-      for (let i = 0; i < numProcs; i++) {
-        startCmds.push(
-          `nohup sh -c 'export ${marker}=1 && ${proc.command}' > /tmp/${marker}_${i}.log 2>&1 &`
-        );
+      const result = await run(startProcessScript(proc.id, proc.command, proc.num_processes));
+      // The runner reports failure as a result, not a throw; same check as Start.
+      if (result.exitCode !== 0 && !result.output.includes("STARTED")) {
+        throw new Error(result.output.trim().slice(0, 300) || `exit code ${result.exitCode}`);
       }
-      const cmd = startCmds.join(" && ");
-      await executeCommand(target, cmd);
+      restoredProcesses++;
       logger.info(`[processes] Restored process: ${proc.name || proc.command}`);
     } catch (err) {
       const msg = getErrMsg(err);
@@ -86,33 +94,34 @@ export async function restoreProcessesAfterDeploy(params: {
     }
   }
 
-  // Restore scheduled jobs
+  // Restore scheduled jobs with the install script: it keeps each job's user (the
+  // restore used to put every job in root's crontab), escapes the command, and
+  // validates the stored values. One script per job, run together.
+  let restoredJobs = 0;
   if (jobs.length > 0) {
-    try {
-      // Build all cron entries at once for efficiency
-      const cronLines: string[] = [];
-      for (const job of jobs) {
-        const marker = `# DOCKIER_JOB_${job.id.slice(0, 8)}`;
-        const cronExpr = job.frequency === "custom" && job.custom_cron
-          ? job.custom_cron
-          : FREQUENCY_TO_CRON[job.frequency] || "0 * * * *";
-        cronLines.push(marker);
-        cronLines.push(`${cronExpr} ${job.command} # ↑ dockier`);
+    const scripts: string[] = [];
+    for (const job of jobs) {
+      try {
+        if (!SAFE_CRON_USER.test(job.user)) throw new Error(`invalid cron user "${job.user}"`);
+        scripts.push(installCronScript({ jobId: job.id, user: job.user, expr: jobCronExpression(job), command: job.command }));
+      } catch (err) {
+        logger.error(`[processes] Skipping scheduled job ${job.id} on restore: ${getErrMsg(err)}`);
       }
-
-      const installCmd = [
-        "which crontab > /dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq cron > /dev/null 2>&1)",
-        `(crontab -l 2>/dev/null || echo "") | grep -v "DOCKIER_JOB_" | grep -v "# ↑ dockier" > /tmp/cron_restore`,
-        `printf '${cronLines.join("\\n")}\\n' >> /tmp/cron_restore`,
-        "crontab /tmp/cron_restore",
-        "service cron start 2>/dev/null || crond 2>/dev/null || true",
-      ].join(" && ");
-
-      await executeCommand(target, installCmd);
-      logger.info(`[processes] Restored ${jobs.length} scheduled job(s)`);
+    }
+    try {
+      if (scripts.length > 0) {
+        const result = await run(scripts.join("\n"));
+        if (!result.output.includes("INSTALLED")) {
+          throw new Error(result.output.trim().slice(0, 300) || `exit code ${result.exitCode}`);
+        }
+      }
+      restoredJobs = scripts.length;
+      logger.info(`[processes] Restored ${scripts.length} scheduled job(s)`);
     } catch (err) {
       const msg = getErrMsg(err);
       logger.error(`[processes] Failed to restore scheduled jobs: ${msg}`);
     }
   }
+
+  return { processes: restoredProcesses, jobs: restoredJobs };
 }

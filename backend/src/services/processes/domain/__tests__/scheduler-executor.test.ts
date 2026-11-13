@@ -56,9 +56,16 @@ vi.mock("../../../../shared/supabase/client.js", () => ({
 const resolveExecutionTarget = vi.fn();
 const executeCommand = vi.fn();
 
+// The scheduler goes through resolveProjectRunner (Dokploy first, then native);
+// its routing is tested in commands/domain/__tests__/project-runner.test.ts.
+// Here it is backed by the two mocks below so assertions can read the command.
 vi.mock("../../../../shared/service-clients/command-execution.js", () => ({
-  resolveExecutionTarget: (...a: unknown[]) => resolveExecutionTarget(...a),
-  executeCommand: (...a: unknown[]) => executeCommand(...a),
+  resolveProjectRunner: async (projectId: string, tenantId: string) => {
+    const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
+    return target
+      ? { run: (command: string) => executeCommand(target, command) }
+      : { run: null, errorMessage };
+  },
 }));
 
 vi.mock("../../../../shared/logger.js", () => ({
@@ -175,10 +182,12 @@ describe("scheduler-executor — cron validation", () => {
     expect(lastCommand()).toContain("30 2 * * 1 php artisan cleanup");
   });
 
-  it("accepts a 6-field custom cron (with seconds)", async () => {
+  it("rejects a 6-field custom cron: cron has no seconds field", async () => {
+    // Accepted before: the sixth token became part of the command, and an hour
+    // of 30 made `crontab` refuse the whole file.
     jobRow = makeJob({ frequency: "custom", custom_cron: "0 30 2 * * 1" });
-    const res = await installJob(params());
-    expect(res.success).toBe(true);
+    await expect(installJob(params())).rejects.toThrow(/Invalid cron expression/i);
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 });
 
@@ -221,15 +230,18 @@ describe("scheduler-executor — job marker", () => {
 
   it("derives an 8-hex-char marker from the job id and uses it to install and remove", async () => {
     await installJob(params());
-    // jobId "abc123de-..." → hex-only, first 8 chars → "abc123de"
-    expect(lastCommand()).toContain("# DOCKIER_JOB_abc123de");
-    // The install both strips the old entry (grep -v) and adds the new one.
-    expect(lastCommand()).toContain('grep -v "# DOCKIER_JOB_abc123de"');
+    // jobId "abc123de-..." → hex-only, first 8 chars → "abc123de", at the end of the job's one line.
+    expect(lastCommand()).toContain("php artisan cleanup # DOCKIER_JOB_abc123de");
+    // The install strips this job's old entry by its tag only (scripts.test.ts runs the filter).
+    expect(lastCommand()).toContain("awk -v t='DOCKIER_JOB_abc123de'");
+    // The old filter that removed every Dockier job is gone.
+    expect(lastCommand()).not.toContain('grep -v "# ↑ dockier"');
   });
 
-  it("pause removes the same marker line", async () => {
+  it("pause removes the same job's entry and no other", async () => {
     await pauseJob(params());
-    expect(lastCommand()).toContain('grep -v "# DOCKIER_JOB_abc123de"');
+    expect(lastCommand()).toContain("awk -v t='DOCKIER_JOB_abc123de'");
+    expect(lastCommand()).not.toContain('grep -v "# ↑ dockier"');
     expect(lastCommand()).toContain("echo PAUSED");
   });
 });

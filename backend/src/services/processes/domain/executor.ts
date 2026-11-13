@@ -10,9 +10,10 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { nowIso } from "../../../shared/utils/time.js";
-import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
+import { resolveProjectRunner } from "../../../shared/service-clients/command-execution.js";
 import { ProcessesError } from "./processes.js";
 import type { BackgroundProcessRow } from "../schemas.js";
+import { processLogsScript, startProcessScript, stopProcessScript } from "./scripts.js";
 
 const db = supabaseAdmin;
 
@@ -48,12 +49,6 @@ async function fetchProcessOrThrow(
   return row;
 }
 
-/** Marker must be alphanumeric + underscore only. */
-function buildMarker(processId: string): string {
-  const short = processId.replace(/[^a-f0-9]/g, "").slice(0, 8);
-  return `DOCKIER_PROC_${short}`;
-}
-
 /**
  * Start a background process on the deployed infrastructure.
  *
@@ -76,27 +71,17 @@ export async function startProcess(params: {
   // Length is capped by the route schema, and the shell boundary is the
   // quoting in commands/domain/executor.ts.
 
-  // Resolve execution target
-  const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
-  if (!target) {
-    return { success: false, message: errorMessage || "No active deployment found." };
+  // Inside the Dokploy container when the project has one, as Commands does.
+  const runner = await resolveProjectRunner(projectId, tenantId);
+  if (!runner.run) {
+    return { success: false, message: runner.errorMessage };
   }
 
-  const marker = buildMarker(processId);
   const processCmd = process.command;
-  const numProcs = Math.min(process.num_processes || 1, 10); // Cap at 10
-
-  // Start N instances using nohup. Uses newlines to avoid dash syntax issues.
-  const lines: string[] = [];
-  for (let i = 0; i < numProcs; i++) {
-    lines.push(`${marker}=1 nohup ${processCmd} > /tmp/${marker}_${i}.log 2>&1 &`);
-  }
-  lines.push("sleep 1");
-  lines.push("echo STARTED");
-  const fullCmd = lines.join("\n");
+  const fullCmd = startProcessScript(processId, processCmd, process.num_processes);
 
   try {
-    const result = await executeCommand(target, fullCmd);
+    const result = await runner.run(fullCmd);
     logger.info(`[processes] Start command result: exitCode=${result.exitCode}, output="${result.output.trim().slice(0, 200)}"`);
 
     if (result.exitCode === 0 || result.output.includes("STARTED")) {
@@ -134,19 +119,15 @@ export async function stopProcess(params: {
   // Verify ownership with defense-in-depth assertion
   await fetchProcessOrThrow(processId, projectId, tenantId, "id,organization_id");
 
-  // Resolve execution target
-  const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
-  if (!target) {
-    return { success: false, message: errorMessage || "No active deployment found." };
+  const runner = await resolveProjectRunner(projectId, tenantId);
+  if (!runner.run) {
+    return { success: false, message: runner.errorMessage };
   }
 
-  const marker = buildMarker(processId);
-
-  // Kill all processes with our marker — pkill returns 1 if no match (safe)
-  const stopCmd = `pkill -f "${marker}" 2>/dev/null\necho STOPPED`;
+  const stopCmd = stopProcessScript(processId);
 
   try {
-    const result = await executeCommand(target, stopCmd);
+    const result = await runner.run(stopCmd);
     // pkill returns 1 if no process found, which is fine
     if (result.output.includes("STOPPED")) {
       await db
@@ -195,16 +176,15 @@ export async function getProcessLogs(params: {
   // Verify ownership with defense-in-depth assertion
   await fetchProcessOrThrow(processId, projectId, tenantId, "id,organization_id");
 
-  const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
-  if (!target) {
-    return { logs: errorMessage || "No active deployment found. Cannot retrieve logs." };
+  const runner = await resolveProjectRunner(projectId, tenantId);
+  if (!runner.run) {
+    return { logs: runner.errorMessage };
   }
 
-  const marker = buildMarker(processId);
-  const cmd = `cat /tmp/${marker}_*.log 2>/dev/null | tail -n ${lines} || echo "No logs available yet."`;
+  const cmd = processLogsScript(processId, lines);
 
   try {
-    const result = await executeCommand(target, cmd);
+    const result = await runner.run(cmd);
     return { logs: result.output || "No logs available yet." };
   } catch (err) {
     const msg = getErrMsg(err);
