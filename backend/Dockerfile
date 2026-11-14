@@ -5,9 +5,12 @@ FROM node:22-bookworm-slim AS base
 # semgrep is pinned: it is the scan engine the product ships, so an unpinned
 # install makes every rebuild a silent upgrade and an upstream regression
 # arrives on its own. Keep in step with the root package.json postinstall.
+# openssh-client: every command on a Dokploy app (Commands panel, post-deploy,
+# processes, Observe logs) is `ssh root@<server> docker exec …` from
+# deploy/domain/dokploy/command-exec.ts. Without it each one fails with "spawn ssh ENOENT".
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    python3 python3-pip git ca-certificates curl unzip \
+    python3 python3-pip git ca-certificates curl unzip openssh-client \
   && pip3 install semgrep==1.160.0 --break-system-packages \
   && rm -rf /var/lib/apt/lists/*
 
