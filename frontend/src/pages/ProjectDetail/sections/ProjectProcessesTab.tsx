@@ -20,8 +20,8 @@ import Spinner from "@/components/Spinner";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
-import { Input } from "@/components/ui/input";
-import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, InfoIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
+import { Input, inputCls } from "@/components/ui/input";
+import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import type { StatusTone } from "@/utils/styles";
 import { labelCls } from "@/utils/styles";
 import { cn } from "@/utils/cn";
@@ -356,22 +356,34 @@ function JobActionsMenu({
 
 // ─── Queue-worker form rows ───
 
-const fieldLabelCls = cn(labelCls, "flex w-28 items-center gap-1.5 text-xs");
+// shrink-0: a full-width input used to squeeze the label, so plain inputs and
+// unit inputs started at two different x positions.
+const fieldLabelCls = cn(labelCls, "w-28 shrink-0 text-xs");
 
 /**
- * One row of the queue-worker form: fixed-width label left, control right.
+ * One row of the process form: fixed-width label left, control filling the rest.
  * A row whose control is a `ToggleSwitch` passes no `htmlFor` — that renders a
  * button, which a label cannot name, so it gets a span instead.
  */
 function FieldRow({ htmlFor, label, children }: { htmlFor?: string; label: ReactNode; children: ReactNode }) {
-  const content = <><InfoIcon className="size-3.5 text-primary-500" />{label}</>;
   return (
     <div className="flex items-center gap-3">
       {htmlFor
-        ? <label htmlFor={htmlFor} className={fieldLabelCls}>{content}</label>
-        : <span className={fieldLabelCls}>{content}</span>}
-      {children}
+        ? <label htmlFor={htmlFor} className={fieldLabelCls}>{label}</label>
+        : <span className={fieldLabelCls}>{label}</span>}
+      <div className="flex min-w-0 flex-1 items-center">{children}</div>
     </div>
+  );
+}
+
+/** A labelled group of rows; the gap above it separates it from the previous group. */
+function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <fieldset className="space-y-3 border-t border-border pt-4">
+      <legend className="sr-only">{title}</legend>
+      <p aria-hidden="true" className="text-xs font-semibold text-text">{title}</p>
+      {children}
+    </fieldset>
   );
 }
 
@@ -379,17 +391,18 @@ function FieldRow({ htmlFor, label, children }: { htmlFor?: string; label: React
 const UNIT_PAD = { seconds: "pr-16", tries: "pr-12", MB: "pr-10" } as const;
 
 /** Number input with its unit printed inside the right edge. */
-function UnitInput({ id, unit, value, onChange, min }: {
+function UnitInput({ id, unit, value, onChange, min, max }: {
   id: string;
   /** Keyed, not free text: a unit with no measured padding will not compile. */
   unit: keyof typeof UNIT_PAD;
   value: number;
   onChange: (value: number) => void;
   min: number;
+  max?: number;
 }) {
   return (
     <div className="relative flex-1">
-      <Input id={id} type="number" className={UNIT_PAD[unit]} value={value} onChange={(e) => onChange(Number(e.target.value))} min={min} />
+      <Input id={id} type="number" className={UNIT_PAD[unit]} value={value} onChange={(e) => onChange(Number(e.target.value))} min={min} max={max} />
       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">{unit}</span>
     </div>
   );
@@ -495,7 +508,8 @@ function CreateProcessModal({
         memory,
         env: env.trim() || undefined,
         force,
-        workingDirectory: workingDirectory.trim() || undefined,
+        // "" (not undefined) so clearing the field on edit really clears it; it is now applied.
+        workingDirectory: workingDirectory.trim(),
         gracefulShutdown,
       };
       if (type === "custom") {
@@ -515,90 +529,101 @@ function CreateProcessModal({
   };
 
   const tabBtnCls = (active: boolean) =>
-    `px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+    `px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 rounded-t-md ${
       active ? "border-primary-500 text-text" : "border-transparent text-text-muted hover:text-text"
     }`;
+
+  // A segmented choice, not ARIA tabs (no tabpanel or arrow keys): aria-pressed
+  // lets a screen reader hear which type is selected.
+  const typeTab = (value: ProcessType, label: string) => (
+    <button type="button" aria-pressed={type === value} className={tabBtnCls(type === value)} onClick={() => setType(value)}>
+      {label}
+    </button>
+  );
 
   return (
     <Modal open onClose={onClose} title={editProcess ? "Edit background process" : "New background process"}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {!editProcess && (
-          <p className="text-xs text-text-muted -mt-2">
+          <p className="text-xs text-text-muted">
             {type === "queue_worker"
               ? "Create a background process that continuously listens for queued jobs and processes them as they are added."
-              : "Create a custom background process that runs continuously. If the command exits, it will be restarted automatically."}
+              : "Create a background process that runs your own command. Dockier starts and stops it; a command that exits is not restarted."}
           </p>
         )}
 
         <div>
           <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-name`}>Name</label>
-          <p className="text-xs text-text-muted mb-1.5">Add a custom display name for the background process.</p>
-          <Input id={`${fid}-name`} type="text"  value={name} onChange={(e) => setName(e.target.value)} placeholder="" />
+          <p className="text-xs text-text-muted mb-1.5">Shown in the process list instead of the command.</p>
+          <Input id={`${fid}-name`} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={type === "queue_worker" ? "Queue worker" : "Ticker"} />
         </div>
 
-        {/* Type tabs */}
-        <div className="flex border-b border-border">
-          <button type="button" className={tabBtnCls(type === "queue_worker")} onClick={() => setType("queue_worker")}>Queue worker</button>
-          <button type="button" className={tabBtnCls(type === "custom")} onClick={() => setType("custom")}>Custom</button>
+        <div role="group" aria-label="Process type" className="flex border-b border-border">
+          {typeTab("queue_worker", "Queue worker")}
+          {typeTab("custom", "Custom")}
         </div>
 
         {type === "queue_worker" ? (
-          <div className="space-y-3">
-            <FieldRow htmlFor={`${fid}-runtime`} label="Runtime">
-              <select id={`${fid}-runtime`} value={runtime} onChange={(e) => { setRuntime(e.target.value); setRuntimeVersion(""); }}>
-                {RUNTIME_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </FieldRow>
-            {currentRuntimeOpts && currentRuntimeOpts.versions.length > 0 && (
-              <FieldRow htmlFor={`${fid}-version`} label="Version">
-                <select id={`${fid}-version`} value={runtimeVersion || currentRuntimeOpts.versions[0]} onChange={(e) => setRuntimeVersion(e.target.value)}>
-                  {currentRuntimeOpts.versions.map((v) => <option key={v} value={v}>{currentRuntimeOpts.label} {v}</option>)}
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <FieldRow htmlFor={`${fid}-runtime`} label="Runtime">
+                <select id={`${fid}-runtime`} className={inputCls} value={runtime} onChange={(e) => { setRuntime(e.target.value); setRuntimeVersion(""); }}>
+                  {RUNTIME_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
               </FieldRow>
-            )}
-            <FieldRow htmlFor={`${fid}-field-3`} label={runtime === "php" ? "Connection" : "Entry point"}>
-              <Input id={`${fid}-field-3`} type="text" value={connection} onChange={(e) => setConnection(e.target.value)} placeholder={runtime === "php" ? "redis" : runtime === "node" ? "worker.js" : runtime === "python" ? "worker.py" : "./worker"} />
-            </FieldRow>
-            <FieldRow htmlFor={`${fid}-processes`} label="processes">
-              <Input id={`${fid}-processes`} type="number" value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
-            </FieldRow>
-            <FieldRow htmlFor={`${fid}-queue`} label="--queue">
-              <Input id={`${fid}-queue`} type="text" value={queue} onChange={(e) => setQueue(e.target.value)} placeholder={runtime === "php" ? "default,emails" : "default"} />
-            </FieldRow>
+              {currentRuntimeOpts && currentRuntimeOpts.versions.length > 0 && (
+                <FieldRow htmlFor={`${fid}-version`} label="Version">
+                  <select id={`${fid}-version`} className={inputCls} value={runtimeVersion || currentRuntimeOpts.versions[0]} onChange={(e) => setRuntimeVersion(e.target.value)}>
+                    {currentRuntimeOpts.versions.map((v) => <option key={v} value={v}>{currentRuntimeOpts.label} {v}</option>)}
+                  </select>
+                </FieldRow>
+              )}
+              <FieldRow htmlFor={`${fid}-field-3`} label={runtime === "php" ? "Connection" : "Entry point"}>
+                <Input id={`${fid}-field-3`} type="text" value={connection} onChange={(e) => setConnection(e.target.value)} placeholder={runtime === "php" ? "redis" : runtime === "node" ? "worker.js" : runtime === "python" ? "worker.py" : "./worker"} />
+              </FieldRow>
+              <FieldRow htmlFor={`${fid}-queue`} label="Queues">
+                <Input id={`${fid}-queue`} type="text" value={queue} onChange={(e) => setQueue(e.target.value)} placeholder={runtime === "php" ? "default,emails" : "default"} />
+              </FieldRow>
+              <FieldRow htmlFor={`${fid}-processes`} label="Processes">
+                <Input id={`${fid}-processes`} type="number" value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
+              </FieldRow>
+            </div>
 
-            <FieldRow htmlFor={`${fid}-timeout`} label="Timeout">
-              <UnitInput id={`${fid}-timeout`} unit="seconds" value={timeoutSeconds} onChange={setTimeoutSeconds} min={0} />
-            </FieldRow>
-            <FieldRow htmlFor={`${fid}-tries`} label="Tries">
-              <UnitInput id={`${fid}-tries`} unit="tries" value={tries} onChange={setTries} min={0} />
-            </FieldRow>
-            <FieldRow htmlFor={`${fid}-memory`} label="Memory">
-              <UnitInput id={`${fid}-memory`} unit="MB" value={memory} onChange={setMemory} min={32} />
-            </FieldRow>
-            {/* PHP-specific fields */}
+            <FieldGroup title="Limits">
+              <FieldRow htmlFor={`${fid}-timeout`} label="Timeout">
+                <UnitInput id={`${fid}-timeout`} unit="seconds" value={timeoutSeconds} onChange={setTimeoutSeconds} min={0} />
+              </FieldRow>
+              <FieldRow htmlFor={`${fid}-tries`} label="Tries">
+                <UnitInput id={`${fid}-tries`} unit="tries" value={tries} onChange={setTries} min={0} />
+              </FieldRow>
+              <FieldRow htmlFor={`${fid}-memory`} label="Memory">
+                <UnitInput id={`${fid}-memory`} unit="MB" value={memory} onChange={setMemory} min={32} />
+              </FieldRow>
+            </FieldGroup>
+
             {runtime === "php" && (
-              <>
-                <FieldRow htmlFor={`${fid}-backoff`} label="--backoff">
+              <FieldGroup title="Laravel worker options">
+                <FieldRow htmlFor={`${fid}-backoff`} label="Backoff">
                   <UnitInput id={`${fid}-backoff`} unit="seconds" value={backoff} onChange={setBackoff} min={0} />
                 </FieldRow>
-                <FieldRow htmlFor={`${fid}-sleep`} label="--sleep">
+                <FieldRow htmlFor={`${fid}-sleep`} label="Sleep">
                   <UnitInput id={`${fid}-sleep`} unit="seconds" value={sleep} onChange={setSleep} min={0} />
                 </FieldRow>
-                <FieldRow htmlFor={`${fid}-rest`} label="--rest">
+                <FieldRow htmlFor={`${fid}-rest`} label="Rest">
                   <UnitInput id={`${fid}-rest`} unit="seconds" value={rest} onChange={setRest} min={0} />
                 </FieldRow>
-                <FieldRow htmlFor={`${fid}-env`} label="--env">
-                  <Input id={`${fid}-env`} type="text" value={env} onChange={(e) => setEnv(e.target.value)} />
+                <FieldRow htmlFor={`${fid}-env`} label="Environment">
+                  <Input id={`${fid}-env`} type="text" value={env} onChange={(e) => setEnv(e.target.value)} placeholder="production" />
                 </FieldRow>
-                <FieldRow label="--force">
-                  <ToggleSwitch checked={force} onChange={setForce} ariaLabel="--force" />
+                <FieldRow label="Force">
+                  <ToggleSwitch checked={force} onChange={setForce} ariaLabel="Force: run even in maintenance mode" />
                 </FieldRow>
-              </>
+              </FieldGroup>
             )}
 
-            {/* Preview */}
-            <div className="mt-4 rounded-lg border border-border p-3">
-              <span className="text-xs uppercase tracking-wide font-semibold text-text-muted">Preview</span>
+            {/* The flags the labels stand for are visible here, in the command that will run. */}
+            <div className="rounded-lg border border-border p-3">
+              <span className="text-xs font-semibold text-text-muted">Command that will run</span>
               <p className="mt-1 text-xs font-mono text-primary-500 break-all">{buildPreviewCommand()}</p>
             </div>
           </div>
@@ -606,31 +631,21 @@ function CreateProcessModal({
           <div className="space-y-4">
             <div>
               <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-command`}>Command</label>
-              <p className="text-xs text-text-muted mb-1.5">The command that should run for this background process.</p>
-              <Input id={`${fid}-command`} type="text"  value={command} onChange={(e) => setCommand(e.target.value)} placeholder="node worker.js" />
+              <p className="text-xs text-text-muted mb-1.5">Runs through <code className="font-mono">sh -c</code>, so pipes and <code className="font-mono">&amp;&amp;</code> work.</p>
+              <Input id={`${fid}-command`} type="text" className="font-mono" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="node worker.js" />
             </div>
-            <div className="rounded-lg border border-border p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-text">Supervisor configuration</span>
-              </div>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Working directory</span>
-                  <Input type="text" className={` w-48! h-7! text-xs`} value={workingDirectory} onChange={(e) => setWorkingDirectory(e.target.value)} placeholder="/home/app" />
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-text-muted">Processes</span>
-                  <Input type="number" className={` w-48! h-7! text-xs`} value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-text-muted">Graceful shutdown</span>
-                  <div className="flex items-center gap-1.5">
-                    <Input type="number" className={` w-36! h-7! text-xs`} value={gracefulShutdown} onChange={(e) => setGracefulShutdown(Number(e.target.value))} min={0} />
-                    <span className="text-primary-500 text-xs">seconds</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <FieldGroup title="Process settings">
+              <FieldRow htmlFor={`${fid}-custom-processes`} label="Processes">
+                <Input id={`${fid}-custom-processes`} type="number" value={numProcesses} onChange={(e) => setNumProcesses(Number(e.target.value))} min={1} />
+              </FieldRow>
+              <FieldRow htmlFor={`${fid}-workdir`} label="Working directory">
+                <Input id={`${fid}-workdir`} type="text" className="font-mono" value={workingDirectory} onChange={(e) => setWorkingDirectory(e.target.value)} placeholder="/app" />
+              </FieldRow>
+              <FieldRow htmlFor={`${fid}-graceful`} label="Graceful shutdown">
+                {/* max mirrors the backend cap: Stop waits this long inside a request. */}
+                <UnitInput id={`${fid}-graceful`} unit="seconds" value={gracefulShutdown} onChange={setGracefulShutdown} min={0} max={20} />
+              </FieldRow>
+            </FieldGroup>
           </div>
         )}
 
@@ -645,6 +660,17 @@ function CreateProcessModal({
 }
 
 // ─── Create/Edit Job Modal ───
+
+/** Hints mirror FREQUENCY_TO_CRON in the backend's processes/domain/scripts.ts. */
+const JOB_FREQUENCIES: { value: JobFrequency; label: string; hint: string }[] = [
+  { value: "every_minute", label: "Every minute", hint: "At the start of every minute." },
+  { value: "hourly", label: "Hourly", hint: "At minute 0 of every hour." },
+  { value: "nightly", label: "Nightly", hint: "Every day at 00:00, container time." },
+  { value: "weekly", label: "Weekly", hint: "Sundays at 00:00, container time." },
+  { value: "monthly", label: "Monthly", hint: "The 1st of each month at 00:00, container time." },
+  { value: "on_reboot", label: "On reboot", hint: "Once, when cron starts in the container." },
+  { value: "custom", label: "Custom", hint: "Your own cron expression, below." },
+];
 
 function CreateJobModal({
   projectId,
@@ -698,48 +724,55 @@ function CreateJobModal({
     <Modal open onClose={onClose} title={editJob ? "Edit scheduled job" : "New scheduled job"}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {!editJob && (
-          <p className="text-xs text-text-muted -mt-2">
-            Create a new scheduled job for this project. This job will run on the configured schedule.
+          <p className="text-xs text-text-muted">
+            Runs a command on a schedule, from the crontab inside your app's container.
           </p>
         )}
 
         <div>
           <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-name`}>Name</label>
-          <Input id={`${fid}-name`} type="text"  value={name} onChange={(e) => setName(e.target.value)} placeholder="My scheduled job" required />
+          <Input id={`${fid}-name`} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Laravel scheduler" required />
         </div>
 
         <div>
           <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-command`}>Command</label>
-          <p className="text-xs text-text-muted mb-1.5">Commands should use fully qualified paths.</p>
-          <Input id={`${fid}-command`} type="text"  value={command} onChange={(e) => setCommand(e.target.value)} placeholder="php /home/app/artisan schedule:run" required />
+          {/* Cron's real constraints: it starts in the user's home with PATH=/usr/bin:/bin,
+              so a bare `php` (/usr/local/bin in the official images) is not found. */}
+          <p className="text-xs text-text-muted mb-1.5">
+            Cron starts in the user's home directory with a minimal <code className="font-mono">PATH</code>: use absolute paths. Must fit on one line.
+          </p>
+          <Input id={`${fid}-command`} type="text" className="font-mono" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="cd /app && /usr/local/bin/php artisan schedule:run" required />
         </div>
 
-        <div>
-          <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-user`}>User</label>
-          <Input id={`${fid}-user`} type="text"  value={user} onChange={(e) => setUser(e.target.value)} placeholder="root" />
-        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-user`}>User</label>
+            <Input id={`${fid}-user`} type="text" className="font-mono" value={user} onChange={(e) => setUser(e.target.value)} placeholder="root" aria-describedby={`${fid}-user-hint`} />
+            <p id={`${fid}-user-hint`} className="mt-1.5 text-xs text-text-muted">Whose crontab runs it.</p>
+          </div>
 
-        <div>
-          <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-frequency`}>Frequency</label>
-          <select id={`${fid}-frequency`}  value={frequency} onChange={(e) => setFrequency(e.target.value as JobFrequency)}>
-            <option value="every_minute">Every minute</option>
-            <option value="hourly">Hourly</option>
-            <option value="nightly">Nightly</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="on_reboot">On reboot</option>
-            <option value="custom">Custom frequency</option>
-          </select>
+          <div>
+            <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-frequency`}>Frequency</label>
+            <select id={`${fid}-frequency`} className={inputCls} value={frequency} onChange={(e) => setFrequency(e.target.value as JobFrequency)} aria-describedby={`${fid}-frequency-hint`}>
+              {JOB_FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+            <p id={`${fid}-frequency-hint`} className="mt-1.5 text-xs text-text-muted">
+              {JOB_FREQUENCIES.find((f) => f.value === frequency)?.hint}
+            </p>
+          </div>
         </div>
 
         {frequency === "custom" && (
           <div>
-            <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-custom-cron-expression`}>Custom Cron Expression</label>
-            <Input id={`${fid}-custom-cron-expression`} type="text"  value={customCron} onChange={(e) => setCustomCron(e.target.value)} placeholder="*/5 * * * *" />
+            <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-custom-cron-expression`}>Cron expression</label>
+            <p className="text-xs text-text-muted mb-1.5">
+              Five fields (minute, hour, day, month, weekday) or a macro such as <code className="font-mono">@daily</code>.
+            </p>
+            <Input id={`${fid}-custom-cron-expression`} type="text" className="font-mono" value={customCron} onChange={(e) => setCustomCron(e.target.value)} placeholder="*/5 * * * *" required />
           </div>
         )}
 
-        <div className="flex items-center justify-between rounded-lg border border-border p-3">
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
           <div>
             <p className="text-xs font-medium text-text">Monitor with heartbeats</p>
             <p className="text-xs text-text-muted">Generate a URL to ping after the job has run.</p>
@@ -865,7 +898,8 @@ export default function ProjectProcessesTab({ project }: Props) {
                 <div>
                   <h3 className="text-sm font-semibold text-text">Background processes</h3>
                   <p className="text-xs text-text-muted mt-1">
-                    Background processes are managed using Supervisor, which monitors your processes and automatically restarts them if they crash or stop unexpectedly. Supports Node.js, PHP, Python, and Go queue workers.
+                    {/* No Supervisor runs these (scripts.ts uses setsid + pid files), and nothing restarts a crashed one. */}
+                    Background processes run inside your app's container. Dockier starts and stops them, and starts them again after every deploy; a process that crashes stays stopped until you start it. Supports Node.js, PHP, Python, and Go queue workers.
                   </p>
                   {!hasDeployment && (
                     <p className="mt-2 text-xs text-warning-ink">

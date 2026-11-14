@@ -77,7 +77,10 @@ export async function restoreProcessesAfterDeploy(params: {
   let restoredProcesses = 0;
   for (const proc of processes) {
     try {
-      const result = await run(startProcessScript(proc.id, proc.command, proc.num_processes));
+      const result = await run(startProcessScript(proc.id, proc.command, proc.num_processes, {
+        workingDirectory: proc.working_directory,
+        graceSeconds: proc.graceful_shutdown,
+      }));
       // The runner reports failure as a result, not a throw; same check as Start.
       if (result.exitCode !== 0 && !result.output.includes("STARTED")) {
         throw new Error(result.output.trim().slice(0, 300) || `exit code ${result.exitCode}`);

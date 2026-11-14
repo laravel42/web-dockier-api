@@ -78,7 +78,10 @@ export async function startProcess(params: {
   }
 
   const processCmd = process.command;
-  const fullCmd = startProcessScript(processId, processCmd, process.num_processes);
+  const fullCmd = startProcessScript(processId, processCmd, process.num_processes, {
+    workingDirectory: process.working_directory,
+    graceSeconds: process.graceful_shutdown,
+  });
 
   try {
     const result = await runner.run(fullCmd);
@@ -117,14 +120,14 @@ export async function stopProcess(params: {
   const { tenantId, projectId, processId } = params;
 
   // Verify ownership with defense-in-depth assertion
-  await fetchProcessOrThrow(processId, projectId, tenantId, "id,organization_id");
+  const row = await fetchProcessOrThrow(processId, projectId, tenantId, "id,organization_id,graceful_shutdown");
 
   const runner = await resolveProjectRunner(projectId, tenantId);
   if (!runner.run) {
     return { success: false, message: runner.errorMessage };
   }
 
-  const stopCmd = stopProcessScript(processId);
+  const stopCmd = stopProcessScript(processId, row.graceful_shutdown);
 
   try {
     const result = await runner.run(stopCmd);

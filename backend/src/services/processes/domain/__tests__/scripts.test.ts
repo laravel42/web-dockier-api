@@ -13,7 +13,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { rmSync, readdirSync } from "node:fs";
+import { mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   cronLine, cronRemoveFilter, isValidCronExpression, processTag, shQuote, startProcessScript, stopProcessScript,
 } from "../scripts.js";
@@ -80,6 +82,53 @@ describe("process scripts", () => {
   it("caps the number of instances", () => {
     const script = startProcessScript(randomUUID(), "true", 100);
     expect(script.match(/nohup sh -c/g)).toHaveLength(10);
+  });
+
+  // The Working directory field was stored and never applied.
+  it("runs the command in the working directory", async () => {
+    const id = randomUUID();
+    const dir = mkdtempSync(join(tmpdir(), "dockier-wd-"));
+    try {
+      sh(startProcessScript(id, "pwd -P", 1, { workingDirectory: dir }));
+      await wait(300);
+      expect(sh(`cat /tmp/${processTag(id)}_0.log`).trim()).toBe(realpathSync(dir));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to start in a working directory that does not exist", () => {
+    const id = randomUUID();
+    let out = "";
+    try {
+      sh(startProcessScript(id, "true", 1, { workingDirectory: "/no/such/dir it's" }));
+    } catch (err) {
+      out = (err as { stdout: string }).stdout;
+    }
+    expect(out).toContain("Working directory not found: /no/such/dir it's");
+    expect(out).not.toContain("STARTED");
+  });
+
+  // Graceful shutdown was stored and never applied: Stop sent TERM and walked
+  // away, so a process that ignores TERM survived every Stop.
+  it("kills a process that ignores TERM once the grace period is over", async () => {
+    const id = randomUUID();
+    sh(startProcessScript(id, "trap '' TERM; while :; do sleep 0.2; done", 1));
+    const pid = sh(`cat /tmp/${processTag(id)}_0.pid`).trim();
+    const t0 = Date.now();
+    expect(sh(stopProcessScript(id, 1))).toContain("STOPPED");
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(900); // it did wait
+    await wait(200);
+    expect(sh(`kill -0 ${pid} 2>/dev/null && echo alive || echo gone`).trim()).toBe("gone");
+  });
+
+  it("does not wait out the grace period for a process that exits on TERM", () => {
+    const id = randomUUID();
+    started.push(3021);
+    sh(startProcessScript(id, "sleep 3021", 1));
+    const t0 = Date.now();
+    sh(stopProcessScript(id, 10));
+    expect(Date.now() - t0).toBeLessThan(3000);
   });
 });
 

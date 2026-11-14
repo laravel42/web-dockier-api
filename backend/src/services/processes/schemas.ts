@@ -54,7 +54,8 @@ export const createProcessBodySchema = z.object({
   env: z.string().max(200).optional(),
   force: z.boolean().default(false),
   workingDirectory: z.string().max(500).optional(),
-  gracefulShutdown: z.number().int().min(0).default(15),
+  // Capped: Stop waits this long inside an HTTP request (see MAX_GRACEFUL_SHUTDOWN_SECONDS).
+  gracefulShutdown: z.number().int().min(0).max(20).default(15),
 });
 
 export const updateProcessBodySchema = createProcessBodySchema.partial();

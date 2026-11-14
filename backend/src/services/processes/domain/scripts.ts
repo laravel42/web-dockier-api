@@ -41,17 +41,34 @@ export function processTag(processId: string): string {
  * command), then the wrapper. The bracket keeps the pattern from matching this
  * script's own command line, which contains it.
  */
-export function stopProcessScript(processId: string): string {
+/**
+ * Longest graceful-shutdown wait honoured. Stop runs inside an HTTP request the
+ * browser abandons after 30 s, and Restart adds a start (two SSH round-trips) on top.
+ */
+export const MAX_GRACEFUL_SHUTDOWN_SECONDS = 20;
+
+export function stopProcessScript(processId: string, graceSeconds = 0): string {
   const tag = processTag(processId);
   const legacyPattern = `export ${tag.slice(0, 13)}[${tag[13]}]${tag.slice(14)}=1`;
+  const grace = Math.min(Math.max(Math.trunc(graceSeconds) || 0, 0), MAX_GRACEFUL_SHUTDOWN_SECONDS);
   return [
+    `P=""`,
     `for f in /tmp/${tag}_*.pid; do`,
     `  [ -f "$f" ] || continue`,
     `  p=$(cat "$f")`,
     // Negative pid = the whole group: the command and anything it spawned.
     `  kill -TERM -"$p" 2>/dev/null || kill -TERM "$p" 2>/dev/null`,
+    `  P="$P $p"`,
     `  rm -f "$f"`,
     `done`,
+    // Graceful shutdown: give the groups up to `grace` seconds to exit on TERM
+    // (a queue worker finishes its current job), then SIGKILL whatever is left.
+    `i=0`,
+    `while [ -n "$P" ] && [ "$i" -lt ${grace} ]; do`,
+    `  A=""; for p in $P; do { kill -0 -"$p" 2>/dev/null || kill -0 "$p" 2>/dev/null; } && A="$A $p"; done`,
+    `  P="$A"; [ -n "$P" ] && sleep 1; i=$((i + 1))`,
+    `done`,
+    `for p in $P; do kill -KILL -"$p" 2>/dev/null || kill -KILL "$p" 2>/dev/null; done`,
     `for p in $(pgrep -f ${shQuote(legacyPattern)} 2>/dev/null); do`,
     `  pkill -TERM -P "$p" 2>/dev/null`,
     `  kill -TERM "$p" 2>/dev/null`,
@@ -69,10 +86,21 @@ export function stopProcessScript(processId: string): string {
  * shortcut: without setsid (a minimal image), Stop kills only the top process, so
  * children of a compound command survive; install util-linux/busybox if that bites.
  */
-export function startProcessScript(processId: string, command: string, count: number): string {
+export function startProcessScript(
+  processId: string,
+  command: string,
+  count: number,
+  opts: { workingDirectory?: string | null; graceSeconds?: number } = {},
+): string {
   const tag = processTag(processId);
   const n = Math.min(Math.max(count || 1, 1), MAX_PROCESS_INSTANCES);
-  const lines = [stopProcessScript(processId), `S=""; command -v setsid >/dev/null 2>&1 && S=setsid`];
+  const lines = [stopProcessScript(processId, opts.graceSeconds)];
+  const dir = opts.workingDirectory?.trim();
+  if (dir) {
+    // Fail the start with a readable reason rather than run the command somewhere else.
+    lines.push(`cd ${shQuote(dir)} || { echo ${shQuote(`Working directory not found: ${dir}`)}; exit 1; }`);
+  }
+  lines.push(`S=""; command -v setsid >/dev/null 2>&1 && S=setsid`);
   for (let i = 0; i < n; i++) {
     lines.push(
       `$S nohup sh -c ${shQuote(command)} > /tmp/${tag}_${i}.log 2>&1 < /dev/null & echo $! > /tmp/${tag}_${i}.pid`,
