@@ -93,13 +93,16 @@ export function parseEnvContent(content: string): Array<{ name: string; value: s
     // Order matters. Stripping the quotes first and *then* testing for a
     // leading quote can never detect one, which silently truncated any quoted
     // value containing " #" — e.g. PASSWORD="p@ss #1" became "p@ss".
+    // `KEY=   # note` is an empty value with a comment. Checked on the raw value,
+    // because trimming eats the space and `COLOR=#ff0000` must keep its '#'.
+    const onlyComment = /^\s+#/.test(value);
     value = value.trim();
     const isQuoted =
       (value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"));
     if (isQuoted) {
       value = value.slice(1, -1);
     } else {
-      const commentIdx = value.indexOf(" #");
+      const commentIdx = onlyComment ? 0 : value.indexOf(" #");
       if (commentIdx > -1) value = value.slice(0, commentIdx).trimEnd();
     }
 

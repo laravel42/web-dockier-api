@@ -83,6 +83,13 @@ describe("parseEnvContent — values", () => {
     expect(parseEnvContent("A=value # trailing note")).toEqual([{ name: "A", value: "value" }]);
   });
 
+  // An uncommented .env.example line (`KEY=   # note`) used to yield "# note" as the
+  // value (dotenv returns ""), so Cloudflare/AWS secrets pushed from .env disagreed with local runs.
+  it("treats a value that is only a comment as empty", () => {
+    expect(parseEnvContent("IP=          # Pre-provisioned VPS IP")).toEqual([{ name: "IP", value: "" }]);
+    expect(parseEnvContent("IP=\t# note")).toEqual([{ name: "IP", value: "" }]);
+  });
+
   it("keeps a '#' that is not preceded by a space", () => {
     expect(parseEnvContent("COLOR=#ff0000")).toEqual([{ name: "COLOR", value: "#ff0000" }]);
     expect(parseEnvContent("TAG=v1#2")).toEqual([{ name: "TAG", value: "v1#2" }]);

@@ -87,7 +87,11 @@ const envSchema = z
      * `deploy/domain/dokploy/stages/provision-server.ts` and truthiness-checked
      * at `deploy/domain/deployments.ts`, both of which handle "unset".
      */
-    DOKPLOY_DEFAULT_SERVER_IP: optionalEnv(z.string().min(1)),
+    // An IP or hostname, nothing else: docker compose's env_file keeps `KEY=   # note` as "# note",
+    // which was registered in Dokploy as the server address. Fail at boot instead.
+    DOKPLOY_DEFAULT_SERVER_IP: optionalEnv(
+      z.string().regex(/^[A-Za-z0-9.:-]+$/, "must be an IP address or hostname (remove any inline # comment)"),
+    ),
     /**
      * Public base URL of this API, used when building user-facing links.
      * Deliberately NOT given a schema default — the fallback
