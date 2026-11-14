@@ -1,7 +1,7 @@
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { nowIso } from "../../../shared/utils/time.js";
-import { resolveExecutionTarget, executeCommand } from "../../../shared/service-clients/command-execution.js";
+import { resolveProjectRunner, readDokployContainerLogs } from "../../../shared/service-clients/command-execution.js";
 
 export const LogsError = createDomainErrorClass<"not_found" | "bad_request" | "internal">("LogsError");
 export type LogsError = InstanceType<typeof LogsError>;
@@ -13,6 +13,8 @@ export interface LogEntry {
   content: string;
   size: number;
   lastModified: string | null;
+  /** null: `content` is an explanatory message, not log data (nothing to download or clear). */
+  source: "file" | "container" | null;
 }
 
 /**
@@ -60,60 +62,45 @@ export async function getLog(params: {
 }): Promise<LogEntry> {
   const { tenantId, projectId, logType } = params;
 
-  // Resolve execution target (same mechanism as commands)
-  const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
+  // Same routing as commands: inside the Dokploy container first, native target otherwise.
+  const runner = await resolveProjectRunner(projectId, tenantId);
 
-  if (!target) {
-    return {
-      type: logType,
-      content: errorMessage || `No active deployment found. Deploy your project first to access ${LOG_TYPE_LABELS[logType]}.`,
-      size: 0,
-      lastModified: null,
-    };
+  const label = LOG_TYPE_LABELS[logType];
+  const message = (content: string): LogEntry => ({ type: logType, content, size: 0, lastModified: null, source: null });
+  const data = (content: string, source: "file" | "container"): LogEntry => ({
+    type: logType,
+    content,
+    size: Buffer.byteLength(content, "utf8"),
+    lastModified: nowIso(),
+    source,
+  });
+
+  if (!runner.run) {
+    return message(runner.errorMessage || `No active deployment found. Deploy your project first to access ${label}.`);
   }
 
   // Build a command that tries each possible log path and tails the first one found
-  const paths = LOG_PATHS[logType];
-  const findAndTailCmd = buildLogReadCommand(paths);
+  const findAndTailCmd = buildLogReadCommand(LOG_PATHS[logType]);
 
   try {
-    const result = await executeCommand(target, findAndTailCmd);
+    const result = await runner.run(findAndTailCmd);
 
-    if (result.timedOut) {
-      return {
-        type: logType,
-        content: `Timed out reading ${LOG_TYPE_LABELS[logType]}. The log file may be very large.`,
-        size: 0,
-        lastModified: null,
-      };
-    }
+    if (result.timedOut) return message(`Timed out reading ${label}. The log file may be very large.`);
 
     if (result.exitCode !== 0 && result.output.includes("NO_LOG_FOUND")) {
-      return {
-        type: logType,
-        content: `${LOG_TYPE_LABELS[logType]} not found. The application may not generate this type of log, or it's stored in a non-standard location.`,
-        size: 0,
-        lastModified: null,
-      };
+      // Most stacks on Dokploy log to stdout, not to a file: show the container's output instead.
+      const stdout = logType === "site" ? await readDokployContainerLogs(projectId, MAX_TAIL_LINES) : null;
+      if (stdout && stdout.exitCode === 0 && !stdout.timedOut) return data(stdout.output, "container");
+      return message(`${label} not found. The application may not generate this type of log, or it's stored in a non-standard location.`);
     }
 
-    // Even with non-zero exit code, if we got output it might be the log content
-    const content = result.output || `No entries in ${LOG_TYPE_LABELS[logType]}.`;
+    // The script keeps tail's exit code, so non-zero here is an error (unreadable file, container down), not log data.
+    if (result.exitCode !== 0) return message(`Failed to read ${label}: ${result.output.trim() || `exit code ${result.exitCode}`}`);
 
-    return {
-      type: logType,
-      content,
-      size: Buffer.byteLength(content, "utf8"),
-      lastModified: nowIso(),
-    };
+    // An empty file is still data: the frontend shows its own empty state.
+    return data(result.output, "file");
   } catch (err) {
-    const msg = getErrMsg(err);
-    return {
-      type: logType,
-      content: `Failed to read ${LOG_TYPE_LABELS[logType]}: ${msg}`,
-      size: 0,
-      lastModified: null,
-    };
+    return message(`Failed to read ${label}: ${getErrMsg(err)}`);
   }
 }
 
@@ -123,24 +110,29 @@ export async function getLog(params: {
 export async function clearLog(params: {
   tenantId: string;
   projectId: string;
+  userId?: string;
   logType: LogType;
 }): Promise<void> {
-  const { tenantId, projectId, logType } = params;
+  const { tenantId, projectId, userId, logType } = params;
 
-  // Resolve execution target
-  const { target, errorMessage } = await resolveExecutionTarget(projectId, tenantId);
+  const runner = await resolveProjectRunner(projectId, tenantId);
 
-  if (!target) {
-    throw new LogsError(errorMessage || "No active deployment found.", "bad_request");
+  if (!runner.run) {
+    throw new LogsError(runner.errorMessage || "No active deployment found.", "bad_request");
   }
 
   // Build a command that truncates the log file
   const paths = LOG_PATHS[logType];
   const truncateCmd = buildLogClearCommand(paths);
 
-  const result = await executeCommand(target, truncateCmd).catch((err) => {
+  const result = await runner.run(truncateCmd).catch((err) => {
     throw new LogsError(`Failed to clear ${LOG_TYPE_LABELS[logType]}`, "internal", err);
   });
+
+  // Nothing was truncated: say so instead of recording a "cleared" event for a log that isn't there.
+  if (result.exitCode !== 0 && result.output.includes("NO_LOG_FOUND")) {
+    throw new LogsError(`${LOG_TYPE_LABELS[logType]} not found, so there is nothing to clear.`, "not_found");
+  }
 
   if (result.exitCode !== 0) {
     throw new LogsError(`Failed to clear ${LOG_TYPE_LABELS[logType]}: ${result.output}`, "internal");
@@ -151,6 +143,7 @@ export async function clearLog(params: {
   await recordActivity({
     tenantId,
     projectId,
+    userId,
     eventType: "log_cleared",
     description: `Cleared ${LOG_TYPE_LABELS[logType]}`,
     metadata: { logType },
@@ -164,7 +157,7 @@ export async function clearLog(params: {
  * Uses a loop so we try multiple paths and output the first one found.
  */
 function buildLogReadCommand(paths: string[]): string {
-  const checks = paths.map((p) => `[ -f "${p}" ] && tail -n ${MAX_TAIL_LINES} "${p}" && exit 0`).join("; ");
+  const checks = paths.map((p) => `[ -f "${p}" ] && { tail -n ${MAX_TAIL_LINES} "${p}"; exit $?; }`).join("; ");
   return `${checks}; echo "NO_LOG_FOUND"; exit 1`;
 }
 
@@ -172,6 +165,7 @@ function buildLogReadCommand(paths: string[]): string {
  * Build a shell command that truncates the first existing log file.
  */
 function buildLogClearCommand(paths: string[]): string {
-  const checks = paths.map((p) => `[ -f "${p}" ] && : > "${p}" && exit 0`).join("; ");
-  return `${checks}; exit 0`;
+  // Stop at the first existing file and keep its exit code, so a permission error isn't reported as "not found".
+  const checks = paths.map((p) => `[ -f "${p}" ] && { : > "${p}"; exit $?; }`).join("; ");
+  return `${checks}; echo "NO_LOG_FOUND"; exit 1`;
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useId } from "react";
+import { useState, useEffect, useCallback, useId, useRef } from "react";
 import { observeApi } from "@/services/observe";
 import { commandsApi } from "@/services/commands";
 import type {
@@ -17,7 +17,14 @@ import Spinner from "@/components/Spinner";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/input";
-import { ArchiveXIcon, ClockIcon, DownloadIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
+import { ArchiveXIcon, CheckIcon, ClockIcon, CopyIcon, DownloadIcon, EllipsisVerticalIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu";
 import { panelId, tabId, useTabListKeyboard } from "@/hooks/useTabListKeyboard";
 import { useUrlSection } from "@/hooks/useUrlSection";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
@@ -140,25 +147,37 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleCopyUrl(hb)}
-                  className="text-xs text-primary-500 hover:text-primary-400 transition-colors"
-                >
-                  {copiedId === hb.id ? "Copied!" : "Copy URL"}
-                </button>
-                {canManage && (
+              {/* Same row-actions menu as Processes and Domains. Non-modal: Delete opens a dialog. */}
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    onClick={() => setConfirmHeartbeat(hb)}
-
-                    className="text-xs text-danger-500 hover:text-danger-400 transition-colors disabled:opacity-50"
+                    className="size-8 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-card/60 transition-colors"
+                    aria-label={`Actions for ${hb.name}`}
                   >
-                    Delete
+                    <EllipsisVerticalIcon className="size-4 text-text-muted" />
                   </button>
-                )}
-              </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-44" aria-label="Heartbeat actions">
+                  {/* Kept open on select so the "Copied" acknowledgement is actually seen. */}
+                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleCopyUrl(hb); }}>
+                    {copiedId === hb.id ? <CheckIcon className="text-success-500" /> : <CopyIcon className="text-text-muted" />}
+                    {copiedId === hb.id ? "Copied" : "Copy ping URL"}
+                  </DropdownMenuItem>
+                  {canManage && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => setConfirmHeartbeat(hb)}
+                        className="text-danger-500 focus:text-danger-500"
+                      >
+                        <Trash2Icon />
+                        Delete
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           ))}
           {canManage && (
@@ -197,7 +216,8 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
 
 function HeartbeatStatusDot({ status }: { status: Heartbeat["status"] }) {
   const tones = { healthy: "success", missed: "danger", waiting: "muted" } as const;
-  return <span className={`size-2.5 rounded-full shrink-0 ${toneDotCls[tones[status]]}`} />;
+  // Status is otherwise conveyed by color alone.
+  return <span role="img" aria-label={`Status: ${status}`} title={status} className={`size-2.5 rounded-full shrink-0 ${toneDotCls[tones[status]]}`} />;
 }
 
 function CreateHeartbeatModal({
@@ -287,18 +307,23 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
   const [logEntry, setLogEntry] = useState<LogEntry | null>(null);
   const [logError, setLogError] = useState("");
   const [loading, setLoading] = useState(true);
+  // Each read is an SSH round-trip; a slower earlier one must not overwrite the log type now selected.
+  const latestRequest = useRef(0);
 
   const fetchLog = useCallback(async (logType: LogType) => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     try {
       const res = await observeApi.getLog(project.id, logType);
+      if (requestId !== latestRequest.current) return;
       setLogEntry(res);
       setLogError("");
     } catch (err) {
+      if (requestId !== latestRequest.current) return;
       setLogEntry(null);
       setLogError(getErrorMessage(err));
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) setLoading(false);
     }
   }, [project.id]);
 
@@ -342,7 +367,8 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
         </select>
 
         <div className="flex items-center gap-2">
-          {canManage && (
+          {/* Only a file can be truncated; container output and messages have nothing to clear. */}
+          {canManage && logEntry?.source === "file" && (
             <button
               type="button"
               onClick={() => setConfirmClear(true)}
@@ -356,7 +382,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
           <button
             type="button"
             onClick={handleDownload}
-            disabled={!logEntry}
+            disabled={!logEntry?.source}
             className="text-xs text-text-muted hover:text-text transition-colors disabled:opacity-50"
             title="Download"
             aria-label="Download log"
@@ -388,9 +414,14 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
             <Button variant="outline" onClick={() => void fetchLog(activeLogType)}>Retry</Button>
           </div>
         ) : (
-          <pre className="p-4 text-xs/relaxed font-mono text-strong whitespace-pre-wrap wrap-break-word">
-            {logEntry?.content || "No log data available."}
-          </pre>
+          <>
+            {logEntry?.source === "container" && (
+              <p className="border-b border-border px-4 py-2 text-xs text-text-muted">No log file found; showing the container's output.</p>
+            )}
+            <pre className="p-4 text-xs/relaxed font-mono text-strong whitespace-pre-wrap wrap-break-word">
+              {logEntry?.content || "No log data available."}
+            </pre>
+          </>
         )}
       </div>
 
@@ -399,7 +430,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
         onClose={() => setConfirmClear(false)}
         onConfirm={handleClear}
         title="Clear this log"
-        message={`Permanently delete the ${activeLogType} log? This is the record you would use to explain a failed deploy, and it cannot be recovered.`}
+        message={`Permanently delete the ${LOG_TYPES.find((lt) => lt.value === activeLogType)?.label ?? activeLogType}? This is the record you would use to explain a failed deploy, and it cannot be recovered.`}
         confirmLabel="Clear log permanently"
       />
     </div>
@@ -480,6 +511,7 @@ function ActivitySection({ project }: { project: Project }) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search"
+          aria-label="Search activity"
           className="pl-9"
         />
       </div>
@@ -495,7 +527,6 @@ function ActivitySection({ project }: { project: Project }) {
         <div className="rounded-lg border border-border flex flex-col items-center justify-center py-14 gap-3">
           <ArchiveXIcon className="size-12 text-text-muted/40" />
           <p className="text-sm font-medium text-text">No recent events</p>
-          <p className="text-xs text-text-muted">Dockier retains 14 days of events.</p>
         </div>
       ) : (
         <div className="rounded-lg border border-border divide-y divide-border overflow-auto">

@@ -40,6 +40,8 @@ export interface LogEntry {
   content: string;
   size: number;
   lastModified: string | null;
+  /** Where `content` came from; null means it is an explanatory message, not log data. */
+  source: "file" | "container" | null;
 }
 
 export type ActivityEventType =
@@ -53,6 +55,7 @@ export type ActivityEventType =
   | "heartbeat_recovered"
   | "log_cleared"
   | "project_updated"
+  | "wp_config_updated"
   | "domain_added"
   | "domain_removed"
   | "security_rule_added"

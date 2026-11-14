@@ -15,3 +15,4 @@
 
 export { executeCommand, type ExecutionTarget, type ExecutionResult } from "../../services/commands/domain/executor.js";
 export { resolveExecutionTarget, resolveProjectRunner, type ProjectCommandRunner } from "../../services/commands/domain/worker.js";
+export { readDokployContainerLogs } from "../../services/deploy/domain/dokploy/command-exec.js";

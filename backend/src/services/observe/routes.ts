@@ -166,6 +166,7 @@ export async function registerObserveRoutes(app: FastifyInstance) {
       await clearLog({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,
+        userId: auth.userId,
         logType: request.params.logType,
       });
       return { success: true as const };

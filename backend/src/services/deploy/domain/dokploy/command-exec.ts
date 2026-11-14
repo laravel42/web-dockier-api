@@ -199,6 +199,26 @@ export async function execOnDokployHost(
  */
 function buildRemoteScript(appName: string, command: string): string {
   const escaped = command.replace(/'/g, "'\\''");
+  return `${resolveContainerScript(appName)} docker exec "$CID" sh -c '${escaped}'`;
+}
+
+/**
+ * Read the app container's stdout/stderr. Most stacks log there rather than to a
+ * file, so this is what the Observe "Site Log" falls back to on Dokploy. Returns
+ * null when the project has no Dokploy application to read from.
+ */
+export async function readDokployContainerLogs(
+  projectId: string,
+  lines: number,
+): Promise<DokployCommandResult | null> {
+  const { target } = await resolveDokployCommandTarget(projectId);
+  if (!target || !SAFE_NAME.test(target.appName)) return null;
+  const tail = Math.max(1, Math.floor(lines));
+  return execOnDokployHost(target, `${resolveContainerScript(target.appName)} docker logs --tail ${tail} "$CID" 2>&1`);
+}
+
+/** Shell that sets `$CID` to the app's running container, or exits 1. */
+function resolveContainerScript(appName: string): string {
   // Note: appName is validated against SAFE_NAME before we get here.
   //
   // Resolving the target container correctly matters during a Swarm rollout:
@@ -225,7 +245,6 @@ function buildRemoteScript(appName: string, command: string): string {
     // so anchor to the start and require the dot separator.
     `if [ -z "$CID" ]; then CID=$(docker ps --filter "name=^/?${appName}\\." --filter "status=running" --format "{{.ID}}" | head -n1); fi;`,
     `if [ -z "$CID" ]; then echo "The application container is not running." >&2; exit 1; fi;`,
-    `docker exec "$CID" sh -c '${escaped}'`,
   ].join(" ");
 }
 

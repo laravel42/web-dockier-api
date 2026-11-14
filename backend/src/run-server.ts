@@ -10,6 +10,7 @@ import { registerScanWorker } from "./services/code-analysis/domain/worker.js";
 import { registerCommandWorker } from "./services/commands/domain/worker.js";
 import { registerConfigApplyWorker } from "./shared/workers/config-apply.js";
 import { registerCertPollWorker } from "./shared/workers/cert-poll.js";
+import { registerHeartbeatCheckWorker } from "./services/observe/domain/heartbeat-check.js";
 import { registerDomainHandlers } from "./services/domains/domain/worker.js";
 import { registerNetworkHandlers } from "./services/network/domain/worker.js";
 import { seedCustomRules } from "./services/code-analysis/domain/seed-custom-rules.js";
@@ -71,6 +72,8 @@ const workerRegistry: WorkerEntry[] = [
     services: ["domains"],
     register: registerCertPollWorker,
   },
+  // Same register-then-schedule constraint as cert-poll, so no onStartup either.
+  { services: ["observe"], register: registerHeartbeatCheckWorker },
 ];
 
 // ─── Startup Hooks ─────────────────────────────────────────────────

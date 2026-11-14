@@ -60,6 +60,8 @@ export const activityEventTypeSchema = z.enum([
   "heartbeat_recovered",
   "log_cleared",
   "project_updated",
+  // Recorded by projects/routes/wp-config.ts; missing here, one such row made GET /activity fail serialization.
+  "wp_config_updated",
   "domain_added",
   "domain_removed",
   "security_rule_added",
@@ -93,4 +95,6 @@ export const logEntrySchema = z.object({
   content: z.string(),
   size: z.number(),
   lastModified: z.string().nullable(),
+  /** null: `content` is an explanatory message (not found, timeout…), not log data. */
+  source: z.enum(["file", "container"]).nullable(),
 });
