@@ -159,6 +159,25 @@ describe("stageConfigureApp — Railpack PHP env defaults", () => {
     });
 
     expect(envMap().RAILPACK_PHP_EXTENSIONS).toContain("intl");
+    expect(envMap().RAILPACK_PHP_EXTENSIONS).not.toContain("pdo_");
+  });
+
+  // A deployed Laravel app answered "could not find driver (Connection: mysql)":
+  // FrankenPHP ships no MySQL/Postgres PDO driver, so the default set must name it.
+  it.each([
+    ["a provisioned mysql database", [{ serviceType: "database", engine: "mysql", host: "db", port: 3306, password: "pw" }], [], "pdo_mysql"],
+    ["a provisioned postgres database", [{ serviceType: "database", engine: "postgres", host: "db", port: 5432, password: "pw" }], [], "pdo_pgsql"],
+    ["DB_CONNECTION=mariadb", [], [{ name: "DB_CONNECTION", value: "mariadb" }], "pdo_mysql"],
+    ["a DB_HOST and no DB_CONNECTION (Laravel defaults to mysql)", [], [{ name: "DB_HOST", value: "db.example.com" }], "pdo_mysql"],
+  ] as const)("adds the PDO driver for %s", async (_label, provisionedDatabases, envVars, driver) => {
+    await stageConfigureApp({
+      ...base,
+      ...phpRailpack,
+      client: client as unknown as DokployClient,
+      provisionedDatabases: [...provisionedDatabases],
+      envVars: [...envVars],
+    });
+    expect(envMap().RAILPACK_PHP_EXTENSIONS?.split(",")).toContain(driver);
   });
 
   it("applies PHP extension defaults when detected via techStack even if primaryLanguage is not php", async () => {

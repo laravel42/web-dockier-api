@@ -45,6 +45,31 @@ const RAILPACK_VERSION = "0.43.0";
  */
 const DEFAULT_PHP_EXTENSIONS = ["gd", "intl", "zip", "sockets", "bcmath", "exif", "pcntl"];
 
+/** PDO driver for the app's DB_CONNECTION. FrankenPHP ships neither MySQL nor Postgres. */
+const PDO_DRIVER_BY_CONNECTION: Record<string, string> = {
+  mysql: "pdo_mysql",
+  mariadb: "pdo_mysql",
+  pgsql: "pdo_pgsql",
+  postgres: "pdo_pgsql",
+  postgresql: "pdo_pgsql",
+};
+
+/**
+ * The default extension set plus the PDO driver the app connects with.
+ *
+ * Railpack adds the driver itself only for a DB_CONNECTION of exactly "mysql" or
+ * "pgsql" as it sees it at build time; a deployed Laravel app answered every request
+ * with "could not find driver (Connection: mysql)". Naming the driver here does not
+ * depend on that detection. Laravel's default connection is mysql, so an app with a
+ * DB_HOST and no DB_CONNECTION gets pdo_mysql too.
+ */
+function defaultPhpExtensions(envVars: Array<{ name: string; value: string }>): string[] {
+  const get = (name: string) => envVars.find((v) => v.name === name)?.value.trim().toLowerCase() ?? "";
+  const connection = get("DB_CONNECTION") || (get("DB_HOST") ? "mysql" : "");
+  const driver = PDO_DRIVER_BY_CONNECTION[connection];
+  return driver ? [...DEFAULT_PHP_EXTENSIONS, driver] : DEFAULT_PHP_EXTENSIONS;
+}
+
 /**
  * The port a Node railpack app is told to listen on (via PORT) and that Traefik
  * is routed to. Railpack's PHP/static images serve on 80, but a Node server
@@ -364,7 +389,8 @@ export async function stageConfigureApp(params: {
     advise?.(injectedPortHostAdvisory(NODE_RAILPACK_PORT));
   }
   if (!envHas(envVars, "RAILPACK_PHP_EXTENSIONS") && envHas(finalEnv, "RAILPACK_PHP_EXTENSIONS")) {
-    advise?.(phpExtensionDefaultsAdvisory(DEFAULT_PHP_EXTENSIONS));
+    const added = finalEnv.find((v) => v.name === "RAILPACK_PHP_EXTENSIONS")?.value ?? "";
+    advise?.(phpExtensionDefaultsAdvisory(added.split(",")));
   }
   if (!envHas(envVars, "RAILPACK_SKIP_MIGRATIONS") && envHas(finalEnv, "RAILPACK_SKIP_MIGRATIONS")) {
     advise?.(migrationsSkippedAdvisory());
@@ -493,7 +519,7 @@ function withRailpackPhpDefaults(
   const additions: Array<{ name: string; value: string }> = [];
 
   if (!has("RAILPACK_PHP_EXTENSIONS")) {
-    additions.push({ name: "RAILPACK_PHP_EXTENSIONS", value: DEFAULT_PHP_EXTENSIONS.join(",") });
+    additions.push({ name: "RAILPACK_PHP_EXTENSIONS", value: defaultPhpExtensions(envVars).join(",") });
   }
   // Only skip migrations when there's no DB to migrate against. With a DB
   // present, leave the flag unset so Railpack runs migrate + optimize at
