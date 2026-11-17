@@ -10,6 +10,7 @@ import type { RunScanOptions } from "./scan-worker.js";
 import { persistScanProgress } from "./scan-progress.js";
 import { reconcileStaleScanById } from "./scan-reconcile.js";
 import { requestScanCancel } from "./scan-cancel.js";
+import { markScanFailed } from "./scan-persistence.js";
 import { getSecurityFindingCounts, getSecurityFindingCountsForScans, countDistinctFindingFiles } from "./findings.js";
 
 export type { RunScanOptions };
@@ -25,8 +26,34 @@ export interface CreateScanParams {
   branch: string;
 }
 
+const PROJECT_SCAN_RUNNING_MESSAGE =
+  "A scan of this project is already running. Wait for it to finish or cancel it first.";
+const projectScanRunningError = () => new CodeAnalysisError(PROJECT_SCAN_RUNNING_MESSAGE, "bad_request");
+
+/**
+ * Whether the project has a running scan whose owner is alive. One that is
+ * stale (owner died) is marked failed on the way, so it cannot block the project.
+ * The unique index of migration 0089 is the real guard; this gives the refusal
+ * before a scan row is created, and frees a project a crash left "running".
+ */
+async function hasLiveRunningScan(tenantId: string, projectId: string, exceptScanId?: string): Promise<boolean> {
+  // Tenant-scoped: createScan does not verify projectId, so this must not report on another tenant's project.
+  let query = supabaseAdmin
+    .from("scans")
+    .select("id")
+    .eq("organization_id", tenantId)
+    .eq("project_id", projectId)
+    .eq("status", "running");
+  if (exceptScanId) query = query.neq("id", exceptScanId);
+  const { data } = await query;
+  const results = await Promise.allSettled((data ?? []).map((s) => reconcileStaleScanById(s.id)));
+  // reconcile returns true when it marked the scan failed; anything else is still running.
+  return results.some((r) => !(r.status === "fulfilled" && r.value));
+}
+
 export async function createScan(params: CreateScanParams) {
   const { tenantId, projectId, connectionId, repo, branch } = params;
+  if (await hasLiveRunningScan(tenantId, projectId)) throw projectScanRunningError();
   const id = randomUUID();
   const now = nowIso();
   const payload = {
@@ -242,6 +269,8 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
   const scan = unwrapQuery(data, error, CodeAnalysisError, { notFoundMsg: "Scan not found" });
   assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
 
+  if (await hasLiveRunningScan(tenantId, scan.project_id, scanId)) throw projectScanRunningError();
+
   const initialProgress = {
     phase: "cloning" as const,
     scanner: "cloning" as const,
@@ -276,6 +305,12 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
     .neq("status", "running")
     .select()
     .maybeSingle();
+  if (updateError?.code === "23505") {
+    // Lost the race to a run started between the check above and this write. A
+    // just-created (pending) scan is recorded as refused instead of left behind.
+    await markScanFailed(scanId, PROJECT_SCAN_RUNNING_MESSAGE);
+    throw projectScanRunningError();
+  }
   throwOnError(updateError, CodeAnalysisError, { internalMsg: "Failed to update scan status" });
   if (!updated) {
     throw new CodeAnalysisError(

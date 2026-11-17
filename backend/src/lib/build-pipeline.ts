@@ -10,7 +10,8 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, writeFile, copyFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { buildCloneUrl } from "./git-url.js";
 import { analyzeRepoConfig, generateDockerfile, configSummary, toDetectedStack, resolvePhpVersion } from "./repo-analyzer/index.js";
 import type { RepoConfig, DetectedStack } from "./repo-analyzer/types.js";
@@ -146,13 +147,15 @@ export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
   const repoDir = join(workDir, "repo");
 
   try {
-    // execFileSync, not execSync: no shell, so a branch or repo name containing
+    // execFile, not exec: no shell, so a branch or repo name containing
     // $(...) or backticks is an argument and never a command. JSON.stringify did
     // not stop that — it escapes quotes but leaves $ and ` live inside them.
-    execFileSync(
+    // Async, not execFileSync: a sync clone blocks the scan child's event loop,
+    // its 10 s heartbeat never fires, and the 90 s stale check fails a healthy scan.
+    await promisify(execFile)(
       "git",
       ["clone", "--depth", "1", "--branch", branch, cloneUrl, "repo"],
-      { cwd: workDir, timeout: 120_000, stdio: "pipe" },
+      { cwd: workDir, timeout: 120_000 },
     );
   } catch (err) {
     // Clean up the temp directory since the caller won't have access to it
@@ -160,9 +163,7 @@ export async function cloneRepo(opts: CloneOptions): Promise<CloneResult> {
     throw new BuildError(`Failed to clone ${git.repo}@${branch}`, "clone", err);
   }
 
-  const commitHash = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoDir, timeout: 5_000 })
-    .toString()
-    .trim();
+  const commitHash = (await promisify(execFile)("git", ["rev-parse", "HEAD"], { cwd: repoDir, timeout: 5_000 })).stdout.trim();
 
   await logger.success(`Repository cloned (commit: ${commitHash.slice(0, 8)})`);
 

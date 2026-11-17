@@ -8,15 +8,19 @@ vi.mock("../../shared/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { execFileSyncMock, execSyncMock } = vi.hoisted(() => ({
-  execFileSyncMock: vi.fn(),
+const { execFileMock, execSyncMock } = vi.hoisted(() => ({
+  execFileMock: vi.fn(),
   execSyncMock: vi.fn(),
 }));
 
-vi.mock("node:child_process", () => ({
-  execFileSync: execFileSyncMock,
-  execSync: execSyncMock,
-}));
+// execFile stands in for promisify(execFile): the custom hook resolves { stdout, stderr } like the real one.
+vi.mock("node:child_process", async () => {
+  const { promisify } = await import("node:util");
+  return {
+    execFile: Object.assign(() => {}, { [promisify.custom]: execFileMock }),
+    execSync: execSyncMock,
+  };
+});
 
 const { cloneRepo } = await import("../build-pipeline.js");
 
@@ -46,7 +50,7 @@ describe("cloneRepo — the branch name never reaches a shell", () => {
   });
 
   it("passes a hostile branch as its own argv element, with no shell", async () => {
-    execFileSyncMock.mockReturnValue(Buffer.from("abc1234\n"));
+    execFileMock.mockResolvedValue({ stdout: "abc1234\n", stderr: "" });
 
     const result = await cloneRepo({
       git: { provider: "github", token: "", repo: "owner/repo" },
@@ -61,7 +65,7 @@ describe("cloneRepo — the branch name never reaches a shell", () => {
     // in this path may use it.
     expect(execSyncMock).not.toHaveBeenCalled();
 
-    const [file, args] = execFileSyncMock.mock.calls[0] as [string, string[]];
+    const [file, args] = execFileMock.mock.calls[0] as [string, string[]];
     expect(file).toBe("git");
     expect(args).toEqual([
       "clone",
@@ -80,7 +84,7 @@ describe("cloneRepo — the branch name never reaches a shell", () => {
   });
 
   it("uses argv for rev-parse too", async () => {
-    execFileSyncMock.mockReturnValue(Buffer.from("abc1234\n"));
+    execFileMock.mockResolvedValue({ stdout: "abc1234\n", stderr: "" });
 
     const result = await cloneRepo({
       git: { provider: "github", token: "", repo: "owner/repo" },
@@ -90,8 +94,8 @@ describe("cloneRepo — the branch name never reaches a shell", () => {
     });
     workDir = result.workDir;
 
-    expect(execFileSyncMock.mock.calls[1]?.[0]).toBe("git");
-    expect(execFileSyncMock.mock.calls[1]?.[1]).toEqual(["rev-parse", "HEAD"]);
+    expect(execFileMock.mock.calls[1]?.[0]).toBe("git");
+    expect(execFileMock.mock.calls[1]?.[1]).toEqual(["rev-parse", "HEAD"]);
     expect(execSyncMock).not.toHaveBeenCalled();
   });
 });

@@ -25,7 +25,8 @@ let updateMatches = true;
 
 function chain(op: Op): Record<string, unknown> {
   const result = () => {
-    if (op.op === "update") return { data: updateMatches ? { id: "s" } : null, error: null };
+    // A matched update returns the row, as `.select()` after an UPDATE does.
+    if (op.op === "update") return { data: updateMatches ? { id: "s", ...scanRow } : null, error: null };
     if (op.op === "select") return { data: scanRow, error: null };
     return { data: null, error: null };
   };
@@ -142,7 +143,7 @@ describe("handleScanJob", () => {
     expect(failed!.payload!.summary).toMatchObject({ cancelled: true });
   });
 
-  it("still fails the job for a real error, so the queue retries it", async () => {
+  it("still fails the job for a real error", async () => {
     runScanInSubprocess.mockRejectedValueOnce(new Error("Scan subprocess exited with code 1"));
 
     await expect(handleScanJob(job)).rejects.toThrow(/code 1/);
@@ -157,5 +158,19 @@ describe("handleScanJob", () => {
     await expect(options.isCancelled()).resolves.toBe(true);
     scanRow = { status: "running", cancel_requested_at: null };
     await expect(options.isCancelled()).resolves.toBe(false);
+  });
+
+  // The child's own heartbeat stops when its event loop blocks, and 90 s later the
+  // scan read as dead while still running, which let a second run start.
+  it("keeps the scan alive from the parent on every poll, and only while it runs", async () => {
+    runScanInSubprocess.mockResolvedValueOnce(undefined);
+    await handleScanJob(job);
+    const options = runScanInSubprocess.mock.calls[0][2] as { isCancelled: () => Promise<boolean> };
+    ops.length = 0;
+    await options.isCancelled();
+    const poll = updatesTo("scans")[0];
+    expect(poll.payload).toHaveProperty("updated_at");
+    expect(poll.payload).not.toHaveProperty("status");
+    expect(poll.filters).toContain('eq:["status","running"]');
   });
 });

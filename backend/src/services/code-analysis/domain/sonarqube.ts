@@ -1,7 +1,8 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import type { ScanFindingInput } from "./scan-analysis.js";
 import { sonarExclusionGlobs } from "./scan-skip-dirs.js";
 import { logger } from "../../../shared/logger.js";
@@ -267,7 +268,7 @@ export async function waitForSonarAnalysis(
 
 export interface RunSonarScannerDeps {
   findScanner?: () => string | null;
-  execScanner?: (scannerBin: string, repoDir: string) => void;
+  execScanner?: (scannerBin: string, repoDir: string) => void | Promise<void>;
   readReportTask?: (repoDir: string) => string | null;
   waitForAnalysis?: (taskId: string) => Promise<void>;
   fetchIssues?: (projectKey: string) => Promise<SonarApiIssue[]>;
@@ -282,7 +283,7 @@ export interface RunSonarScannerDeps {
 
 /** sonar-scanner prints its ERROR line on stdout; the exception message is only the command line. */
 function scannerFailureDetail(err: unknown): string {
-  const e = err as { stdout?: Buffer; stderr?: Buffer; message?: string };
+  const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
   const output = `${e.stderr?.toString() ?? ""}\n${e.stdout?.toString() ?? ""}`;
   const errorLine = output.split("\n").find((line) => /\bERROR\b/.test(line));
   const text = (errorLine ?? e.message ?? String(err)).replace(/^.*?\bERROR:?\s*/, "").trim();
@@ -341,17 +342,20 @@ export async function runSonarScanner(
   try {
     const execScanner =
       deps.execScanner ??
-      ((bin: string, dir: string) => {
-        execFileSync(bin, [`-Dsonar.projectBaseDir=${dir}`], {
+      (async (bin: string, dir: string) => {
+        // Async: a sync scanner run (up to 5 min) blocks the scan child's heartbeat,
+        // and the 90 s stale check then fails a healthy scan. maxBuffer: the 1 MB
+        // default is outgrown by INFO output on a large repo (ENOBUFS kills the run).
+        await promisify(execFile)(bin, [`-Dsonar.projectBaseDir=${dir}`], {
           cwd: dir,
           timeout: 300_000,
-          stdio: "pipe",
+          maxBuffer: 64 * 1024 * 1024,
           env: { ...process.env },
         });
       });
 
     try {
-      execScanner(scannerBin, repoDir);
+      await execScanner(scannerBin, repoDir);
     } catch (err) {
       log(`Scanner failed: ${scannerFailureDetail(err)}`);
     }

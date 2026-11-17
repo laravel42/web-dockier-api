@@ -37,6 +37,24 @@ export async function isScanCancelRequested(scanId: string): Promise<boolean> {
   return Boolean(data?.cancel_requested_at);
 }
 
+/**
+ * The owning instance's 5 s poll: reads the cancel flag AND refreshes `updated_at`.
+ * The parent's event loop never blocks, unlike the scan child's (a tenant regex can
+ * hang it), so a scan whose owner is alive never trips the 90 s stale check, gets
+ * marked failed, and lets a second run of the same project start.
+ */
+export async function pollRunningScan(scanId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("scans")
+    .update({ updated_at: nowIso() })
+    .eq("id", scanId)
+    .eq("status", "running")
+    .select("cancel_requested_at")
+    .maybeSingle();
+  if (error) throw new Error(`Failed to poll scan: ${error.message}`);
+  return Boolean(data?.cancel_requested_at);
+}
+
 /** Finish a cancelled scan; one that completed meanwhile keeps its result (see markScanFailed). */
 export async function markScanCancelled(scanId: string): Promise<void> {
   await markScanFailed(scanId, SCAN_CANCELLED_MESSAGE, { cancelled: true });

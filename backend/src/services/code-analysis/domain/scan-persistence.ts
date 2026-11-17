@@ -201,3 +201,35 @@ export async function markScanFailed(
 
   broadcastScanStatus(scanId, "failed", summary);
 }
+
+/**
+ * Store a finished run's result. Status-guarded like `markScanFailed`: a scan
+ * marked failed meanwhile (stale, cancelled) stays failed, its just-persisted
+ * findings are dropped, and `false` is returned so the caller announces nothing.
+ * Unguarded, a failed scan flipped back to completed when its run ended.
+ */
+export async function markScanCompleted(
+  scanId: string,
+  summary: Record<string, unknown>,
+  commitSha: string,
+): Promise<boolean> {
+  const { data: completed, error } = await supabaseAdmin
+    .from("scans")
+    .update({
+      status: "completed",
+      summary: { ...summary, progress: undefined } as unknown as Json,
+      commit_sha: commitSha,
+      updated_at: nowIso(),
+    })
+    .eq("id", scanId)
+    .in("status", ["running", "pending"])
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(`Failed to update scan status: ${error.message}`);
+  if (completed) return true;
+
+  // shortcut: a re-run of the same scan id while an old run lives on also passes the guard. The owner's poll keeps a live run "running", so that needs the owner SIGKILLed with its child blocked; a per-run token would close it.
+  obsLogger.warn(`[scan] Scan ${scanId} is no longer running; discarding this run's result`);
+  await supabaseAdmin.from("findings").delete().eq("scan_id", scanId);
+  return false;
+}

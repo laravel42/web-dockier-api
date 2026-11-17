@@ -168,11 +168,15 @@ export function parseSemgrepOutput(
   disabledRuleIds: Set<string>,
   repoDir?: string,
 ): ScanFindingInput[] {
+  if (!stdout.trim()) return [];
   let parsed: { results?: SemgrepJsonResult[] };
   try {
     parsed = JSON.parse(stdout) as { results?: SemgrepJsonResult[] };
   } catch {
-    return [];
+    // Returning [] here made a crashed or truncated run (runCommand cuts stdout at
+    // 50 MB) look like a clean one. Semgrep failing fails the scan. The output is
+    // not quoted: it is shown to every tenant member and carries server paths.
+    throw new Error("Semgrep returned output that could not be read, possibly because it exceeded the 50 MB output limit.");
   }
 
   const findings: ScanFindingInput[] = [];

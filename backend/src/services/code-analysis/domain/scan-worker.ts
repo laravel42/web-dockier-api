@@ -2,9 +2,7 @@ import { rm } from "node:fs/promises";
 import { cloneRepo } from "../../../lib/build-pipeline.js";
 import { createConsoleLogger } from "../../../lib/logging.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
-import { nowIso } from "../../../shared/utils/time.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import type { Json } from "../../../shared/supabase/types.js";
 import { getConnectionForTenant } from "../../../shared/service-clients/git-connections.js";
 import { emitScanNotification } from "./scan-events.js";
 import { type ScanFindingInput, dedupeScanFindings, toRepoRelativePath } from "./scan-analysis.js";
@@ -21,7 +19,7 @@ import type { ScanProgressPayload } from "./scan-events.js";
 import { withElapsed, startScanHeartbeat } from "./scan-heartbeat.js";
 import { walkRepoFiles } from "./scan-files.js";
 import { runSemgrep, runCustomRules, runSensitiveDataScanner } from "./scan-strategies.js";
-import { buildSummary, persistFindings, markScanFailed } from "./scan-persistence.js";
+import { buildSummary, persistFindings, markScanFailed, markScanCompleted } from "./scan-persistence.js";
 import type { ScanSummary } from "./mappers.js";
 
 export interface RunScanOptions {
@@ -288,16 +286,7 @@ export async function executeScan(
       ...buildSummary(uniqueFindings, filesInRepo, filesScanned),
       ...(skippedEngines.length > 0 ? { skippedEngines } : {}),
     };
-    const { error: updateError } = await supabaseAdmin
-      .from("scans")
-      .update({
-        status: "completed",
-        summary: { ...summary, progress: undefined } as unknown as Json,
-        commit_sha: cloneResult.commitHash,
-        updated_at: nowIso(),
-      })
-      .eq("id", scanId);
-    if (updateError) throw new Error(`Failed to update scan status: ${updateError.message}`);
+    if (!(await markScanCompleted(scanId, summary, cloneResult.commitHash))) return;
 
     broadcastScanStatus(scanId, "completed", summary);
 

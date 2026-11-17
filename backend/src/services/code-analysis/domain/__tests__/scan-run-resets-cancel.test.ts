@@ -7,9 +7,14 @@ import { describe, it, expect, vi } from "vitest";
 
 let updatePayload: Record<string, unknown> | undefined;
 
-function chain(result: unknown): Record<string, unknown> {
-  const c: Record<string, unknown> = { then: (ok: (v: unknown) => unknown) => Promise.resolve(result).then(ok) };
-  for (const m of ["select", "eq", "neq", "in", "single", "maybeSingle"]) c[m] = () => c;
+/** `listResult` answers a select without .single() (runScan's lookup of running siblings). */
+function chain(result: unknown, listResult: unknown = { data: [], error: null }): Record<string, unknown> {
+  let single = false;
+  const c: Record<string, unknown> = {
+    then: (ok: (v: unknown) => unknown) => Promise.resolve(single ? result : listResult).then(ok),
+  };
+  for (const m of ["select", "eq", "neq", "in"]) c[m] = () => c;
+  for (const m of ["single", "maybeSingle"]) c[m] = () => { single = true; return c; };
   return c;
 }
 

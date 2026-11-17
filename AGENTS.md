@@ -317,8 +317,21 @@ subprocesses to route a request to. A dedicated column, not a key in
 flag stored there is lost whenever it lands between one of their reads and
 writes. Rules that must hold:
 
-- A cancelled job **ends**, it does not fail: `retryLimit: 1` would otherwise
-  restart the scan the user stopped. A job cancelled while queued never starts.
+- A cancelled job **ends**, it does not fail. A job cancelled while queued never starts.
+- The `security-scan` queue has `retryLimit: 0`. A failed job has already marked
+  its scan failed; a retry re-ran it unseen and flipped it back to `completed`.
+- The final `completed` write is status-guarded, like `markScanFailed`: a scan
+  marked failed meanwhile (stale or cancelled) stays failed and its result is
+  discarded. Clone and sonar-scanner run async so the 10 s heartbeat keeps the
+  scan clear of the 90 s stale check.
+- **One running scan per project.** A unique partial index (migration 0089)
+  enforces it; `createScan` refuses up front so no orphan row is created, and
+  `runScan` maps the 23505 of a lost race to the same message. A sibling whose
+  owner died is reconciled first, so a crash cannot block a project.
+- **Liveness comes from the parent too.** The owning instance's 5 s cancel poll
+  (`pollRunningScan`) also refreshes `updated_at`. The child's own heartbeat stops
+  whenever its event loop blocks (a tenant regex can do it); without the parent's,
+  a live scan read as dead after 90 s and a second run of the project could start.
 - `runScan` clears `cancel_requested_at`, or a re-run would start out cancelled.
 - A runner that exits 0 just as the kill goes out keeps its result.
 - A cancelled scan is stored as `failed` with `summary.cancelled = true` (the

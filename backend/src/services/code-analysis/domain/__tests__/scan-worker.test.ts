@@ -104,8 +104,14 @@ describe("parseSemgrepOutput", () => {
     expect(findings[0]?.filePath).toBe("lib/util.ts");
   });
 
-  it("returns empty array for invalid JSON", () => {
-    expect(parseSemgrepOutput("not json", new Set())).toEqual([]);
+  // Invalid or truncated output used to read as "no findings".
+  it("throws on output that is not valid JSON, including a truncated document", () => {
+    expect(() => parseSemgrepOutput("not json", new Set())).toThrow(/could not be read/);
+    expect(() => parseSemgrepOutput('{"results": [{"check_id": "a"', new Set())).toThrow(/could not be read/);
+  });
+
+  it("treats empty output as no findings", () => {
+    expect(parseSemgrepOutput("  \n", new Set())).toEqual([]);
   });
 
   it("falls back to metadata impact when severity is missing", () => {

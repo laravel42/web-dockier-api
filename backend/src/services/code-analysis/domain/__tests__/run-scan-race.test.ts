@@ -17,19 +17,28 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 interface QueryResult {
   data: unknown;
-  error: { message: string } | null;
+  error: { message: string; code?: string } | null;
 }
 
 /** Result for the next terminal call on a chain, queued per operation. */
 let selectResult: QueryResult = { data: null, error: null };
 let updateResult: QueryResult = { data: null, error: null };
+/** What a list select (no .single()) returns: the project's other running scans. */
+let siblingsResult: QueryResult = { data: [], error: null };
 
-function chainable(resolve: () => QueryResult): Record<string, unknown> {
+function chainable(resolve: (single: boolean) => QueryResult): Record<string, unknown> {
+  let single = false;
   const chain: Record<string, unknown> = {
-    then: (onFulfilled: (v: QueryResult) => unknown) => Promise.resolve(resolve()).then(onFulfilled),
+    then: (onFulfilled: (v: QueryResult) => unknown) => Promise.resolve(resolve(single)).then(onFulfilled),
   };
-  for (const method of ["select", "eq", "neq", "in", "order", "range", "single", "maybeSingle"]) {
+  for (const method of ["select", "eq", "neq", "in", "order", "range"]) {
     chain[method] = () => chain;
+  }
+  for (const method of ["single", "maybeSingle"]) {
+    chain[method] = () => {
+      single = true;
+      return chain;
+    };
   }
   return chain;
 }
@@ -37,7 +46,7 @@ function chainable(resolve: () => QueryResult): Record<string, unknown> {
 vi.mock("../../../../shared/supabase/client.js", () => ({
   supabaseAdmin: {
     from: () => ({
-      select: () => chainable(() => selectResult),
+      select: () => chainable((single) => (single ? selectResult : siblingsResult)),
       update: () => chainable(() => updateResult),
       insert: () => chainable(() => ({ data: null, error: null })),
       delete: () => chainable(() => ({ data: null, error: null })),
@@ -57,7 +66,8 @@ vi.mock("../scan-progress.js", () => ({
 // The reconciler would itself read Supabase; it is not what this test is about.
 vi.mock("../scan-reconcile.js", () => ({ reconcileStaleScanById: vi.fn(async () => false) }));
 
-const { runScan, CodeAnalysisError } = await import("../scans.js");
+const { runScan, createScan, CodeAnalysisError } = await import("../scans.js");
+const { reconcileStaleScanById } = await import("../scan-reconcile.js");
 
 /** A scan row as PostgREST returns it. */
 const scanRow = {
@@ -76,7 +86,9 @@ const scanRow = {
 
 beforeEach(() => {
   enqueueScan.mockClear();
+  vi.mocked(reconcileStaleScanById).mockReset().mockResolvedValue(false);
   selectResult = { data: scanRow, error: null };
+  siblingsResult = { data: [], error: null };
 });
 
 describe("runScan status transition", () => {
@@ -99,10 +111,50 @@ describe("runScan status transition", () => {
     expect(enqueueScan).not.toHaveBeenCalled();
   });
 
+  // Every "Run new scan" is a new row, so the per-row lock above cannot stop two
+  // scans of one project; the unique index of migration 0089 does.
+  it("refuses a second running scan of the same project, and enqueues nothing", async () => {
+    updateResult = { data: null, error: { code: "23505", message: "duplicate key value violates unique constraint" } };
+    await expect(runScan(scanRow.id, "org-1")).rejects.toThrow(/already running/);
+    expect(enqueueScan).not.toHaveBeenCalled();
+  });
+
+  it("first clears a sibling scan whose owner died, so it cannot block the project", async () => {
+    siblingsResult = { data: [{ id: "old-scan" }], error: null };
+    // The sibling was stale and is now failed; the target scan is not.
+    vi.mocked(reconcileStaleScanById).mockImplementation(async (id) => id === "old-scan");
+    updateResult = { data: { ...scanRow, status: "running" }, error: null };
+    await runScan(scanRow.id, "org-1");
+    expect(reconcileStaleScanById).toHaveBeenCalledWith("old-scan");
+    expect(enqueueScan).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses while another scan of the project is alive", async () => {
+    siblingsResult = { data: [{ id: "live-scan" }], error: null }; // reconcile: not stale
+    updateResult = { data: { ...scanRow, status: "running" }, error: null };
+    await expect(runScan(scanRow.id, "org-1")).rejects.toThrow(/already running/);
+    expect(enqueueScan).not.toHaveBeenCalled();
+  });
+
   it("rejects a scan belonging to another tenant before any write", async () => {
     updateResult = { data: { ...scanRow, status: "running" }, error: null };
-
     await expect(runScan(scanRow.id, "org-2")).rejects.toThrow(/Not your scan/);
     expect(enqueueScan).not.toHaveBeenCalled();
+  });
+});
+
+describe("createScan", () => {
+  // Refused before a row exists: the UI creates then runs, and a refusal at run
+  // time left an orphan pending scan plus a page stuck on "running".
+  it("refuses to create a scan while the project has one running", async () => {
+    siblingsResult = { data: [{ id: "live-scan" }], error: null };
+    await expect(
+      createScan({ tenantId: "org-1", projectId: "proj-1", connectionId: "conn-1", repo: "acme/api", branch: "main" }),
+    ).rejects.toThrow(/already running/);
+  });
+
+  it("creates it when nothing is running", async () => {
+    const scan = await createScan({ tenantId: "org-1", projectId: "proj-1", connectionId: "conn-1", repo: "acme/api", branch: "main" });
+    expect(scan.status).toBe("pending");
   });
 });

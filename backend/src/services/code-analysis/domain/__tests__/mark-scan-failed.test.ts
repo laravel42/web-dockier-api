@@ -38,7 +38,7 @@ vi.mock("../../../../shared/supabase/client.js", () => ({
 vi.mock("../scan-progress.js", () => ({ broadcastScanStatus: vi.fn() }));
 
 const { broadcastScanStatus } = await import("../scan-progress.js");
-const { markScanFailed } = await import("../scan-persistence.js");
+const { markScanFailed, markScanCompleted } = await import("../scan-persistence.js");
 
 beforeEach(() => {
   calls.length = 0;
@@ -70,5 +70,21 @@ describe("markScanFailed", () => {
   it("still finishes when the cleanup itself fails", async () => {
     deleteError = { message: "connection terminated" };
     await expect(markScanFailed("scan-1", "boom")).resolves.toBeUndefined();
+  });
+});
+
+// A scan marked failed while its run was still going (stale heartbeat, cancel)
+// used to flip back to completed when the run ended.
+describe("markScanCompleted", () => {
+  it("completes a scan that is still running and keeps its findings", async () => {
+    await expect(markScanCompleted("scan-1", { totalFindings: 3 }, "abc123")).resolves.toBe(true);
+    expect(filters).toContain('scans.update.in:["status",["running","pending"]]');
+    expect(calls).not.toContain("findings.delete");
+  });
+
+  it("leaves a scan already marked failed as failed and drops this run's findings", async () => {
+    stillRunning = false;
+    await expect(markScanCompleted("scan-1", { totalFindings: 3 }, "abc123")).resolves.toBe(false);
+    expect(calls).toContain("findings.delete");
   });
 });
