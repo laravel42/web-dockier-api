@@ -299,6 +299,19 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["opengrep_rules"]["Row"]>;
         Relationships: [];
       };
+      custom_rule_overrides: {
+        Row: {
+          id: string;
+          organization_id: string;
+          rule_id: string;
+          enabled: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["custom_rule_overrides"]["Row"]> &
+          Pick<Database["public"]["Tables"]["custom_rule_overrides"]["Row"], "id" | "organization_id" | "rule_id" | "enabled">;
+        Update: Partial<Database["public"]["Tables"]["custom_rule_overrides"]["Row"]>;
+        Relationships: [];
+      };
       sonarqube_rules: {
         Row: {
           id: string;

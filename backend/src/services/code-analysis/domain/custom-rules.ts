@@ -6,6 +6,7 @@ import { nowIso } from "../../../shared/utils/time.js";
 import { rowToCustomRule } from "./mappers.js";
 import { seedCustomRules } from "./seed-custom-rules.js";
 import { CodeAnalysisError } from "./scans.js";
+import { listRuleOverrides, upsertRuleOverride } from "./rule-overrides.js";
 
 const CUSTOM_RULE_COLUMNS =
   "id,organization_id,rule_id,severity,message,pattern,extensions,enabled,type,yaml_content,created_at";
@@ -23,7 +24,7 @@ export async function listCustomRules(params: ListCustomRulesParams) {
     await seedCustomRules();
   }
 
-  const [systemResult, tenantResult] = await Promise.all([
+  const [systemResult, tenantResult, overrides] = await Promise.all([
     supabaseAdmin
       .from("custom_rules")
       .select(CUSTOM_RULE_COLUMNS)
@@ -36,6 +37,7 @@ export async function listCustomRules(params: ListCustomRulesParams) {
       .eq("organization_id", tenantId)
       .eq("type", type)
       .order("rule_id", { ascending: true }),
+    listRuleOverrides(tenantId, "custom"),
   ]);
 
   const systemRows = unwrapList(systemResult.data, systemResult.error, CodeAnalysisError, {
@@ -45,7 +47,10 @@ export async function listCustomRules(params: ListCustomRulesParams) {
     internalMsg: "Failed to list tenant custom rules",
   });
 
-  return [...systemRows, ...tenantRows].map(rowToCustomRule);
+  // A system rule's on/off is per organization; the shared row only holds the default.
+  const enabledFor = new Map(overrides.map((o) => [o.ruleId, o.enabled]));
+  const system = systemRows.map((row) => ({ ...row, enabled: enabledFor.get(row.rule_id) ?? row.enabled }));
+  return [...system, ...tenantRows].map(rowToCustomRule);
 }
 
 export interface CreateCustomRuleParams {
@@ -123,7 +128,7 @@ export async function updateCustomRule(params: UpdateCustomRuleParams) {
 
   const { data: existing, error: fetchError } = await supabaseAdmin
     .from("custom_rules")
-    .select("organization_id,type")
+    .select("organization_id,type,rule_id")
     .eq("id", ruleDbId)
     .single();
   const rule = unwrapQuery(existing, fetchError, CodeAnalysisError, { notFoundMsg: "Rule not found" });
@@ -144,6 +149,9 @@ export async function updateCustomRule(params: UpdateCustomRuleParams) {
     ) {
       throw new CodeAnalysisError("System rules only support enable/disable", "forbidden");
     }
+    // Never the shared row: updating it switched the rule for every organization.
+    await upsertRuleOverride({ tenantId, tool: "custom", ruleId: rule.rule_id, enabled: params.enabled });
+    return;
   }
   if (params.pattern && rule.type === "custom") {
     try {

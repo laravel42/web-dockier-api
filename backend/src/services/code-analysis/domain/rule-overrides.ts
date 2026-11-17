@@ -3,7 +3,14 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { selectAllRows, throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { CodeAnalysisError } from "./scans.js";
 
-export type OverrideTool = "semgrep" | "sonarqube";
+/** "custom" holds overrides of the shared system custom rules; it is not exposed by the routes. */
+export type OverrideTool = "semgrep" | "sonarqube" | "custom";
+
+const OVERRIDE_TABLE = {
+  semgrep: "opengrep_rules",
+  sonarqube: "sonarqube_rules",
+  custom: "custom_rule_overrides",
+} as const;
 
 export interface RuleOverride {
   id: string;
@@ -12,7 +19,7 @@ export interface RuleOverride {
 }
 
 export async function listRuleOverrides(tenantId: string, tool: OverrideTool): Promise<RuleOverride[]> {
-  const table = tool === "semgrep" ? "opengrep_rules" : "sonarqube_rules";
+  const table = OVERRIDE_TABLE[tool];
   // All of them: the scan worker builds its disabled-rule set from this list, so an
   // override past the 1000-row cap would let a disabled rule run again. rule_id is
   // unique per organization (the upsert's conflict key), so the order is total.
@@ -40,7 +47,7 @@ export interface UpsertRuleOverrideParams {
 
 export async function upsertRuleOverride(params: UpsertRuleOverrideParams): Promise<void> {
   const { tenantId, tool, ruleId, enabled } = params;
-  const table = tool === "semgrep" ? "opengrep_rules" : "sonarqube_rules";
+  const table = OVERRIDE_TABLE[tool];
   const payload = {
     id: randomUUID(),
     organization_id: tenantId,
