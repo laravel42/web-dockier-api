@@ -10,6 +10,7 @@ import { emptyFilterMessage, PROVIDER_DEFS } from "../utils/providerFilters";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import type { Finding, PMIntegration, SecurityFindingCounts, SkippedEngine } from "@/types";
 import Spinner from "@/components/Spinner";
+import PageError from "@/components/ui/PageError";
 import {
   ChevronRightIcon,
   CircleCheckIcon,
@@ -24,6 +25,9 @@ interface Props {
   findingsLoadingMore: boolean;
   hasMoreFindings: boolean;
   onLoadMore: () => void;
+  findingsError: string;
+  /** Re-runs the first page with the current filters. */
+  onRetry: () => void;
   scanCompleted: boolean;
   severityFilter: string;
   providerFilter: string;
@@ -119,6 +123,7 @@ function sortFindingsBySeverityDesc(findings: Finding[]): Finding[] {
 
 export default function FindingsList({
   findings, findingCounts, findingsLoading, findingsLoadingMore, hasMoreFindings, onLoadMore,
+  findingsError, onRetry,
   scanCompleted,
   severityFilter, providerFilter, skippedEngines,
   fileContents, pmIntegrations, hasConnectionId, mrCreating,
@@ -138,6 +143,11 @@ export default function FindingsList({
         <Spinner />
       </div>
     );
+  }
+
+  // Before the empty states: a failed load has no counts, which read as "looking clean".
+  if (findingsError && findings.length === 0) {
+    return <PageError message={findingsError} onRetry={onRetry} />;
   }
 
   if (!hasSecurityFindings && scanCompleted && !hasActiveFilter) {
@@ -219,6 +229,8 @@ export default function FindingsList({
               <Spinner />
             </div>
           )}
+          {/* A failed "load more": the rows above are real, so keep them and offer the next page again. */}
+          {findingsError && <PageError className="py-4" message={findingsError} onRetry={onLoadMore} />}
         </>
       )}
     </>

@@ -197,6 +197,14 @@ export function useScanDetail() {
     });
   }, [scanId, findingsLoading, findingsLoadingMore, hasMoreFindings, fetchFindings, severityFilter, providerFilter]);
 
+  const retryFindings = useCallback(() => {
+    if (!scanId) return;
+    fetchFindings(scanId, {
+      severity: severityFilter || undefined,
+      provider: (providerFilter || undefined) as "semgrep" | "sonarqube" | "custom" | undefined,
+    });
+  }, [scanId, fetchFindings, severityFilter, providerFilter]);
+
   const refreshAllScans = useCallback(async (projectId: string, options?: { silent?: boolean }) => {
     const id = ++allScansRequestRef.current;
     if (!options?.silent) setAllScansLoading(true);
@@ -485,8 +493,16 @@ export function useScanDetail() {
 
       await refreshAllScans(project.id, { silent: true });
     } catch (err) {
-      setRunScanError(getErrorMessage(err, "Scan failed"));
-      if (createdScanId) clearScanState(createdScanId);
+      const message = getErrorMessage(err, "Scan failed");
+      setRunScanError(message);
+      if (createdScanId) {
+        clearScanState(createdScanId);
+        // The optimistic "running" stayed on screen after a refused run, with
+        // Cancel shown and Run disabled until a reload.
+        const refused = createdScanId;
+        setScan((prev) => (prev?.id === refused ? { ...prev, status: "failed", summary: { ...prev.summary, error: message } } : prev));
+        void refreshAllScans(project.id, { silent: true });
+      }
     } finally {
       setRunScanStarting(false);
     }
@@ -519,6 +535,7 @@ export function useScanDetail() {
     findingsLoadingMore,
     pageError,
     findingsError,
+    retryFindings,
     severityFilter,
     handleSeverityFilter,
     providerFilter,

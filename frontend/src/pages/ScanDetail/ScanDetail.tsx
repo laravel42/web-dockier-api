@@ -133,6 +133,8 @@ export default function ScanDetail() {
           findingsLoadingMore={core.findingsLoadingMore}
           hasMoreFindings={core.hasMoreFindings}
           onLoadMore={core.loadMoreFindings}
+          findingsError={core.findingsError}
+          onRetry={core.retryFindings}
           scanCompleted={core.scan.status === "completed"}
           severityFilter={core.severityFilter}
           providerFilter={core.providerFilter}
