@@ -241,17 +241,29 @@ describe("runScanInSubprocess", () => {
     // The kill can race the runner's last instruction. Here the runner answers
     // the signal by exiting 0, which is a result: throwing it away would
     // "cancel" a scan that had in fact completed.
+    //
+    // Cancel only once the handler is installed: under a loaded suite node took
+    // over 100 ms to start, the signal landed first and killed the runner, and a
+    // kill is rightly a cancel. That was the flake, not the code.
+    const readyDir = await mkdtemp(join(tmpdir(), "scan-ready-"));
+    const readyFile = join(readyDir, "ready");
     await installRunner(`
+      import { writeFileSync } from "node:fs";
       process.on("SIGTERM", () => process.exit(0));
+      writeFileSync(${JSON.stringify(readyFile)}, "1");
       setInterval(() => {}, 1000);
     `);
 
-    await expect(
-      runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }, 600_000, {
-        isCancelled: async () => true,
-        pollMs: 100,
-      }),
-    ).resolves.toBeUndefined();
+    try {
+      await expect(
+        runScanInSubprocess({ scanId: scanId(), tenantId: "t", options: {} }, 600_000, {
+          isCancelled: async () => existsSync(readyFile),
+          pollMs: 100,
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      await rm(readyDir, { recursive: true, force: true });
+    }
   }, 40_000);
 
   it("does not kill a healthy scan because the cancel check failed", async () => {
