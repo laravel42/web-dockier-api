@@ -61,7 +61,11 @@ export type ActivityEventType =
   | "domain_added"
   | "domain_removed"
   | "security_rule_added"
-  | "security_rule_removed";
+  | "security_rule_removed"
+  | "security_rule_user_added"
+  | "security_rule_user_removed"
+  | "redirect_added"
+  | "redirect_removed";
 
 export interface ActivityEntry {
   id: string;

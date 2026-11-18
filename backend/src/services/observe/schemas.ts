@@ -68,6 +68,10 @@ export const activityEventTypeSchema = z.enum([
   "domain_removed",
   "security_rule_added",
   "security_rule_removed",
+  "security_rule_user_added",
+  "security_rule_user_removed",
+  "redirect_added",
+  "redirect_removed",
 ]);
 
 export const activitySchema = z.object({

@@ -22,6 +22,10 @@ import {
   deleteRedirectRule,
 } from "./domain/network.js";
 import { applyNetworkRules } from "./domain/applier.js";
+import { safeRecordActivity } from "../../shared/service-clients/activity.js";
+
+/** Where a Basic Auth rule applies, for an activity line. */
+const rulePlace = (path: string | null | undefined) => (path ? ` on ${path}` : " on the whole site");
 import { enqueueNetworkApply } from "../../shared/workers/config-apply.js";
 
 export async function registerNetworkRoutes(app: FastifyInstance) {
@@ -74,6 +78,13 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         credentials: request.body.credentials,
       });
       await enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      safeRecordActivity({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        userId: auth.userId,
+        eventType: "security_rule_added",
+        description: `Added Basic Auth rule "${rule.name}"${rulePlace(rule.path)}`,
+      });
       return rule;
     },
   );
@@ -94,12 +105,19 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      await deleteSecurityRule({
+      const removed = await deleteSecurityRule({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,
         ruleId: request.params.ruleId,
       });
       await enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      safeRecordActivity({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        userId: auth.userId,
+        eventType: "security_rule_removed",
+        description: `Removed Basic Auth rule "${removed.name}"${rulePlace(removed.path)}`,
+      });
       return { success: true as const };
     },
   );
@@ -127,7 +145,7 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      const cred = await addSecurityRuleCredential({
+      const { credential, ruleName } = await addSecurityRuleCredential({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,
         ruleId: request.params.ruleId,
@@ -135,7 +153,15 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         password: request.body.password,
       });
       await enqueueNetworkApply(auth.tenantId, request.params.projectId);
-      return cred;
+      // Who can get in changed: the line an audit of a break-in looks for.
+      safeRecordActivity({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        userId: auth.userId,
+        eventType: "security_rule_user_added",
+        description: `Added user "${credential.username}" to Basic Auth rule "${ruleName}"`,
+      });
+      return credential;
     },
   );
 
@@ -156,13 +182,20 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      await deleteSecurityRuleCredential({
+      const removed = await deleteSecurityRuleCredential({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,
         ruleId: request.params.ruleId,
         credentialId: request.params.credentialId,
       });
       await enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      safeRecordActivity({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        userId: auth.userId,
+        eventType: "security_rule_user_removed",
+        description: `Removed user "${removed.username}" from Basic Auth rule "${removed.ruleName}"`,
+      });
       return { success: true as const };
     },
   );
@@ -214,6 +247,13 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
         type: request.body.type,
       });
       await enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      safeRecordActivity({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        userId: auth.userId,
+        eventType: "redirect_added",
+        description: `Added redirect ${rule.fromPath} → ${rule.toPath}`,
+      });
       return rule;
     },
   );
@@ -234,12 +274,19 @@ export async function registerNetworkRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      await deleteRedirectRule({
+      const removed = await deleteRedirectRule({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,
         ruleId: request.params.ruleId,
       });
       await enqueueNetworkApply(auth.tenantId, request.params.projectId);
+      safeRecordActivity({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        userId: auth.userId,
+        eventType: "redirect_removed",
+        description: `Removed redirect ${removed.fromPath} → ${removed.toPath}`,
+      });
       return { success: true as const };
     },
   );

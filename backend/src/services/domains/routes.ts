@@ -43,6 +43,7 @@ import {
 import { tenantRateLimit } from "../../shared/http/rate-limit.js";
 import { resumeDomainAttachment } from "./domain/resume.js";
 import { enqueueDomainApply, enqueueCertificateIssue } from "./domain/worker.js";
+import { safeRecordActivity } from "../../shared/service-clients/activity.js";
 
 export async function registerDomainsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -132,6 +133,13 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
         name,
       });
       await enqueueDomainApply(auth.tenantId, projectId);
+      safeRecordActivity({
+        tenantId: auth.tenantId,
+        projectId,
+        userId: auth.userId,
+        eventType: "domain_added",
+        description: `Added domain ${name}`,
+      });
 
       // Advisory, never blocking: the domain is already created by this point.
       const warning = await existingRecordAdvisory(name, routeTarget);
@@ -214,6 +222,13 @@ export async function registerDomainsRoutes(app: FastifyInstance) {
       }
 
       await enqueueDomainApply(auth.tenantId, request.params.projectId);
+      safeRecordActivity({
+        tenantId: auth.tenantId,
+        projectId: request.params.projectId,
+        userId: auth.userId,
+        eventType: "domain_removed",
+        description: removedName ? `Removed domain ${removedName}` : "Removed a domain",
+      });
       return { success: true as const };
     },
   );

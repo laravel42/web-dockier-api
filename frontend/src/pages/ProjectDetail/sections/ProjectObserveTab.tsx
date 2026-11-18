@@ -606,6 +606,10 @@ function ActivityDetailModal({
     domain_removed: "Domain removed",
     security_rule_added: "Security rule added",
     security_rule_removed: "Security rule removed",
+    security_rule_user_added: "Basic Auth user added",
+    security_rule_user_removed: "Basic Auth user removed",
+    redirect_added: "Redirect added",
+    redirect_removed: "Redirect removed",
   };
 
   const subtitle = EVENT_DESCRIPTIONS[entry.eventType] ?? entry.description;

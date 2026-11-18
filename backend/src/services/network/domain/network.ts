@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, unwrapList, deleteOrThrow } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, unwrapList } from "../../../shared/supabase/query.js";
 import type {
   SecurityRuleRow,
   SecurityRuleCredentialRow,
@@ -117,19 +117,21 @@ export async function deleteSecurityRule(params: {
   tenantId: string;
   projectId: string;
   ruleId: string;
-}): Promise<void> {
+}): Promise<{ name: string; path: string | null }> {
   const { tenantId, projectId, ruleId } = params;
 
-  await deleteOrThrow(
-    supabaseAdmin
-      .from("security_rules")
-      .delete({ count: "exact" })
-      .eq("id", ruleId)
-      .eq("organization_id", tenantId)
-      .eq("project_id", projectId),
-    NetworkError,
-    { notFoundMsg: "Security rule not found", internalMsg: "Failed to delete security rule" },
-  );
+  // Returns what was deleted, for the project's activity.
+  const { data, error } = await supabaseAdmin
+    .from("security_rules")
+    .delete()
+    .eq("id", ruleId)
+    .eq("organization_id", tenantId)
+    .eq("project_id", projectId)
+    .select("name,path");
+  throwOnError(error, NetworkError, { internalMsg: "Failed to delete security rule" });
+  const deleted = data?.[0];
+  if (!deleted) throw new NetworkError("Security rule not found", "not_found");
+  return deleted;
 }
 
 export async function addSecurityRuleCredential(params: {
@@ -138,19 +140,19 @@ export async function addSecurityRuleCredential(params: {
   ruleId: string;
   username: string;
   password: string;
-}): Promise<SecurityRuleCredentialResponse> {
+}): Promise<{ credential: SecurityRuleCredentialResponse; ruleName: string }> {
   const { tenantId, projectId, ruleId, username, password } = params;
 
   // Verify the rule belongs to this tenant/project
   const { data: rule, error: ruleError } = await supabaseAdmin
     .from("security_rules")
-    .select("id")
+    .select("id,name")
     .eq("id", ruleId)
     .eq("organization_id", tenantId)
     .eq("project_id", projectId)
     .single();
 
-  unwrapQuery(rule, ruleError, NetworkError, { notFoundMsg: "Security rule not found" });
+  const owned = unwrapQuery(rule, ruleError, NetworkError, { notFoundMsg: "Security rule not found" });
 
   const passwordHash = await hash(password, BCRYPT_ROUNDS);
 
@@ -167,7 +169,8 @@ export async function addSecurityRuleCredential(params: {
 
   const cred = unwrapQuery(data, error, NetworkError, { internalMsg: "Failed to add credential" });
 
-  return rowToCredential(cred as SecurityRuleCredentialRow);
+  // The rule's name rides along for the project's activity.
+  return { credential: rowToCredential(cred as SecurityRuleCredentialRow), ruleName: owned.name };
 }
 
 export async function deleteSecurityRuleCredential(params: {
@@ -175,29 +178,31 @@ export async function deleteSecurityRuleCredential(params: {
   projectId: string;
   ruleId: string;
   credentialId: string;
-}): Promise<void> {
+}): Promise<{ username: string; ruleName: string }> {
   const { tenantId, projectId, ruleId, credentialId } = params;
 
   // Verify the rule belongs to this tenant/project
   const { data: rule, error: ruleError } = await supabaseAdmin
     .from("security_rules")
-    .select("id")
+    .select("id,name")
     .eq("id", ruleId)
     .eq("organization_id", tenantId)
     .eq("project_id", projectId)
     .single();
 
-  unwrapQuery(rule, ruleError, NetworkError, { notFoundMsg: "Security rule not found" });
+  const owned = unwrapQuery(rule, ruleError, NetworkError, { notFoundMsg: "Security rule not found" });
 
-  await deleteOrThrow(
-    supabaseAdmin
-      .from("security_rule_credentials")
-      .delete({ count: "exact" })
-      .eq("id", credentialId)
-      .eq("security_rule_id", ruleId),
-    NetworkError,
-    { notFoundMsg: "Credential not found", internalMsg: "Failed to delete credential" },
-  );
+  // Returns who was removed, for the project's activity.
+  const { data, error } = await supabaseAdmin
+    .from("security_rule_credentials")
+    .delete()
+    .eq("id", credentialId)
+    .eq("security_rule_id", ruleId)
+    .select("username");
+  throwOnError(error, NetworkError, { internalMsg: "Failed to delete credential" });
+  const deleted = data?.[0];
+  if (!deleted) throw new NetworkError("Credential not found", "not_found");
+  return { username: deleted.username, ruleName: owned.name };
 }
 
 // ─── Redirect Rules ───
@@ -250,19 +255,21 @@ export async function deleteRedirectRule(params: {
   tenantId: string;
   projectId: string;
   ruleId: string;
-}): Promise<void> {
+}): Promise<{ fromPath: string; toPath: string }> {
   const { tenantId, projectId, ruleId } = params;
 
-  await deleteOrThrow(
-    supabaseAdmin
-      .from("redirect_rules")
-      .delete({ count: "exact" })
-      .eq("id", ruleId)
-      .eq("organization_id", tenantId)
-      .eq("project_id", projectId),
-    NetworkError,
-    { notFoundMsg: "Redirect rule not found", internalMsg: "Failed to delete redirect rule" },
-  );
+  // Returns what was deleted, for the project's activity.
+  const { data, error } = await supabaseAdmin
+    .from("redirect_rules")
+    .delete()
+    .eq("id", ruleId)
+    .eq("organization_id", tenantId)
+    .eq("project_id", projectId)
+    .select("from_path,to_path");
+  throwOnError(error, NetworkError, { internalMsg: "Failed to delete redirect rule" });
+  const deleted = data?.[0];
+  if (!deleted) throw new NetworkError("Redirect rule not found", "not_found");
+  return { fromPath: deleted.from_path, toPath: deleted.to_path };
 }
 
 // ─── Server-only: decrypted credentials (for the Dokploy applier) ───
