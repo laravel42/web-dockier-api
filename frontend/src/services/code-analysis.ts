@@ -66,8 +66,6 @@ export const codeAnalysisApi = {
   listOpengrepRules: () =>
     request<{ rules: Array<{ id: string; name: string; lang: string; path: string; severity: string; category: string; message: string }>; languages: string[] }>("/code-analysis/semgrep-rules"),
 
-  getOpengrepRuleContent: (path: string) =>
-    request<{ content: string }>(`/code-analysis/semgrep-rules/content${buildQuery({ path })}`),
 
 
   listSonarProfiles: () =>

@@ -140,7 +140,6 @@ export interface ListFindingsParams {
   provider?: FindingProvider;
   limit?: number;
   offset?: number;
-  excludeSensitiveData?: boolean;
 }
 
 export interface ListFindingsResult {
@@ -208,7 +207,6 @@ export async function listFindings(params: ListFindingsParams): Promise<ListFind
     provider,
     limit: rawLimit,
     offset: rawOffset,
-    excludeSensitiveData = true,
   } = params;
 
   const limit = Math.min(
@@ -234,7 +232,8 @@ export async function listFindings(params: ListFindingsParams): Promise<ListFind
   }>(query: T, severityFilter?: string): T => {
     let next = query.eq("scan_id", scanId).eq("suppressed_by_llm", false);
     if (severityFilter) next = next.eq("severity", severityFilter);
-    if (excludeSensitiveData) next = next.not("rule_id", "like", "sensitive-data.%");
+    // Sensitive-data hits are not security findings and never listed here (no caller wanted them).
+    next = next.not("rule_id", "like", "sensitive-data.%");
     // Mirrors findingProvider() in finding-filters.ts: semgrep is defined by
     // exclusion, so a prefix added there must be excluded here too or its
     // findings show up under Semgrep as well as their own provider.

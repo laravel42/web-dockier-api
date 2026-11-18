@@ -14,7 +14,7 @@ vi.mock("../../../../shared/config.js", () => ({
   },
 }));
 
-import { listSemgrepRules } from "../semgrep-rules.js";
+import { listSemgrepRules, getSemgrepRuleContent } from "../semgrep-rules.js";
 
 /**
  * A rule override only works if its id equals what a scan reports: the rule's
@@ -57,5 +57,11 @@ describe("listSemgrepRules", () => {
 
     const allInfo = rules.every((rule) => rule.severity === "info");
     expect(allInfo).toBe(false);
+  });
+});
+
+describe("getSemgrepRuleContent", () => {
+  it("refuses a directory instead of failing to read it", () => {
+    expect(() => getSemgrepRuleContent("bash")).toThrow(expect.objectContaining({ code: "not_found" }));
   });
 });

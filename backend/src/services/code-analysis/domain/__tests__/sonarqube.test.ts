@@ -23,7 +23,6 @@ vi.mock("../../../../shared/config.js", () => ({
 import {
   filterDisabledSonarFindings,
   getSonarConfig,
-  isSonarConfigured,
   mapSonarSeverity,
   parseSonarIssues,
   runSonarScanner,
@@ -46,7 +45,6 @@ describe("getSonarConfig", () => {
     delete process.env.SONARQUBE_URL;
     delete process.env.SONARQUBE_TOKEN;
     expect(getSonarConfig()).toBeNull();
-    expect(isSonarConfigured()).toBe(false);
   });
 
   it("returns config when both env vars are set", () => {
@@ -56,7 +54,6 @@ describe("getSonarConfig", () => {
       baseUrl: "https://sonar.example.com",
       token: "sqp_test_token",
     });
-    expect(isSonarConfigured()).toBe(true);
   });
 });
 

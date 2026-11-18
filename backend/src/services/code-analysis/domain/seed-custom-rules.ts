@@ -296,7 +296,7 @@ async function removeObsoleteSystemRules(): Promise<void> {
 
 /**
  * Idempotently insert built-in custom rules (organization_id = "").
- * Safe to call on every server boot and before listing rules.
+ * Runs once per boot of the code-analysis service (run-server.ts startup hook).
  */
 export async function seedCustomRules(): Promise<void> {
   await removeObsoleteSystemRules();

@@ -35,7 +35,6 @@ vi.mock("../../../../shared/supabase/client.js", () => ({
     }),
   },
 }));
-vi.mock("../seed-custom-rules.js", () => ({ seedCustomRules: vi.fn(async () => {}) }));
 vi.mock("../scans.js", () => ({
   CodeAnalysisError: class extends Error {
     constructor(message: string, public code: string) { super(message); }

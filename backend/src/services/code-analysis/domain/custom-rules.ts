@@ -4,7 +4,6 @@ import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../..
 import type { Database } from "../../../shared/supabase/types.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { rowToCustomRule } from "./mappers.js";
-import { seedCustomRules } from "./seed-custom-rules.js";
 import { CodeAnalysisError } from "./scans.js";
 import { listRuleOverrides, upsertRuleOverride } from "./rule-overrides.js";
 
@@ -20,9 +19,6 @@ export async function listCustomRules(params: ListCustomRulesParams) {
   const { tenantId } = params;
   const type = params.type ?? "custom";
 
-  if (type === "custom") {
-    await seedCustomRules();
-  }
 
   const [systemResult, tenantResult, overrides] = await Promise.all([
     supabaseAdmin

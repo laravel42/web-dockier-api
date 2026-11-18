@@ -57,10 +57,6 @@ export function getSonarConfig(): SonarConfig | null {
   return { baseUrl, token };
 }
 
-export function isSonarConfigured(): boolean {
-  return getSonarConfig() !== null;
-}
-
 export class SonarNotConfiguredError extends DomainError {
   constructor() {
     super("SonarQube URL or token not configured", "service_unavailable");

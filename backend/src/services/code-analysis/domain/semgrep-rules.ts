@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, isAbsolute } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { getOpengrepRulesDir } from "../../../shared/utils/paths.js";
@@ -75,7 +75,8 @@ export function listSemgrepRules(): { rules: SemgrepRule[]; languages: string[] 
 export function getSemgrepRuleContent(relativePath: string): string {
   const filePath = join(RULES_DIR, relativePath);
   const rel = relative(RULES_DIR, filePath);
-  if (rel.startsWith("..") || isAbsolute(rel) || !existsSync(filePath)) {
+  // isFile, not existsSync: a directory passed that check and readFileSync then threw EISDIR (a 500).
+  if (rel.startsWith("..") || isAbsolute(rel) || !existsSync(filePath) || !statSync(filePath).isFile()) {
     throw new CodeAnalysisError("Rule file not found", "not_found");
   }
   return readFileSync(filePath, "utf-8");
