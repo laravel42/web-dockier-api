@@ -72,6 +72,9 @@ export function useScanDetail() {
   scanRef.current = scan;
   const findingsRef = useRef(findings);
   findingsRef.current = findings;
+  /** The scan in the URL now, for async work started for an earlier one. */
+  const scanIdRef = useRef(scanId);
+  scanIdRef.current = scanId;
 
   const scanMatchesUrl = !scan || !scanId || scan.id === scanId;
   const scanRunning =
@@ -373,9 +376,14 @@ export function useScanDetail() {
     if (terminalHandledRef.current === key) return;
     terminalHandledRef.current = key;
 
+    // No findings fetch here: the status-keyed findings effect already runs when the
+    // scan turns completed, and a second one cleared the list mid-render (a flash).
+    const forScan = scanId;
     void (async () => {
       try {
-        const s = await codeAnalysisApi.getScan(scanId);
+        const s = await codeAnalysisApi.getScan(forScan);
+        // The user may have opened another scan while this was in flight.
+        if (scanIdRef.current !== forScan) return;
         setScan(s);
         seedFromScan(s);
         setAllScans((prev) =>
@@ -385,15 +393,9 @@ export function useScanDetail() {
         /* ignore */
       }
 
-      if (live.status === "completed") {
-        await fetchFindings(scanId, {
-          severity: severityFilter || undefined,
-          provider: (providerFilter || undefined) as "semgrep" | "sonarqube" | "custom" | undefined,
-        });
-      }
-      if (project) await refreshAllScans(project.id, { silent: true });
+      if (project && scanIdRef.current === forScan) await refreshAllScans(project.id, { silent: true });
     })();
-  }, [live, scanId, severityFilter, providerFilter, fetchFindings, project, refreshAllScans, seedFromScan]);
+  }, [live, scanId, project, refreshAllScans, seedFromScan]);
 
   useEffect(() => {
     if (!project || findings.length === 0) return;
@@ -458,6 +460,18 @@ export function useScanDetail() {
     { errorFallback: "Could not cancel the scan" },
   );
   const cancelling = scanRunning && cancelRequestedFor !== null && cancelRequestedFor === scanId;
+
+  // Lands on the project's newest remaining scan, so the user stays in its history.
+  const deleteConfirm = useConfirmableAction(
+    async () => {
+      if (!scanId) return;
+      await codeAnalysisApi.deleteScan(scanId);
+      const next = allScans.find((s) => s.id !== scanId);
+      setAllScans((prev) => prev.filter((s) => s.id !== scanId));
+      navigate(next ? `/security/${next.id}` : "/security", { replace: true });
+    },
+    { errorFallback: "Could not delete the scan" },
+  );
   const handleRunScan = async () => {
     if (!project || runScanBusy) return;
     setRunScanError("");
@@ -550,6 +564,7 @@ export function useScanDetail() {
     scanCancelled,
     cancelConfirm,
     cancelling,
+    deleteConfirm,
     handleRunScan,
     runScanBusy,
   };

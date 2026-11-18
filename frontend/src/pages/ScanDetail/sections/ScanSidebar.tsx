@@ -12,7 +12,7 @@ import type { Scan } from "@/types";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/Spinner";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
-import { ShieldCheckIcon } from "lucide-react";
+import { ShieldCheckIcon, Trash2Icon } from "lucide-react";
 import { failedScanDotClass, scanFindingSeverityDotClass } from "@/utils/scanSummary";
 import { clickableProps } from "@/utils/a11y";
 
@@ -27,6 +27,8 @@ interface Props {
   cancelling?: boolean;
   /** Absent where there is no scan to cancel (the empty state). */
   onCancelScan?: () => void;
+  /** Absent where there is no scan to delete (the empty state). */
+  onDeleteScan?: () => void;
   hasConnectionId: boolean;
   onRunScan: () => void;
   onSelectScan: (id: string) => void;
@@ -35,11 +37,13 @@ interface Props {
 
 export default function ScanSidebar({
   scanId, allScans, allScansLoading,
-  scanError, scanCancelled = false, scanRunning = false, cancelling = false, onCancelScan,
+  scanError, scanCancelled = false, scanRunning = false, cancelling = false, onCancelScan, onDeleteScan,
   hasConnectionId, onRunScan, onSelectScan, runScanBusy = false,
 }: Props) {
   const { has, isOwner, loading: permissionsLoading } = usePermissions();
   const canRunScan = isOwner || has("scan:run");
+  // The delete route requires scan:manage, not scan:run.
+  const canManageScans = isOwner || has("scan:manage");
 
   return (
     <div className="w-72 shrink-0">
@@ -66,6 +70,18 @@ export default function ScanSidebar({
                 className="mt-2 w-full"
               >
                 {cancelling ? "Cancelling…" : "Cancel scan"}
+              </Button>
+            )}
+            {/* Not while it runs: the backend refuses, a running scan has to be cancelled first. */}
+            {!scanRunning && canManageScans && onDeleteScan && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={onDeleteScan}
+                iconLeft={<Trash2Icon className="size-3.5" />}
+                className="mt-2 w-full text-text-muted hover:text-danger-500"
+              >
+                Delete scan
               </Button>
             )}
           </div>

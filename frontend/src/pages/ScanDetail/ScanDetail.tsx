@@ -213,6 +213,14 @@ export default function ScanDetail() {
         confirmLabel="Cancel scan"
         message="Cancel this scan? It stops within a few seconds and its partial results are discarded."
       />
+      <ConfirmModal
+        open={core.deleteConfirm.showModal}
+        onClose={core.deleteConfirm.close}
+        onConfirm={core.deleteConfirm.execute}
+        title="Delete scan"
+        confirmLabel="Delete scan"
+        message="Delete this scan and all its findings? Issues and merge requests already created from it are not affected. This cannot be undone."
+      />
       <ScanSidebar
         scanId={core.scanId}
         allScans={core.allScans}
@@ -222,6 +230,7 @@ export default function ScanDetail() {
         scanRunning={core.scanRunning}
         cancelling={core.cancelling}
         onCancelScan={core.cancelConfirm.open}
+        onDeleteScan={core.deleteConfirm.open}
         hasConnectionId={!!core.project?.connectionId}
         onRunScan={core.handleRunScan}
         onSelectScan={(id) => core.navigate(`/security/${id}`)}
