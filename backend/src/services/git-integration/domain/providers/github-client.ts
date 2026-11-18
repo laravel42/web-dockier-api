@@ -12,7 +12,7 @@
 import type { ConnectionLike } from "./provider-client.js";
 import { authHeaders, baseUrl } from "./provider-client.js";
 import { DomainError } from "../../../../shared/supabase/errors.js";
-import { fetchWithTimeout } from "../../../../shared/http/fetch.js";
+import { gitFetch } from "./guarded-fetch.js";
 
 export class GitHubApiError extends DomainError {
   constructor(
@@ -159,7 +159,7 @@ async function getCommitStats(
   sha: string,
 ): Promise<{ additions: number; deletions: number }> {
   try {
-    const res = await fetchWithTimeout(`${baseUrl}/repos/${owner}/${repo}/commits/${sha}`, { headers });
+    const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/commits/${sha}`, { headers });
     if (!res.ok) return { additions: 0, deletions: 0 };
     const data = (await res.json()) as { stats?: { additions?: number; deletions?: number } };
     return { additions: data.stats?.additions ?? 0, deletions: data.stats?.deletions ?? 0 };
@@ -180,7 +180,7 @@ export async function listCommits(
   const headers = getHeaders(connection);
   const { owner, repo, branch, limit, includeStats } = params;
 
-  const res = await fetchWithTimeout(
+  const res = await gitFetch(
     `${baseUrl}/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${limit}`,
     { headers },
   );
@@ -225,7 +225,7 @@ export async function getRepoInfo(
   const headers = getHeaders(connection);
   const { owner, repo } = params;
 
-  const res = await fetchWithTimeout(`${baseUrl}/repos/${owner}/${repo}`, { headers });
+  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}`, { headers });
   assertOk(res, `getRepoInfo ${owner}/${repo}`);
 
   const data = (await res.json()) as GitHubRepoInfoApiItem;
@@ -249,7 +249,7 @@ export async function getLanguages(
   const headers = getHeaders(connection);
   const { owner, repo } = params;
 
-  const res = await fetchWithTimeout(`${baseUrl}/repos/${owner}/${repo}/languages`, { headers });
+  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/languages`, { headers });
   if (!res.ok) return {};
 
   const languageData = (await res.json()) as Record<string, number>;
@@ -275,7 +275,7 @@ async function getContributorStats(
   host: string,
 ): Promise<GitHubContributor[] | null> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetchWithTimeout(`${baseUrl}/repos/${owner}/${repo}/stats/contributors`, { headers });
+    const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/stats/contributors`, { headers });
     if (res.status === 202) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       continue;
@@ -326,7 +326,7 @@ export async function getContributors(
     return stats.sort((a, b) => b.commits - a.commits).slice(0, limit);
   }
 
-  const res = await fetchWithTimeout(`${baseUrl}/repos/${owner}/${repo}/contributors?per_page=${limit}`, { headers });
+  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/contributors?per_page=${limit}`, { headers });
   if (!res.ok || res.status === 204) return [];
 
   const data = (await res.json()) as GitHubContributorApiItem[];
@@ -368,7 +368,7 @@ export async function listIssues(
   const headers = getHeaders(connection);
   const { owner, repo, limit = 10 } = params;
 
-  const res = await fetchWithTimeout(
+  const res = await gitFetch(
     `${baseUrl}/repos/${owner}/${repo}/issues?state=open&per_page=${limit}&sort=created&direction=desc`,
     { headers },
   );
@@ -404,7 +404,7 @@ export async function listPullRequests(
   const headers = getHeaders(connection);
   const { owner, repo, limit = 10 } = params;
 
-  const res = await fetchWithTimeout(
+  const res = await gitFetch(
     `${baseUrl}/repos/${owner}/${repo}/pulls?state=open&per_page=${limit}&sort=created&direction=desc`,
     { headers },
   );
@@ -434,7 +434,7 @@ export async function getCollaborators(
   const headers = getHeaders(connection);
   const { owner, repo } = params;
 
-  const res = await fetchWithTimeout(`${baseUrl}/repos/${owner}/${repo}/collaborators?per_page=100`, { headers });
+  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/collaborators?per_page=100`, { headers });
   if (!res.ok) return [];
 
   const data = (await res.json()) as Array<{ id: number; login: string; avatar_url: string }>;
@@ -457,7 +457,7 @@ export async function createIssue(
   const headers = getHeaders(connection);
   const { owner, repo, title, body, assignee } = params;
 
-  const res = await fetchWithTimeout(`${baseUrl}/repos/${owner}/${repo}/issues`, {
+  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/issues`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -487,7 +487,7 @@ export async function closeIssue(
   const headers = getHeaders(connection);
   const { owner, repo, issueNumber } = params;
 
-  const res = await fetchWithTimeout(`${baseUrl}/repos/${owner}/${repo}/issues/${issueNumber}`, {
+  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/issues/${issueNumber}`, {
     method: "PATCH",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ state: "closed" }),
@@ -508,7 +508,7 @@ export async function createBranch(
 
   // Get the SHA of the base branch (default: main)
   const base = baseBranch || "main";
-  const refRes = await fetchWithTimeout(`${baseUrl}/repos/${owner}/${repo}/git/ref/heads/${base}`, {
+  const refRes = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/git/ref/heads/${base}`, {
     headers,
   });
   assertOk(refRes, `getBranchRef ${owner}/${repo}:${base}`);
@@ -516,7 +516,7 @@ export async function createBranch(
   const sha = refData.object.sha;
 
   // Create the new branch
-  const createRes = await fetchWithTimeout(`${baseUrl}/repos/${owner}/${repo}/git/refs`, {
+  const createRes = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/git/refs`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({

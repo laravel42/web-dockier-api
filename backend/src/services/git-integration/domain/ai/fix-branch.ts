@@ -1,6 +1,6 @@
 import type { ConnectionLike } from "../providers/provider-client.js";
 import { baseUrl as providerBaseUrl } from "../providers/provider-client.js";
-import { fetchWithTimeout } from "../../../../shared/http/fetch.js";
+import { gitFetch } from "../providers/guarded-fetch.js";
 
 function baseUrl(connection: ConnectionLike): string {
   return providerBaseUrl(connection.provider, connection.endpoint);
@@ -37,7 +37,7 @@ export async function getDefaultBranch(
   const origin = baseUrl(connection);
 
   if (connection.provider === "github") {
-    const res = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}`, { headers: githubHeaders(connection) });
+    const res = await gitFetch(`${origin}/repos/${owner}/${repo}`, { headers: githubHeaders(connection) });
     if (!res.ok) return fallback;
     const body = (await res.json()) as { default_branch?: string };
     return body.default_branch || fallback;
@@ -45,7 +45,7 @@ export async function getDefaultBranch(
 
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
     const project = encodeURIComponent(`${owner}/${repo}`);
-    const res = await fetchWithTimeout(`${origin}/api/v4/projects/${project}`, { headers: gitlabHeaders(connection) });
+    const res = await gitFetch(`${origin}/api/v4/projects/${project}`, { headers: gitlabHeaders(connection) });
     if (!res.ok) return fallback;
     const body = (await res.json()) as { default_branch?: string };
     return body.default_branch || fallback;
@@ -61,7 +61,7 @@ async function getGitHubRefSha(
   branch: string,
 ): Promise<string> {
   const origin = baseUrl(connection);
-  const res = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`, {
+  const res = await gitFetch(`${origin}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`, {
     headers: githubHeaders(connection),
   });
   if (!res.ok) {
@@ -80,7 +80,7 @@ async function createGitHubBranch(
   baseSha: string,
 ): Promise<void> {
   const origin = baseUrl(connection);
-  const res = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}/git/refs`, {
+  const res = await gitFetch(`${origin}/repos/${owner}/${repo}/git/refs`, {
     method: "POST",
     headers: githubHeaders(connection),
     body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: baseSha }),
@@ -99,7 +99,7 @@ async function getGitHubFileSha(
   branch: string,
 ): Promise<string | undefined> {
   const origin = baseUrl(connection);
-  const res = await fetchWithTimeout(
+  const res = await gitFetch(
     `${origin}/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`,
     { headers: githubHeaders(connection) },
   );
@@ -119,7 +119,7 @@ async function commitGitHubFile(
   fileSha?: string,
 ): Promise<void> {
   const origin = baseUrl(connection);
-  const res = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}/contents/${path}`, {
+  const res = await gitFetch(`${origin}/repos/${owner}/${repo}/contents/${path}`, {
     method: "PUT",
     headers: githubHeaders(connection),
     body: JSON.stringify({
@@ -144,7 +144,7 @@ async function createGitLabBranch(
 ): Promise<void> {
   const origin = baseUrl(connection);
   const project = encodeURIComponent(`${owner}/${repo}`);
-  const res = await fetchWithTimeout(`${origin}/api/v4/projects/${project}/repository/branches`, {
+  const res = await gitFetch(`${origin}/api/v4/projects/${project}/repository/branches`, {
     method: "POST",
     headers: gitlabHeaders(connection),
     body: JSON.stringify({ branch: branchName, ref: baseBranch }),
@@ -167,7 +167,7 @@ async function commitGitLabFile(
   const origin = baseUrl(connection);
   const project = encodeURIComponent(`${owner}/${repo}`);
   const filePath = encodeURIComponent(path);
-  const res = await fetchWithTimeout(`${origin}/api/v4/projects/${project}/repository/files/${filePath}`, {
+  const res = await gitFetch(`${origin}/api/v4/projects/${project}/repository/files/${filePath}`, {
     method: "PUT",
     headers: gitlabHeaders(connection),
     body: JSON.stringify({

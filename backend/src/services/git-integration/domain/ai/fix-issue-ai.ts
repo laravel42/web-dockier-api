@@ -14,7 +14,7 @@ import { fetchRepoFile, getRepoFileTree, baseUrl as providerBaseUrl } from "../p
 import { logger } from "../../../../shared/logger.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { callOpenAIChat } from "./openai-client.js";
-import { fetchWithTimeout } from "../../../../shared/http/fetch.js";
+import { gitFetch } from "../providers/guarded-fetch.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ async function getFileTreeWithShas(
       Authorization: `Bearer ${connection.personal_token}`,
       Accept: "application/vnd.github.v3+json",
     };
-    const res = await fetchWithTimeout(
+    const res = await gitFetch(
       `${origin}/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
       { headers },
     );
@@ -137,7 +137,7 @@ async function fetchBlobByShaWithError(
   const url = `${origin}/repos/${owner}/${repo}/git/blobs/${sha}`;
 
   try {
-    const res = await fetchWithTimeout(url, { headers });
+    const res = await gitFetch(url, { headers });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       const errMsg = `HTTP ${res.status} ${res.statusText}: ${body.slice(0, 200)}`;
@@ -470,13 +470,13 @@ async function commitMultipleFiles(
     };
 
     // Get the base branch SHA
-    const refRes = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(baseBranch)}`, { headers });
+    const refRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(baseBranch)}`, { headers });
     if (!refRes.ok) throw new Error(`Failed to resolve branch ${baseBranch}`);
     const refData = (await refRes.json()) as { object: { sha: string } };
     const baseSha = refData.object.sha;
 
     // Get the base tree
-    const commitRes = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}/git/commits/${baseSha}`, { headers });
+    const commitRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/commits/${baseSha}`, { headers });
     if (!commitRes.ok) throw new Error("Failed to get base commit");
     const commitData = (await commitRes.json()) as { tree: { sha: string } };
     const baseTreeSha = commitData.tree.sha;
@@ -484,7 +484,7 @@ async function commitMultipleFiles(
     // Create blobs for each file
     const treeEntries: Array<{ path: string; mode: string; type: string; sha: string }> = [];
     for (const fix of fixes) {
-      const blobRes = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}/git/blobs`, {
+      const blobRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/blobs`, {
         method: "POST",
         headers,
         body: JSON.stringify({ content: fix.content, encoding: "utf-8" }),
@@ -495,7 +495,7 @@ async function commitMultipleFiles(
     }
 
     // Create tree
-    const treeRes = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}/git/trees`, {
+    const treeRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/trees`, {
       method: "POST",
       headers,
       body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries }),
@@ -504,7 +504,7 @@ async function commitMultipleFiles(
     const treeData = (await treeRes.json()) as { sha: string };
 
     // Create commit
-    const newCommitRes = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}/git/commits`, {
+    const newCommitRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/commits`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -517,7 +517,7 @@ async function commitMultipleFiles(
     const newCommitData = (await newCommitRes.json()) as { sha: string };
 
     // Create the branch ref
-    const createRefRes = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}/git/refs`, {
+    const createRefRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/refs`, {
       method: "POST",
       headers,
       body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: newCommitData.sha }),
@@ -536,7 +536,7 @@ async function commitMultipleFiles(
     const project = encodeURIComponent(`${owner}/${repo}`);
 
     // Create branch first
-    const branchRes = await fetchWithTimeout(`${origin}/api/v4/projects/${project}/repository/branches`, {
+    const branchRes = await gitFetch(`${origin}/api/v4/projects/${project}/repository/branches`, {
       method: "POST",
       headers,
       body: JSON.stringify({ branch: branchName, ref: baseBranch }),
@@ -553,7 +553,7 @@ async function commitMultipleFiles(
       content: fix.content,
     }));
 
-    const commitRes = await fetchWithTimeout(`${origin}/api/v4/projects/${project}/repository/commits`, {
+    const commitRes = await gitFetch(`${origin}/api/v4/projects/${project}/repository/commits`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -589,7 +589,7 @@ async function createPullRequest(
       "Content-Type": "application/json",
     };
 
-    const res = await fetchWithTimeout(`${origin}/repos/${owner}/${repo}/pulls`, {
+    const res = await gitFetch(`${origin}/repos/${owner}/${repo}/pulls`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -615,7 +615,7 @@ async function createPullRequest(
     const headers = { "PRIVATE-TOKEN": connection.personal_token, "Content-Type": "application/json" };
     const project = encodeURIComponent(`${owner}/${repo}`);
 
-    const res = await fetchWithTimeout(`${origin}/api/v4/projects/${project}/merge_requests`, {
+    const res = await gitFetch(`${origin}/api/v4/projects/${project}/merge_requests`, {
       method: "POST",
       headers,
       body: JSON.stringify({

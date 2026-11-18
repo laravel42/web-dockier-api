@@ -38,7 +38,19 @@ export async function registerConnectionRoutes(app: FastifyInstance) {
           personalToken: z.string().min(1).max(500),
           label: z.string().min(1).max(100),
           repoUrl: z.string().max(500).default(""),
-          endpoint: z.string().max(500).default(""),
+          // Internal addresses are refused at fetch time (guarded-fetch.ts); this only rejects malformed values early.
+          endpoint: z.string().trim().max(500)
+            .refine((v) => {
+              if (!v) return true;
+              try {
+                const u = new URL(v);
+                return u.protocol === "https:" && !u.username && !u.password;
+              } catch {
+                return false;
+              }
+            }, "API endpoint must be an https:// URL without credentials")
+            .transform((v) => v.replace(/\/+$/, ""))
+            .default(""),
         }),
         response: { 200: connectionSchema },
       },
