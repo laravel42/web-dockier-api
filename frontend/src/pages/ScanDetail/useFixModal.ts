@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { gitApi } from "@/services/api";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import { findingSourceUrl } from "./utils/scanPaths";
 import type { Finding, Project, RepoMember, FixResult } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -32,9 +33,7 @@ export function useFixModal(project: Project | null) {
     setMrTitle("Generating title…");
     setTitleGenerating(true);
 
-    const repoUrl = project.repository?.replace(/\.git$/, "") || "";
-    const branch = project.branch || "main";
-    const blameUrl = `${repoUrl}/-/blame/${branch}/${f.filePath}#L${f.startLine}`;
+    const blameUrl = findingSourceUrl(project.repository || "", project.branch || "main", f.filePath, f.startLine);
     const cleanMsg = f.message.replace(/\s+/g, " ").trim();
     setMrDescription([cleanMsg, ``, `**Source:** ${blameUrl}`].join("\n"));
 

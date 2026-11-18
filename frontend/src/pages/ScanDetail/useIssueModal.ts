@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { integrationsApi, gitApi } from "@/services/api";
 import { ApiError } from "@/services/api-error";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
+import { findingSourceUrl } from "./utils/scanPaths";
 import type { Finding, Project, PMIntegration, PMTeam, PMMember } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -83,9 +84,7 @@ export function useIssueModal(project: Project | null) {
   // ── Actions ────────────────────────────────────────────────────
 
   const openIssueModal = (f: Finding) => {
-    const repoUrl = project?.repository?.replace(/\.git$/, "") || "";
-    const branch = project?.branch || "main";
-    const blameUrl = `${repoUrl}/-/blame/${branch}/${f.filePath}#L${f.startLine}`;
+    const blameUrl = findingSourceUrl(project?.repository || "", project?.branch || "main", f.filePath, f.startLine);
     const cleanMsg = f.message.replace(/\s+/g, " ").trim();
     const desc = [cleanMsg, ``, `**Source:** ${blameUrl}`].filter(Boolean).join("\n");
     setIssueTitle("Generating title…");
