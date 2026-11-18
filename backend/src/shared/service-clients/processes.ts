@@ -7,3 +7,4 @@
  */
 
 export { restoreProcessesAfterDeploy } from "../../services/processes/domain/post-deploy-restore.js";
+export { findJobOwningHeartbeat, listJobsOwningHeartbeats } from "../../services/processes/domain/job-heartbeat.js";

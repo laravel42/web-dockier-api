@@ -47,10 +47,12 @@ type SubTab = "processes" | "scheduler";
 const SUB_TAB_KEYS: readonly SubTab[] = ["processes", "scheduler"];
 
 const ALL_RUNTIME_OPTIONS = [
-  { value: "node", label: "Node.js", versions: ["22", "20", "18"], categories: ["JavaScript"] },
-  { value: "php", label: "PHP", versions: ["8.4", "8.3", "8.2", "8.1"], categories: ["PHP"] },
-  { value: "python", label: "Python", versions: ["3.12", "3.11", "3.10"], categories: ["Python"] },
-  { value: "go", label: "Go", versions: ["1.22", "1.21", "1.20"], categories: ["Other"] },
+  // No version choice: a process runs the container's own interpreter, so a picked
+  // version was stored and ignored (it showed PHP 8.4 over an 8.5 image).
+  { value: "node", label: "Node.js", categories: ["JavaScript"] },
+  { value: "php", label: "PHP", categories: ["PHP"] },
+  { value: "python", label: "Python", categories: ["Python"] },
+  { value: "go", label: "Go", categories: ["Other"] },
 ];
 
 /** Maps the project's detected platform to the runtimes available for processes. */
@@ -428,7 +430,6 @@ function CreateProcessModal({
   const [type, setType] = useState<ProcessType>(editProcess?.type || "queue_worker");
   const [command, setCommand] = useState(editProcess?.command || "");
   const [runtime, setRuntime] = useState(editProcess?.runtime || getDefaultRuntime(project.platform));
-  const [runtimeVersion, setRuntimeVersion] = useState(editProcess?.runtimeVersion || "");
   const [connection, setConnection] = useState(editProcess?.connection || "");
   const [numProcesses, setNumProcesses] = useState(editProcess?.numProcesses ?? 1);
   const [queue, setQueue] = useState(editProcess?.queue || "");
@@ -447,8 +448,6 @@ function CreateProcessModal({
   const [error, setError] = useState("");
 
   const RUNTIME_OPTIONS = getRuntimeOptionsForProject(project.platform);
-
-  const currentRuntimeOpts = RUNTIME_OPTIONS.find((r) => r.value === runtime);
 
   const buildPreviewCommand = () => {
     if (type === "custom") return command;
@@ -496,7 +495,6 @@ function CreateProcessModal({
         name: name.trim(),
         type,
         runtime,
-        runtimeVersion: runtimeVersion || undefined,
         connection: connection.trim() || undefined,
         numProcesses,
         queue: queue.trim() || undefined,
@@ -567,17 +565,10 @@ function CreateProcessModal({
           <div className="space-y-4">
             <div className="space-y-3">
               <FieldRow htmlFor={`${fid}-runtime`} label="Runtime">
-                <select id={`${fid}-runtime`} className={inputCls} value={runtime} onChange={(e) => { setRuntime(e.target.value); setRuntimeVersion(""); }}>
+                <select id={`${fid}-runtime`} className={inputCls} value={runtime} onChange={(e) => setRuntime(e.target.value)}>
                   {RUNTIME_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
               </FieldRow>
-              {currentRuntimeOpts && currentRuntimeOpts.versions.length > 0 && (
-                <FieldRow htmlFor={`${fid}-version`} label="Version">
-                  <select id={`${fid}-version`} className={inputCls} value={runtimeVersion || currentRuntimeOpts.versions[0]} onChange={(e) => setRuntimeVersion(e.target.value)}>
-                    {currentRuntimeOpts.versions.map((v) => <option key={v} value={v}>{currentRuntimeOpts.label} {v}</option>)}
-                  </select>
-                </FieldRow>
-              )}
               <FieldRow htmlFor={`${fid}-field-3`} label={runtime === "php" ? "Connection" : "Entry point"}>
                 <Input id={`${fid}-field-3`} type="text" value={connection} onChange={(e) => setConnection(e.target.value)} placeholder={runtime === "php" ? "redis" : runtime === "node" ? "worker.js" : runtime === "python" ? "worker.py" : "./worker"} />
               </FieldRow>
@@ -690,6 +681,8 @@ function CreateJobModal({
   const [frequency, setFrequency] = useState<JobFrequency>(editJob?.frequency || "weekly");
   const [customCron, setCustomCron] = useState(editJob?.customCron || "");
   const [monitorHeartbeat, setMonitorHeartbeat] = useState(editJob?.monitorHeartbeat ?? false);
+  // No fixed interval, so a missed run cannot be told from a late one.
+  const monitorable = frequency !== "on_reboot" && frequency !== "custom";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -705,7 +698,8 @@ function CreateJobModal({
         user: user.trim() || "root",
         frequency,
         customCron: frequency === "custom" ? customCron.trim() : undefined,
-        monitorHeartbeat,
+        // Switching to a frequency that cannot be monitored turns monitoring off, rather than a refused save.
+        monitorHeartbeat: monitorHeartbeat && monitorable,
       };
       if (editJob) {
         await processesApi.updateJob(projectId, editJob.id, body);
@@ -775,9 +769,19 @@ function CreateJobModal({
         <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
           <div>
             <p className="text-xs font-medium text-text">Monitor with heartbeats</p>
-            <p className="text-xs text-text-muted">Generate a URL to ping after the job has run.</p>
+            <p className="text-xs text-text-muted">
+              {monitorable
+                ? "Each successful run pings a heartbeat; you are alerted when a run is missed. It appears in Observe → Heartbeats."
+                : "Needs a fixed schedule, so it is not available for On reboot or a custom cron expression."}
+            </p>
           </div>
-          <ToggleSwitch checked={monitorHeartbeat} onChange={setMonitorHeartbeat} ariaLabel="Monitor with heartbeats" />
+          {/* Mirrors assertMonitorable in the backend's job-heartbeat.ts, which refuses the save. */}
+          <ToggleSwitch
+            checked={monitorHeartbeat && monitorable}
+            onChange={setMonitorHeartbeat}
+            disabled={!monitorable}
+            ariaLabel="Monitor with heartbeats"
+          />
         </div>
 
         {error && <Alert variant="error">{error}</Alert>}
@@ -973,7 +977,9 @@ export default function ProjectProcessesTab({ project }: Props) {
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium text-text truncate">{job.name}</p>
                           {job.monitorHeartbeat && (
-                            <CircleCheckIcon className="size-3.5 text-success-500 shrink-0" />
+                            <CircleCheckIcon role="img" aria-label="Monitored by a heartbeat" className="size-3.5 text-success-500 shrink-0">
+                              <title>Monitored by a heartbeat</title>
+                            </CircleCheckIcon>
                           )}
                         </div>
                         <p className="text-xs text-text-muted font-mono truncate mt-0.5">

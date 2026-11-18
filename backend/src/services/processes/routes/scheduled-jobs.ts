@@ -17,7 +17,9 @@ import {
   updateJobStatus,
   deleteJob,
 } from "../domain/processes.js";
-import { installJob, pauseJob, removeJobCron } from "../domain/scheduler-executor.js";
+import { fetchJobOrThrow, installJob, pauseJob, removeJobCron } from "../domain/scheduler-executor.js";
+import { assertMonitorable, removeJobHeartbeat, syncJobHeartbeat } from "../domain/job-heartbeat.js";
+import { rowToJob } from "../domain/mappers.js";
 import { logger } from "../../../shared/logger.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 
@@ -58,11 +60,14 @@ export async function registerScheduledJobRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = getAuth(request);
       const { projectId } = request.params;
-      const job = await createJob({ tenantId: auth.tenantId, projectId, ...request.body });
+      assertMonitorable(request.body.frequency, request.body.monitorHeartbeat);
+      const created = await createJob({ tenantId: auth.tenantId, projectId, ...request.body });
+      // Before the install below, so the cron line already carries the ping.
+      const job = await syncJobHeartbeat(await fetchJobOrThrow(created.id, projectId, auth.tenantId), false);
       // A job used to be stored "installed" without ever reaching the crontab, so
       // it only started running after the next deploy.
       syncInstalledJob(auth.tenantId, projectId, job.id);
-      return job;
+      return rowToJob(job);
     },
   );
 
@@ -102,10 +107,19 @@ export async function registerScheduledJobRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = getAuth(request);
       const { projectId, jobId } = request.params;
-      const job = await updateJob({ tenantId: auth.tenantId, projectId, jobId, updates: request.body });
+      const before = await fetchJobOrThrow(jobId, projectId, auth.tenantId);
+      assertMonitorable(
+        request.body.frequency ?? before.frequency,
+        request.body.monitorHeartbeat ?? before.monitor_heartbeat,
+      );
+      await updateJob({ tenantId: auth.tenantId, projectId, jobId, updates: request.body });
+      const job = await syncJobHeartbeat(
+        await fetchJobOrThrow(jobId, projectId, auth.tenantId),
+        request.body.frequency !== undefined && request.body.frequency !== before.frequency,
+      );
       // Reinstall an installed job, or cron keeps running the old command/schedule.
       if (job.status === "installed") syncInstalledJob(auth.tenantId, projectId, jobId);
-      return job;
+      return rowToJob(job);
     },
   );
 
@@ -174,12 +188,16 @@ export async function registerScheduledJobRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       const { projectId, jobId } = request.params;
 
+      const job = await fetchJobOrThrow(jobId, projectId, auth.tenantId);
+
       // Remove cron entry from infrastructure (best-effort)
       await removeJobCron({
         tenantId: auth.tenantId,
         projectId,
         jobId,
       });
+      // Or the heartbeat outlives the job and reports it missed forever.
+      await removeJobHeartbeat(job);
 
       await deleteJob({
         tenantId: auth.tenantId,

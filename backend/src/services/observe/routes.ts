@@ -19,7 +19,9 @@ import {
   listHeartbeats,
   deleteHeartbeat,
   pingHeartbeat,
+  HeartbeatsError,
 } from "./domain/heartbeats.js";
+import { findJobOwningHeartbeat, listJobsOwningHeartbeats } from "../../shared/service-clients/processes.js";
 import { listActivity } from "./domain/activity.js";
 import { getLog, clearLog } from "./domain/logs.js";
 
@@ -43,10 +45,12 @@ export async function registerObserveRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      return await listHeartbeats({
-        tenantId: auth.tenantId,
-        projectId: request.params.projectId,
-      });
+      const [{ heartbeats }, owners] = await Promise.all([
+        listHeartbeats({ tenantId: auth.tenantId, projectId: request.params.projectId }),
+        listJobsOwningHeartbeats(auth.tenantId, request.params.projectId),
+      ]);
+      // So the list can say who manages a job's heartbeat instead of offering a Delete that is refused.
+      return { heartbeats: heartbeats.map((hb) => ({ ...hb, scheduledJob: owners.get(hb.id) ?? null })) };
     },
   );
 
@@ -94,6 +98,15 @@ export async function registerObserveRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
+      // A job's heartbeat is managed from the job. Deleted here, the job kept
+      // pinging a URL that no longer existed and looked monitored while nothing watched it.
+      const owner = await findJobOwningHeartbeat(auth.tenantId, request.params.heartbeatId);
+      if (owner) {
+        throw new HeartbeatsError(
+          `This heartbeat belongs to the scheduled job "${owner.name}". Turn off Monitor with heartbeats on the job instead.`,
+          "bad_request",
+        );
+      }
       await deleteHeartbeat({
         tenantId: auth.tenantId,
         projectId: request.params.projectId,

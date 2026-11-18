@@ -13,6 +13,7 @@ import { resolveProjectRunner } from "../../../shared/service-clients/command-ex
 import { ProcessesError } from "./processes.js";
 import type { ScheduledJobRow } from "../schemas.js";
 import { FREQUENCY_TO_CRON, SAFE_CRON_USER, installCronScript, isValidCronExpression, removeCronScript } from "./scripts.js";
+import { jobCronCommand, pauseJobHeartbeat } from "./job-heartbeat.js";
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 const db = supabaseAdmin;
@@ -39,7 +40,7 @@ export function jobCronExpression(job: ScheduledJobRow): string {
  * Fetch a scheduled job row and assert it belongs to the given tenant + project.
  * Throws not_found if the row doesn't exist or doesn't match the scope.
  */
-async function fetchJobOrThrow(
+export async function fetchJobOrThrow(
   jobId: string,
   projectId: string,
   tenantId: string,
@@ -87,7 +88,7 @@ export async function installJob(params: {
   }
 
   // Replaces only this job's entry, so installs are idempotent and leave other jobs alone.
-  const installCmd = installCronScript({ jobId, user: jobRow.user, expr: cronExpr, command: jobRow.command });
+  const installCmd = installCronScript({ jobId, user: jobRow.user, expr: cronExpr, command: jobCronCommand(jobRow) });
   const cronLine = `${cronExpr} ${jobRow.command}`;
 
   try {
@@ -138,6 +139,7 @@ export async function pauseJob(params: {
         .from("scheduled_jobs")
         .update({ status: "paused", updated_at: nowIso() })
         .eq("id", jobId);
+      await pauseJobHeartbeat(jobRow);
 
       logger.info(`[scheduler] Paused job ${jobId}`);
       return { success: true, message: "Scheduled job paused." };

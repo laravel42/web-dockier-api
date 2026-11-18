@@ -79,6 +79,19 @@ export async function deleteHeartbeat(params: {
 }
 
 /**
+ * Stop judging a heartbeat until it pings again: the missed-ping sweep only looks
+ * at `healthy` ones. Used when the job behind it is paused on purpose.
+ */
+export async function setHeartbeatWaiting(params: { tenantId: string; heartbeatId: string }): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("heartbeats")
+    .update({ status: "waiting", updated_at: nowIso() })
+    .eq("organization_id", params.tenantId)
+    .eq("id", params.heartbeatId);
+  throwOnError(error, HeartbeatsError, { internalMsg: "Failed to update heartbeat" });
+}
+
+/**
  * Public ping endpoint — updates the heartbeat status and last_pinged_at.
  * No authentication required (used by external cron jobs).
  */

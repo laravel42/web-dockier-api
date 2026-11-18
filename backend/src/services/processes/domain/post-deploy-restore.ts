@@ -14,6 +14,7 @@ import { resolveProjectRunner } from "../../../shared/service-clients/command-ex
 import type { BackgroundProcessRow, ScheduledJobRow } from "../schemas.js";
 import { SAFE_CRON_USER, installCronScript, startProcessScript } from "./scripts.js";
 import { jobCronExpression } from "./scheduler-executor.js";
+import { jobCronCommand } from "./job-heartbeat.js";
 
 const db = supabaseAdmin;
 
@@ -106,7 +107,7 @@ export async function restoreProcessesAfterDeploy(params: {
     for (const job of jobs) {
       try {
         if (!SAFE_CRON_USER.test(job.user)) throw new Error(`invalid cron user "${job.user}"`);
-        scripts.push(installCronScript({ jobId: job.id, user: job.user, expr: jobCronExpression(job), command: job.command }));
+        scripts.push(installCronScript({ jobId: job.id, user: job.user, expr: jobCronExpression(job), command: jobCronCommand(job) }));
       } catch (err) {
         logger.error(`[processes] Skipping scheduled job ${job.id} on restore: ${getErrMsg(err)}`);
       }

@@ -35,7 +35,16 @@ vi.mock("../domain/processes.js", async (orig) => ({
 vi.mock("../domain/scheduler-executor.js", async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   installJob: domain.installJob,
+  fetchJobOrThrow: async () => jobRow(currentStatus),
 }));
+// Heartbeat sync has its own tests (job-heartbeat.test.ts); here it passes the row through.
+vi.mock("../domain/job-heartbeat.js", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  syncJobHeartbeat: async (row: unknown) => row,
+  removeJobHeartbeat: async () => {},
+}));
+/** The status the job row reads back as after create/update; set by each test's domain mock. */
+let currentStatus = "installed";
 vi.mock("../domain/executor.js", async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   stopProcess: domain.stopProcess,
@@ -43,9 +52,18 @@ vi.mock("../domain/executor.js", async (orig) => ({
 
 const PROJECT = "c9d0e1f2-9012-4234-abcd-999999999999";
 const JOB = "a1b2c3d4-1111-4111-8111-111111111111";
-const job = (status: string) => ({
-  id: JOB, projectId: PROJECT, name: "n", command: "php artisan x", user: "root", frequency: "nightly",
-  customCron: null, monitorHeartbeat: false, heartbeatUrl: null, status, lastRunAt: null, createdAt: "", updatedAt: "",
+const job = (status: string) => {
+  currentStatus = status;
+  return {
+    id: JOB, projectId: PROJECT, name: "n", command: "php artisan x", user: "root", frequency: "nightly",
+    customCron: null, monitorHeartbeat: false, heartbeatUrl: null, status, lastRunAt: null, createdAt: "", updatedAt: "",
+  };
+};
+/** The same job as the database row the routes now read back. */
+const jobRow = (status: string) => ({
+  id: JOB, organization_id: "org", project_id: PROJECT, name: "n", command: "php artisan x", user: "root",
+  frequency: "nightly", custom_cron: null, monitor_heartbeat: false, heartbeat_url: null, status,
+  last_run_at: null, created_at: "", updated_at: "",
 });
 
 let app: FastifyInstance;

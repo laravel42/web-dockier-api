@@ -167,13 +167,20 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
                   {canManage && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={() => setConfirmHeartbeat(hb)}
-                        className="text-danger-500 focus:text-danger-500"
-                      >
-                        <Trash2Icon />
-                        Delete
-                      </DropdownMenuItem>
+                      {hb.scheduledJob ? (
+                        // The backend refuses this delete; say who manages it instead of offering it.
+                        <p className="px-2 py-1.5 text-xs text-text-muted">
+                          Managed by the scheduled job "{hb.scheduledJob.name}" in Processes → Scheduler.
+                        </p>
+                      ) : (
+                        <DropdownMenuItem
+                          onSelect={() => setConfirmHeartbeat(hb)}
+                          className="text-danger-500 focus:text-danger-500"
+                        >
+                          <Trash2Icon />
+                          Delete
+                        </DropdownMenuItem>
+                      )}
                     </>
                   )}
                 </DropdownMenuContent>

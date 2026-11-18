@@ -31,6 +31,8 @@ export interface Heartbeat {
   pingUrl: string;
   createdAt: string;
   updatedAt: string;
+  /** The scheduled job whose monitoring owns this heartbeat; it is managed from the job. Set on the list. */
+  scheduledJob?: { id: string; name: string } | null;
 }
 
 export type LogType = "site" | "nginx_access" | "nginx_error";

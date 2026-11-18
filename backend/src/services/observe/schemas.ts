@@ -39,6 +39,8 @@ export const heartbeatSchema = z.object({
   pingUrl: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** Set on the list: the scheduled job that owns this heartbeat, which manages it. */
+  scheduledJob: z.object({ id: z.string(), name: z.string() }).nullable().optional(),
 });
 
 export const listHeartbeatsResponseSchema = z.object({
