@@ -25,8 +25,16 @@ function isEdgeBlock(message: string): boolean {
   return /^\s*<(!doctype html|html)/i.test(message);
 }
 
+/**
+ * The user-facing part of a database error. It ends up in summary.error, which every
+ * member of the tenant can read, so the raw text (constraint and column names,
+ * PostgREST internals) goes to the log only. An edge block is described instead.
+ */
 function describeDbError(message: string, context: string): string {
-  if (!isEdgeBlock(message)) return message;
+  if (!isEdgeBlock(message)) {
+    obsLogger.error({ err: message }, `[scan] Database error ${context}`);
+    return `a database error ${context}; try running the scan again`;
+  }
   const ray = /Cloudflare Ray ID:[^<]*<strong[^>]*>([a-z0-9]+)</i.exec(message)?.[1];
   return `blocked by the database edge (Cloudflare) ${context}${ray ? `, Cloudflare Ray ID ${ray}` : ""}`;
 }
@@ -225,7 +233,7 @@ export async function markScanCompleted(
     .in("status", ["running", "pending"])
     .select("id")
     .maybeSingle();
-  if (error) throw new Error(`Failed to update scan status: ${error.message}`);
+  if (error) throw new Error(`Failed to save the scan result: ${describeDbError(error.message, "while saving the result")}`);
   if (completed) return true;
 
   // shortcut: a re-run of the same scan id while an old run lives on also passes the guard. The owner's poll keeps a live run "running", so that needs the owner SIGKILLed with its child blocked; a per-run token would close it.

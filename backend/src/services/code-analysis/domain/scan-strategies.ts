@@ -27,6 +27,7 @@ import {
 import { getOpengrepRulesDir } from "../../../shared/utils/paths.js";
 import { isScanSkippedRelativePath, semgrepExcludeArgs, writeSemgrepIgnore } from "./scan-skip-dirs.js";
 import { findSemgrepBinary, runCommand } from "./scan-exec.js";
+import { logger } from "../../../shared/logger.js";
 import type { ScanProgressPayload } from "./scan-events.js";
 
 const RULES_DIR = getOpengrepRulesDir();
@@ -60,13 +61,19 @@ async function runSemgrepBatch(
       "--quiet",
       "--use-git-ignore",
       ...semgrepExcludeArgs(),
+      // Targets are repo file names: a file named `--exclude=x` was parsed as an
+      // option and hid its own findings. Everything after `--` is a path.
+      "--",
       ...targets,
     ],
     { cwd: repoDir, timeoutMs: SEMGREP_TIMEOUT_MS },
   );
 
   if (!stdout.trim() && code !== 0) {
-    throw new Error(stderr.trim() || `semgrep exited with code ${code}`);
+    // The stderr names server paths (the clone, the rules directory) and goes to
+    // the log only: the stored reason is shown to every member of the tenant.
+    logger.error(`[scan] semgrep exited with code ${code}: ${stderr.trim().slice(0, 2000)}`);
+    throw new Error(`Semgrep failed (exit code ${code}). The scan could not be completed; try running it again.`);
   }
 
   return filterScannableFindings(parseSemgrepOutput(stdout, disabledRuleIds, repoDir), repoDir);

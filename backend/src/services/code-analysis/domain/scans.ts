@@ -200,14 +200,17 @@ export async function listLatestScansByProject(tenantId: string, projectIds: str
 }
 
 export async function getScan(scanId: string, tenantId: string) {
-  await reconcileStaleScanById(scanId);
-
-  const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
-  const scan = unwrapQuery(data, error, CodeAnalysisError, {
-    notFoundMsg: "Scan not found",
-    internalMsg: "Failed to fetch scan",
-  });
+  const load = async () => {
+    const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
+    return unwrapQuery(data, error, CodeAnalysisError, {
+      notFoundMsg: "Scan not found",
+      internalMsg: "Failed to fetch scan",
+    });
+  };
+  let scan = await load();
   assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
+  // After the ownership check: the reconcile writes, and must not run on another tenant's scan.
+  if (await reconcileStaleScanById(scanId)) scan = await load();
   const mapped = rowToScan(scan);
   if (mapped.status === "completed" || mapped.status === "failed") {
     const counts = await getSecurityFindingCounts(scanId);
@@ -270,11 +273,12 @@ export async function cancelScan(scanId: string, tenantId: string) {
 }
 
 export async function runScan(scanId: string, tenantId: string, options: RunScanOptions = {}, correlationId?: string) {
-  await reconcileStaleScanById(scanId);
-
   const { data, error } = await supabaseAdmin.from("scans").select("*").eq("id", scanId).single();
   const scan = unwrapQuery(data, error, CodeAnalysisError, { notFoundMsg: "Scan not found" });
   assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
+  // After the ownership check (it writes). A stale "running" row is failed here, so
+  // the status lock below lets the re-run through; only repo/project_id are read from `scan`.
+  await reconcileStaleScanById(scanId);
 
   if (await hasLiveRunningScan(tenantId, scan.project_id, scanId)) throw projectScanRunningError();
 

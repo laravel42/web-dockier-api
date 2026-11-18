@@ -66,7 +66,7 @@ vi.mock("../scan-progress.js", () => ({
 // The reconciler would itself read Supabase; it is not what this test is about.
 vi.mock("../scan-reconcile.js", () => ({ reconcileStaleScanById: vi.fn(async () => false) }));
 
-const { runScan, createScan, deleteScan, CodeAnalysisError } = await import("../scans.js");
+const { runScan, createScan, deleteScan, getScan, CodeAnalysisError } = await import("../scans.js");
 const { reconcileStaleScanById } = await import("../scan-reconcile.js");
 
 /** A scan row as PostgREST returns it. */
@@ -140,6 +140,13 @@ describe("runScan status transition", () => {
     updateResult = { data: { ...scanRow, status: "running" }, error: null };
     await expect(runScan(scanRow.id, "org-2")).rejects.toThrow(/Not your scan/);
     expect(enqueueScan).not.toHaveBeenCalled();
+    // The stale-scan reconcile writes too: it used to run before this check.
+    expect(reconcileStaleScanById).not.toHaveBeenCalled();
+  });
+
+  it("does not reconcile another tenant's scan when reading it", async () => {
+    await expect(getScan(scanRow.id, "org-2")).rejects.toThrow(/Not your scan/);
+    expect(reconcileStaleScanById).not.toHaveBeenCalled();
   });
 });
 

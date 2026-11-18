@@ -39,6 +39,10 @@ vi.mock("../../../../shared/supabase/client.js", () => ({
 }));
 
 vi.mock("../scan-progress.js", () => ({ broadcastScanStatus: vi.fn() }));
+const logError = vi.hoisted(() => vi.fn());
+vi.mock("../../../../shared/logger.js", () => ({
+  logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
 // Keep the retry's backoff from making this test sleep for seconds.
 vi.mock("../../../../shared/utils/time.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../../shared/utils/time.js")>()),
@@ -105,12 +109,15 @@ describe("persistFindings against an edge block", () => {
     expect(withheld.map((r) => r.file_path)).toEqual(["src/file-137.js"]);
   });
 
-  it("does not retry a rejected row, and keeps the database's own message", async () => {
-    insertErrors = [{ message: 'duplicate key value violates unique constraint "findings_pkey"' }];
+  it("does not retry a rejected row, and logs the database's own message instead of storing it", async () => {
+    const raw = 'duplicate key value violates unique constraint "findings_pkey"';
+    insertErrors = [{ message: raw }];
 
-    await expect(persistFindings("scan-1", "org-1", findings(10))).rejects.toThrow(
-      /duplicate key value/,
-    );
+    // The thrown message becomes summary.error, which every tenant member reads.
+    const failure = persistFindings("scan-1", "org-1", findings(10));
+    await expect(failure).rejects.toThrow(/Failed to insert findings: a database error/);
+    await expect(failure).rejects.not.toThrow(/findings_pkey/);
+    expect(logError).toHaveBeenCalledWith({ err: raw }, expect.stringContaining("Database error"));
     expect(insertedBatches).toHaveLength(1); // no second attempt
   });
 });

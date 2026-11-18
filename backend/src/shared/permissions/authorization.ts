@@ -216,6 +216,19 @@ export function hasPermissions(resolved: ResolvedAuth, required: PermissionKey[]
  * Check if a user can assign a set of permissions.
  * Users cannot assign critical permissions they don't possess.
  */
+/**
+ * The `requirePermission` check for routes that cannot use the preHandler: a
+ * WebSocket authenticates from its query string, after the upgrade. Same cached
+ * resolution, so a member without the permission is refused the same way.
+ */
+export async function authHasPermissions(
+  auth: { userId: string; tenantId: string; email: string },
+  required: PermissionKey[],
+): Promise<boolean> {
+  const resolved = await resolvePermissions(auth.userId, auth.tenantId, auth.email);
+  return resolved !== null && hasPermissions(resolved, required);
+}
+
 export function canAssignPermissions(actor: ResolvedAuth, permissionsToAssign: PermissionKey[]): boolean {
   for (const perm of permissionsToAssign) {
     if (CRITICAL_PERMISSIONS.includes(perm) && !actor.permissions.includes(perm)) {

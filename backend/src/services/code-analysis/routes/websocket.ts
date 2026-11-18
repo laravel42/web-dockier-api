@@ -1,6 +1,8 @@
 import websocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import { verifyAuthToken } from "../../../shared/auth/auth.js";
+import { authHasPermissions } from "../../../shared/permissions/authorization.js";
+import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { getScan } from "../domain/scans.js";
 import {
   subscribeToScan,
@@ -28,8 +30,18 @@ export async function registerScanWebSocketRoutes(app: FastifyInstance) {
         return;
       }
 
+      // The REST scan routes require scan:view; this stream carries the same data.
+      if (!(await authHasPermissions(auth, [PERMISSIONS.SCAN_VIEW]))) {
+        socket.close(1008, "Insufficient permissions");
+        return;
+      }
+
       try {
         const scan = await getScan(scanId, auth.tenantId);
+        // Registered before subscribing: a socket closed during the awaits above
+        // would otherwise stay in the subscriber list for good.
+        socket.on("close", () => unsubscribeFromScan(scanId, socket));
+        if (socket.readyState !== socket.OPEN) return;
         subscribeToScan(scanId, socket);
         sendScanSnapshot(
           socket,
@@ -37,8 +49,6 @@ export async function registerScanWebSocketRoutes(app: FastifyInstance) {
           scan.status,
           scan.summary as unknown as Record<string, unknown>,
         );
-
-        socket.on("close", () => unsubscribeFromScan(scanId, socket));
       } catch {
         socket.close(1008, "Scan not found");
       }
