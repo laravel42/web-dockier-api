@@ -4,7 +4,8 @@ import Button from "@/components/ui/Button";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import SeverityBadge from "@/components/SeverityBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
-import { failedScanDotClass, isScanSecurityClean, scanFindingSeverityDotClass } from "@/utils/scanSummary";
+import { isScanSecurityClean } from "@/utils/scanSummary";
+import ScanStatusDot from "@/components/ScanStatusDot";
 import { clickableProps } from "@/utils/a11y";
 
 interface Props {
@@ -34,16 +35,10 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
           {scans.map((s) => {
             const proj = projectMap[s.projectId];
             const summary = s.summary;
-            const statusDot =
-              s.status === "completed"
-                ? scanFindingSeverityDotClass(summary)
-                : s.status === "failed"
-                  ? failedScanDotClass(summary)
-                  : "bg-primary-500";
             return (
               <li key={s.id}>
                 <div {...clickableProps(() => onViewScan(s.id))} className={dashboardActivityRowCls}>
-                  <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
+                  <ScanStatusDot status={s.status} summary={summary} />
                   <div className="min-w-0 flex-1">
                     <p className={`${typeCardTitle} truncate`}>{proj?.name || s.repo}</p>
                     <div className="mt-1 flex items-center gap-2">

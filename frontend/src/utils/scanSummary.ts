@@ -33,3 +33,34 @@ export function scanFindingSeverityDotClass(summary?: Pick<ScanSummaryCounts, "e
   if (summary && summary.warnings > 0) return "bg-warning-500";
   return "bg-success-500";
 }
+
+type DotSummary = Pick<ScanSummaryCounts, "errors" | "warnings"> & { cancelled?: boolean };
+
+/**
+ * A scan's status dot: its color and the words it stands for. Five list views
+ * each built the color with their own ternary (a pending scan was blue in two and
+ * grey in three) and none said it in text, so status was color-only.
+ *
+ * `findings` is the summary whose counts color a completed scan; list views pass
+ * the latest completed scan's, which can differ from the newest scan's.
+ */
+export function scanStatusDot(
+  status: string,
+  summary?: DotSummary | null,
+  findings: Pick<ScanSummaryCounts, "errors" | "warnings"> | null | undefined = summary,
+): { className: string; label: string } {
+  if (status === "completed") {
+    const className = scanFindingSeverityDotClass(findings);
+    const label = findings && findings.errors > 0
+      ? "Completed with errors"
+      : findings && findings.warnings > 0
+        ? "Completed with warnings"
+        : "Completed, no errors or warnings";
+    return { className, label };
+  }
+  if (status === "failed") {
+    return { className: failedScanDotClass(summary), label: summary?.cancelled ? "Cancelled" : "Failed" };
+  }
+  if (status === "running") return { className: "bg-primary-500", label: "Running" };
+  return { className: "bg-secondary-400", label: "Pending" };
+}

@@ -6,7 +6,8 @@ import { tableCellCls, tableCellMutedCls, typeCardDateCls, tableRowLinkCls } fro
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import type { Scan, Project, TechBadgeInfo } from "@/types";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
-import { failedScanDotClass, scanFindingSeverityDotClass, scanSecurityFindingCount } from "@/utils/scanSummary";
+import { scanSecurityFindingCount } from "@/utils/scanSummary";
+import ScanStatusDot from "@/components/ScanStatusDot";
 
 interface Props {
   sortedProjectIds: string[];
@@ -20,12 +21,6 @@ interface Props {
   onSelectEmpty: (projectId: string) => void;
 }
 
-function getScanStatusDot(latest: Scan, summary: Scan["summary"] | undefined): string {
-  if (latest.status === "completed") return scanFindingSeverityDotClass(summary);
-  if (latest.status === "failed") return failedScanDotClass(latest.summary);
-  if (latest.status === "running") return "bg-primary-500";
-  return "bg-secondary-400";
-}
 
 export default function ScanProjectTable({
   sortedProjectIds,
@@ -115,7 +110,7 @@ export default function ScanProjectTable({
             </td>
             <td>
               <div className="flex items-center gap-1.5">
-                <span className={`size-2 rounded-full shrink-0 ${getScanStatusDot(latest, summary)}`} />
+                <ScanStatusDot status={latest.status} summary={latest.summary} findings={summary ?? null} />
                 <span className={typeCardDateCls}>
                   {formatCardDateTime(getSortTimestamp(latest, "updated"))}
                 </span>

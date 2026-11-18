@@ -1,7 +1,6 @@
 import SeverityBadge from "@/components/SeverityBadge";
 import {
   cardCls,
-  getStatusDotClass,
   sidebarHistoryItemCls,
   sidebarHistoryLabelCls,
   sidebarPanelHeadCls,
@@ -13,7 +12,7 @@ import Button from "@/components/ui/Button";
 import Spinner from "@/components/Spinner";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { ShieldCheckIcon, Trash2Icon } from "lucide-react";
-import { failedScanDotClass, scanFindingSeverityDotClass } from "@/utils/scanSummary";
+import ScanStatusDot from "@/components/ScanStatusDot";
 import { clickableProps } from "@/utils/a11y";
 
 interface Props {
@@ -113,11 +112,6 @@ export default function ScanSidebar({
                 const isActive = s.id === scanId;
                 const isLive = s.status === "running" || s.status === "pending";
                 const hasBadges = s.summary && (s.summary.errors > 0 || s.summary.warnings > 0 || s.summary.infos > 0);
-                const dotClass = isLive
-                  ? getStatusDotClass(s.status)
-                  : s.status === "failed"
-                    ? failedScanDotClass(s.summary)
-                    : scanFindingSeverityDotClass(s.summary);
                 return (
                   <div
                     key={s.id}
@@ -125,7 +119,7 @@ export default function ScanSidebar({
                     className={`${sidebarHistoryItemCls(isActive)} w-full px-2.5 py-2 text-left`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className={`size-2 rounded-full shrink-0 ${dotClass}`} />
+                      <ScanStatusDot status={s.status} summary={s.summary} />
                       <span className={`${sidebarHistoryLabelCls(isActive)} truncate min-w-0`}>
                         {new Date(s.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                         {" · "}

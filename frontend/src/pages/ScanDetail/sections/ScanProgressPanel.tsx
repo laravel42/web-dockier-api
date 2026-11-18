@@ -71,14 +71,24 @@ export default function ScanProgressPanel({ progress, active = true }: Props) {
       ? `${Math.min(progress.filesScanned, progress.filesInRepo)}/${progress.filesInRepo} files`
       : null;
 
+  // Only the step is announced. The whole panel was a live region, so the percent
+  // (re-rendered every 250 ms) and each file name were read out one after another.
+  // The percent is on the progressbar, which a screen reader reads when asked.
   return (
-    <div className="space-y-1.5" aria-live="polite">
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-text-muted">{step}</span>
-        <span className="text-xs font-semibold text-primary tabular-nums">{displayPct}%</span>
+        <span className="text-xs font-medium text-text-muted" aria-live="polite">{step}</span>
+        <span className="text-xs font-semibold text-primary tabular-nums" aria-hidden="true">{displayPct}%</span>
       </div>
 
-      <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+      <div
+        role="progressbar"
+        aria-label="Scan progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={displayPct}
+        className="h-1 w-full overflow-hidden rounded-full bg-muted"
+      >
         <div
           className="h-full rounded-full bg-primary transition-[width] duration-500 ease-linear"
           style={{ width: `${displayPct}%` }}

@@ -3,7 +3,7 @@ import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { cardInteractiveCls, typeCardDateCls, typeCardMeta, typeCardTitle } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import { compareByTime, getSortTimestamp } from "@/utils/sortByTime";
-import { failedScanDotClass, scanFindingSeverityDotClass } from "@/utils/scanSummary";
+import ScanStatusDot from "@/components/ScanStatusDot";
 import type { Scan, Project, TechBadgeInfo } from "@/types";
 import { ShieldCheckIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
@@ -24,15 +24,6 @@ export default function ScanProjectCard({ project, projectId, scans, scanCount, 
   const latest = sorted[0];
   const latestCompleted = sorted.find((s) => s.status === "completed");
   const summary = latestCompleted?.summary;
-
-  const statusDot =
-    latest.status === "completed"
-      ? scanFindingSeverityDotClass(summary)
-      : latest.status === "failed"
-        ? failedScanDotClass(latest.summary)
-        : latest.status === "running"
-          ? "bg-primary-500"
-          : "bg-secondary-400";
 
   return (
     <div {...clickableProps(() => onSelect(latest.id))} className={`${cardInteractiveCls} p-4 flex flex-col gap-3`}>
@@ -56,7 +47,7 @@ export default function ScanProjectCard({ project, projectId, scans, scanCount, 
 
       <div className="flex items-center justify-between gap-2 mt-auto">
         <div className="flex items-center gap-2">
-          <span className={`size-2 rounded-full shrink-0 ${statusDot}`} />
+          <ScanStatusDot status={latest.status} summary={latest.summary} findings={summary ?? null} />
           <span className={typeCardDateCls}>
             {formatCardDateTime(getSortTimestamp(latest, "updated"))}
           </span>

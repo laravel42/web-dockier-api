@@ -157,7 +157,7 @@ export default function SecurityRulesTab() {
           ] as const).map(({ key, name }) => (
             <div key={key} className="flex items-center gap-2.5 text-sm">
               <span className={scanTools[key] ? "text-text font-medium" : "text-text-muted"}>{name}</span>
-              <ToggleSwitch checked={scanTools[key]} onChange={() => toggleTool(key)} />
+              <ToggleSwitch checked={scanTools[key]} onChange={() => toggleTool(key)} ariaLabel={`Run ${name} in scans`} />
             </div>
           ))}
         </div>
@@ -188,7 +188,7 @@ export default function SecurityRulesTab() {
                 </button>
               ))}
               <div className="flex w-full min-w-0 basis-full flex-col gap-2 sm:ml-auto sm:w-auto sm:basis-auto sm:flex-row sm:items-center">
-                <Input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" className="w-full min-w-0 sm:w-[280px]" />
+                <Input type="text" value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter rules…" aria-label="Filter rules" className="w-full min-w-0 sm:w-[280px]" />
                 {active === "custom" && (
                   <Button onClick={openAdd} iconLeft={<PlusIcon className="size-4" />} className="w-full shrink-0 sm:w-auto">
                     Add Rule
@@ -390,7 +390,7 @@ function CustomRulesPanel({
                     <span className={`size-2.5 rounded-full shrink-0 ${severityDotCls(r.severity)}`} />
                     <span className="text-xs font-mono text-text-muted truncate flex-1">{r.ruleId}</span>
                     {r.isSystem && <span className="px-2 py-0.5 rounded text-xs font-medium bg-secondary-100 text-text-muted shrink-0">System</span>}
-                    <ToggleSwitch checked={r.enabled} onChange={() => onToggle(r)} />
+                    <ToggleSwitch checked={r.enabled} onChange={() => onToggle(r)} ariaLabel={r.ruleId} />
                   </div>
                   <p className="text-sm/relaxed text-text">{r.message}</p>
                   <code className="text-xs text-text-muted font-mono bg-secondary-50 px-2 py-1 rounded truncate">{r.pattern}</code>
@@ -402,10 +402,11 @@ function CustomRulesPanel({
                     </div>
                     {!r.isSystem && (
                       <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={() => onEdit(r)} className="size-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-500/10 transition-colors" aria-label="Edit">
+                        {/* Named per rule: every card had an identical "Edit" and "Delete". */}
+                        <button type="button" onClick={() => onEdit(r)} className="size-7 flex items-center justify-center rounded-md text-text-muted hover:text-primary-500 hover:bg-primary-500/10 transition-colors" aria-label={`Edit ${r.ruleId}`}>
                           <SquarePenIcon className="size-3.5" />
                         </button>
-                        <button onClick={() => onDelete(r.id)} className="size-7 flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label="Delete">
+                        <button type="button" onClick={() => onDelete(r.id)} className="size-7 flex items-center justify-center rounded-md text-text-muted hover:text-danger-500 hover:bg-danger-500/10 transition-colors" aria-label={`Delete ${r.ruleId}`}>
                           <Trash2Icon className="size-3.5" />
                         </button>
                       </div>
