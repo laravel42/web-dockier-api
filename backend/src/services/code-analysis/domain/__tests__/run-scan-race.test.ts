@@ -66,7 +66,7 @@ vi.mock("../scan-progress.js", () => ({
 // The reconciler would itself read Supabase; it is not what this test is about.
 vi.mock("../scan-reconcile.js", () => ({ reconcileStaleScanById: vi.fn(async () => false) }));
 
-const { runScan, createScan, CodeAnalysisError } = await import("../scans.js");
+const { runScan, createScan, deleteScan, CodeAnalysisError } = await import("../scans.js");
 const { reconcileStaleScanById } = await import("../scan-reconcile.js");
 
 /** A scan row as PostgREST returns it. */
@@ -140,6 +140,20 @@ describe("runScan status transition", () => {
     updateResult = { data: { ...scanRow, status: "running" }, error: null };
     await expect(runScan(scanRow.id, "org-2")).rejects.toThrow(/Not your scan/);
     expect(enqueueScan).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteScan", () => {
+  // Deleting a running scan's row stopped nothing; its subprocess ran on.
+  it("refuses to delete a scan that is still running", async () => {
+    selectResult = { data: { ...scanRow, status: "running" }, error: null };
+    await expect(deleteScan(scanRow.id, "org-1")).rejects.toThrow(/still running/);
+  });
+
+  it("deletes a running scan whose owner died, once it is marked failed", async () => {
+    selectResult = { data: { ...scanRow, status: "running" }, error: null };
+    vi.mocked(reconcileStaleScanById).mockResolvedValueOnce(true);
+    await expect(deleteScan(scanRow.id, "org-1")).resolves.toBeUndefined();
   });
 });
 

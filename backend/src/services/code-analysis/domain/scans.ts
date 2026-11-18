@@ -237,11 +237,18 @@ export async function getScan(scanId: string, tenantId: string) {
 export async function deleteScan(scanId: string, tenantId: string) {
   const { data: existing, error: fetchError } = await supabaseAdmin
     .from("scans")
-    .select("id,organization_id")
+    .select("id,organization_id,status")
     .eq("id", scanId)
     .single();
   const scan = unwrapQuery(existing, fetchError, CodeAnalysisError, { notFoundMsg: "Scan not found" });
   assertOwnership(scan, tenantId, CodeAnalysisError, "Not your scan");
+
+  // Deleting the row stopped nothing: the subprocess ran on for up to 50 min and
+  // wrote findings for a scan that no longer existed. A stale one (owner died) is
+  // marked failed here, so it stays deletable.
+  if (scan.status === "running" && !(await reconcileStaleScanById(scanId))) {
+    throw new CodeAnalysisError("This scan is still running. Cancel it first, then delete it.", "bad_request");
+  }
 
   const { error: findingsError } = await supabaseAdmin.from("findings").delete().eq("scan_id", scanId);
   throwOnError(findingsError, CodeAnalysisError, { internalMsg: "Failed to delete scan findings" });
