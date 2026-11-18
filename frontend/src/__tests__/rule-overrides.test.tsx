@@ -75,6 +75,20 @@ describe("Semgrep rule switch", () => {
   });
 });
 
+describe("overrides that fail to load", () => {
+  // No overrides loaded used to render every switch "on", including rules turned off.
+  it("shows the error and no switches, and retries", async () => {
+    api.listRuleOverrides.mockRejectedValueOnce(new Error("Service unavailable"));
+    render(<SemgrepRulesPanel filter="" onChanged={vi.fn()} />);
+    expect(await screen.findByText("Service unavailable")).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).toBeNull();
+
+    api.listRuleOverrides.mockResolvedValue({ overrides: [{ id: "o1", ruleId: RULE_ID, enabled: false }] });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Retry" })));
+    await waitFor(() => expect(screen.getByRole("switch", { name: RULE_ID })).toHaveAttribute("aria-checked", "false"));
+  });
+});
+
 describe("next-scan notice", () => {
   it("appears only after a rule change is saved", async () => {
     render(<SecurityRulesTab />);

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { codeAnalysisApi } from "@/services/api";
 import TechBadge from "@/components/TechBadge";
 import PageLoading from "@/components/ui/PageLoading";
+import PageError from "@/components/ui/PageError";
 import Button from "@/components/ui/Button";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./RulesFilterSidebar";
@@ -20,6 +21,20 @@ const SEVERITIES = [
 ];
 
 /**
+ * Every rule active in one profile. The API pages at 500, and reading only page 1
+ * hid the rest of a large default profile (Java's runs past 500) with no hint, so
+ * those rules could not be turned off. Stops on an empty page too, should `total` lie.
+ */
+async function allProfileRules(profileKey: string): Promise<SonarRule[]> {
+  const rules: SonarRule[] = [];
+  for (let page = 1; ; page++) {
+    const res = await codeAnalysisApi.listSonarRules(profileKey, page);
+    rules.push(...res.rules);
+    if (res.rules.length === 0 || rules.length >= res.total) return rules;
+  }
+}
+
+/**
  * Turns SonarQube rules off for this organization only (rule overrides). Lists
  * the rules active in each language's default profile — the ones a scan runs.
  */
@@ -31,17 +46,16 @@ export default function SonarQubeRulesPanel({ filter, onChanged }: { filter: str
   const [sevFilter, setSevFilter] = useState("");
   const [langs, setLangs] = useState<Set<string>>(new Set());
   const [visible, setVisible] = useState(PAGE);
-  const { disabled, toggle } = useRuleOverrides("sonarqube", onChanged);
+  const { disabled, toggle, loadError, retryLoad } = useRuleOverrides("sonarqube", onChanged);
 
   useEffect(() => {
     const load = async () => {
       try {
         const { profiles } = await codeAnalysisApi.listSonarProfiles();
         const defaults = profiles.filter((p) => p.isDefault);
-        // shortcut: first page (500 rules) per profile; search reaches the rest only if a default profile grows past 500.
-        const pages = await Promise.all(defaults.map((p) => codeAnalysisApi.listSonarRules(p.key, 1)));
+        const perProfile = await Promise.all(defaults.map((p) => allProfileRules(p.key)));
         const seen = new Set<string>();
-        setRules(pages.flatMap((p) => p.rules).filter((r) => !seen.has(r.key) && seen.add(r.key)));
+        setRules(perProfile.flat().filter((r) => !seen.has(r.key) && seen.add(r.key)));
         setLanguages(defaults.map((p) => ({ key: p.language, label: p.languageName })));
       } catch {
         setUnreachable(true);
@@ -60,6 +74,8 @@ export default function SonarQubeRulesPanel({ filter, onChanged }: { filter: str
       </p>
     );
   }
+  // Without the overrides every switch would read "on", including rules turned off.
+  if (loadError) return <PageError message={loadError} onRetry={retryLoad} />;
 
   const q = filter.toLowerCase();
   const matches = rules

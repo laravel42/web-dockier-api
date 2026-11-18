@@ -4,6 +4,7 @@ import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
 import TechBadge from "@/components/TechBadge";
 import PageLoading from "@/components/ui/PageLoading";
+import PageError from "@/components/ui/PageError";
 import Button from "@/components/ui/Button";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./RulesFilterSidebar";
@@ -22,7 +23,7 @@ export default function SemgrepRulesPanel({ filter, onChanged }: { filter: strin
   const [langs, setLangs] = useState<Set<string>>(new Set());
   const [visible, setVisible] = useState(PAGE);
   const toast = useToast();
-  const { disabled, toggle } = useRuleOverrides("semgrep", onChanged);
+  const { disabled, toggle, loadError, retryLoad } = useRuleOverrides("semgrep", onChanged);
 
   useEffect(() => {
     codeAnalysisApi
@@ -43,6 +44,8 @@ export default function SemgrepRulesPanel({ filter, onChanged }: { filter: strin
   const resetPage = () => setVisible(PAGE);
 
   if (loading) return <PageLoading />;
+  // Without the overrides every switch would read "on", including rules turned off.
+  if (loadError) return <PageError message={loadError} onRetry={retryLoad} />;
 
   return (
     <div className="flex gap-4">

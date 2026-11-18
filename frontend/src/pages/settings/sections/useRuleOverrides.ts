@@ -7,18 +7,29 @@ import { getErrorMessage } from "@/utils/errors";
  * This organization's rule overrides for one engine: which rules are off, and a
  * toggle that saves the change. A failed save is reverted and reported; the old
  * panels swallowed it, so a switch could show off while the rule kept running.
+ *
+ * A failed load is returned as `loadError`, not just toasted: with no overrides
+ * loaded every switch rendered "on", including rules this organization had turned off.
  */
 export function useRuleOverrides(tool: "semgrep" | "sonarqube", onChanged: () => void) {
   const [disabled, setDisabled] = useState<Set<string>>(new Set());
+  const [loadError, setLoadError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   const toast = useToast();
 
   useEffect(() => {
+    let current = true;
+    setLoadError("");
     codeAnalysisApi
       .listRuleOverrides(tool)
-      .then((res) => setDisabled(new Set(res.overrides.filter((o) => !o.enabled).map((o) => o.ruleId))))
-      .catch((err: unknown) => toast.error(getErrorMessage(err, "Failed to load rule settings")));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tool]);
+      .then((res) => {
+        if (current) setDisabled(new Set(res.overrides.filter((o) => !o.enabled).map((o) => o.ruleId)));
+      })
+      .catch((err: unknown) => {
+        if (current) setLoadError(getErrorMessage(err, "Failed to load this organization's rule settings"));
+      });
+    return () => { current = false; };
+  }, [tool, attempt]);
 
   const flip = (ruleId: string) =>
     setDisabled((prev) => {
@@ -40,5 +51,5 @@ export function useRuleOverrides(tool: "semgrep" | "sonarqube", onChanged: () =>
     }
   };
 
-  return { disabled, toggle };
+  return { disabled, toggle, loadError, retryLoad: () => setAttempt((n) => n + 1) };
 }
