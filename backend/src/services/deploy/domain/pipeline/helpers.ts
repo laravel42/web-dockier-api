@@ -15,6 +15,10 @@ import {
 } from "../deployments.js";
 import type { DeploymentStatus } from "../../types.js";
 import { emit } from "../../../../shared/events.js";
+import { supabaseAdmin } from "../../../../shared/supabase/client.js";
+import { safeRecordActivity } from "../../../../shared/service-clients/activity.js";
+import { logger } from "../../../../shared/logger.js";
+import { getErrMsg } from "../../../../shared/utils/error-message.js";
 
 // ─── Deployment Log ────────────────────────────────────────────────
 
@@ -26,6 +30,34 @@ export async function appendLog(deploymentId: string, line: string): Promise<voi
 
 export async function updateStatus(deploymentId: string, status: DeploymentStatus, extra?: Record<string, unknown>): Promise<void> {
   await setDeploymentStatus(deploymentId, status, extra);
+}
+
+// ─── Deploy Activity ───────────────────────────────────────────────
+
+/**
+ * Record a finished deploy in the project's activity. The notification helpers
+ * below are what every pipeline calls when a deploy ends, so this is the one place.
+ * The project comes from the deployment row: the callers do not carry it.
+ * Fire-and-forget like safeRecordActivity: activity must never fail a deploy.
+ */
+function recordDeployActivity(
+  tenantId: string,
+  deploymentId: string,
+  eventType: "deploy_completed" | "deploy_failed",
+  description: string,
+): void {
+  void (async () => {
+    const { data } = await supabaseAdmin
+      .from("deployments")
+      .select("project_id")
+      .eq("id", deploymentId)
+      .eq("organization_id", tenantId)
+      .maybeSingle();
+    if (!data?.project_id) return; // a deploy without a project has no activity feed
+    safeRecordActivity({ tenantId, projectId: data.project_id, eventType, description, metadata: { deployId: deploymentId } });
+  })().catch((err: unknown) =>
+    logger.warn({ err: getErrMsg(err), deploymentId, eventType }, "Non-critical: failed to record deploy activity"),
+  );
 }
 
 // ─── Deploy Notification ───────────────────────────────────────────
@@ -62,6 +94,7 @@ export function emitDeploySuccessNotification(params: {
       deployId: deploymentId,
     },
   });
+  recordDeployActivity(tenantId, deploymentId, "deploy_completed", `Deployment of ${repo} (${branch}) completed`);
 }
 
 /**
@@ -114,6 +147,8 @@ export function emitDeployFailureNotification(params: {
       failurePhase: phase || undefined,
     },
   });
+  // The reason stays in the deploy log and the notification: activity descriptions are a short title.
+  recordDeployActivity(tenantId, deploymentId, "deploy_failed", `${prefix} for ${repo} (${branch})`);
 }
 
 // ─── Env Parser ────────────────────────────────────────────────────

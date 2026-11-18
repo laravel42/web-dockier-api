@@ -37,12 +37,13 @@ async function resolveBuildMethod(source: { build_method: string | null; provide
  *
  * Use case: "I pushed a hotfix, deploy again" or "transient failure, retry."
  */
-export async function redeployLatest(deploymentId: string, tenantId: string, correlationId?: string) {
+export async function redeployLatest(deploymentId: string, tenantId: string, correlationId?: string, userId?: string) {
   const source = await getSourceDeployment(deploymentId, tenantId);
   const buildMethod = await resolveBuildMethod(source);
 
   return await createAndEnqueueDeployment({
     tenantId,
+    userId,
     providerId: source.provider_id,
     gitConnectionId: source.git_connection_id ?? "",
     projectId: source.project_id || undefined,
@@ -60,7 +61,7 @@ export async function redeployLatest(deploymentId: string, tenantId: string, cor
  * The pipeline will check out the pinned commit SHA instead of HEAD.
  * Use case: "push-to-deploy shipped a broken commit, go back to what worked."
  */
-export async function rollbackToDeployment(deploymentId: string, tenantId: string, correlationId?: string) {
+export async function rollbackToDeployment(deploymentId: string, tenantId: string, correlationId?: string, userId?: string) {
   const source = await getSourceDeployment(deploymentId, tenantId);
 
   if (!source.commit_hash) {
@@ -76,6 +77,7 @@ export async function rollbackToDeployment(deploymentId: string, tenantId: strin
   // The pipeline will use this commit instead of HEAD
   const deployment = await createAndEnqueueDeployment({
     tenantId,
+    userId,
     providerId: source.provider_id,
     gitConnectionId: source.git_connection_id ?? "",
     projectId: source.project_id || undefined,

@@ -33,6 +33,7 @@ import { timeAgo } from "@/utils/timeAgo";
 import TabSpinner from "@/components/ui/TabSpinner";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { labelCls, toneDotCls } from "@/utils/styles";
+import { Link } from "react-router-dom";
 
 interface Props {
   project: Project;
@@ -591,9 +592,10 @@ function ActivityDetailModal({
   onClose: () => void;
 }) {
   const EVENT_DESCRIPTIONS: Record<string, string> = {
-    deploy_started: "Deploying pushed code",
-    deploy_completed: "Deploying pushed code",
-    deploy_failed: "Deploying pushed code",
+    // Any trigger records these (UI, redeploy, rollback, git push), not only a push.
+    deploy_started: "Deployment started",
+    deploy_completed: "Deployment completed",
+    deploy_failed: "Deployment failed",
     command_run: "Running custom command",
     config_changed: "Configuration changed",
     heartbeat_missed: "Heartbeat missed",
@@ -617,6 +619,13 @@ function ActivityDetailModal({
         <div className="flex items-center justify-center py-10">
           <Spinner className="size-4" />
         </div>
+      ) : typeof entry.metadata?.deployId === "string" ? (
+        // A deploy event's detail is its log, which lives on the deployment page.
+        <p className="py-6 text-center text-sm">
+          <Link to={`/deploy/${encodeURIComponent(entry.metadata.deployId)}`} className="text-primary-500 hover:text-primary-400 underline-offset-2 hover:underline">
+            View the deployment and its log
+          </Link>
+        </p>
       ) : output ? (
         <pre
           tabIndex={0}

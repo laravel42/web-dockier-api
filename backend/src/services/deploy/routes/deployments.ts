@@ -68,6 +68,7 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       return await createAndEnqueueDeployment({
         tenantId: auth.tenantId,
+        userId: auth.userId,
         providerId: request.body.providerId,
         gitConnectionId: request.body.gitConnectionId,
         projectId: request.body.projectId,
@@ -199,7 +200,7 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      return await redeployLatest(request.params.deploymentId, auth.tenantId, request.id);
+      return await redeployLatest(request.params.deploymentId, auth.tenantId, request.id, auth.userId);
     },
   );
 
@@ -217,7 +218,7 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const auth = getAuth(request);
-      return await rollbackToDeployment(request.params.deploymentId, auth.tenantId, request.id);
+      return await rollbackToDeployment(request.params.deploymentId, auth.tenantId, request.id, auth.userId);
     },
   );
 

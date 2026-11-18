@@ -4,6 +4,7 @@ import type { DeployStrategy, DeploymentRow, DeploymentStatus, ServiceEntry } fr
 import { rowToDeployment } from "./mappers.js";
 import { DeployError, getProviderForTenant } from "./providers.js";
 import { createDeploymentRecord } from "./processor.js";
+import { safeRecordActivity } from "../../../shared/service-clients/activity.js";
 import { enqueueDeployment } from "./worker.js";
 import { logger } from "../../../shared/logger.js";
 import { nowIso } from "../../../shared/utils/time.js";
@@ -214,6 +215,8 @@ export async function getDeploymentForWebhook(deploymentId: string): Promise<{ i
 
 export interface CreateDeploymentParams {
   tenantId: string;
+  /** Who started it, for the project's activity. Absent for a git push. */
+  userId?: string;
   providerId: string;
   gitConnectionId: string;
   projectId?: string;
@@ -254,6 +257,7 @@ export interface CreateDeploymentParams {
 export async function createAndEnqueueDeployment(params: CreateDeploymentParams) {
   const {
     tenantId,
+    userId,
     providerId,
     gitConnectionId,
     projectId,
@@ -357,6 +361,17 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
       startCommand,
       correlationId,
     });
+    // Here, not in a pipeline: every trigger (UI, redeploy, rollback, git push) creates through this.
+    if (projectId) {
+      safeRecordActivity({
+        tenantId,
+        projectId,
+        userId,
+        eventType: "deploy_started",
+        description: `Deployment of ${repo} (${branch}) started`,
+        metadata: { deployId: payload.id },
+      });
+    }
   }
 
   return rowToDeployment(payload);
