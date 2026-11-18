@@ -336,7 +336,7 @@ export async function finalizeDeploy(ctx: {
     await updateStatus(ctx.deploymentId, "success", { infra: serializeInfra(infra) });
   }
 
-  await clearRepoFaviconFromAnalysisCache(ctx.event.repo, ctx.event.branch, logger);
+  await clearRepoFaviconFromAnalysisCache(ctx.event.tenantId, ctx.event.repo, ctx.event.branch, logger);
 
   // Non-blocking notification
   emitDeploySuccessNotification({

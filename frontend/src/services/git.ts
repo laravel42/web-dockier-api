@@ -7,6 +7,8 @@ export interface FixPlan {
   issueNumber: number;
   issueTitle: string;
   files: FixPlanFile[];
+  /** Server signature; send the plan back unchanged or apply refuses it. */
+  signature: string;
 }
 export interface ReviewComment {
   path: string;

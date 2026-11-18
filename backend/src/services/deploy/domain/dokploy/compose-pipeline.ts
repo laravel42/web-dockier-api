@@ -198,7 +198,7 @@ export async function executeComposePipeline(event: PipelineInput): Promise<void
       `App URL: ${deployResult.appUrl || "(no public service configured)"}`,
     );
 
-    await clearRepoFaviconFromAnalysisCache(repo, branch, logger);
+    await clearRepoFaviconFromAnalysisCache(tenantId, repo, branch, logger);
     emitDeploySuccessNotification({
       tenantId,
       deploymentId,

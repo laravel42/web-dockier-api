@@ -60,7 +60,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const repoKey = `${request.query.owner}/${request.query.repo}`;
-      const cached = await db.from("stack_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
+      const cached = await db.from("stack_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repoKey).eq("branch", branch).maybeSingle();
       if (cached.data?.result) {
         return { stack: parseJsonField(cached.data.result), cached: true };
       }
@@ -219,7 +219,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       const branch = request.query.branch || "main";
       const repo = request.query.repo;
 
-      const stackCached = await db.from("stack_cache").select("result").eq("repo", repo).eq("branch", branch).maybeSingle();
+      const stackCached = await db.from("stack_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repo).eq("branch", branch).maybeSingle();
       if (stackCached.data?.result) {
         const parsed = parseJsonField<{ components?: Array<{ techs?: string[] }> }>(stackCached.data.result)!;
         const techSet = new Set<string>();
@@ -233,7 +233,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         }
       }
 
-      const analysisCached = await db.from("analysis_cache").select("result").eq("repo", repo).eq("branch", branch).maybeSingle();
+      const analysisCached = await db.from("analysis_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repo).eq("branch", branch).maybeSingle();
       if (analysisCached.data?.result) {
         const parsed = parseJsonField<{ techStack?: Array<{ name: string; category: string; confidence: number }> }>(analysisCached.data.result)!;
         const techStack = parsed.techStack ?? [];
@@ -304,8 +304,8 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       };
 
       type FaviconCache = { repoFavicon?: RepoFaviconCacheEntry };
-      const latestDeployId = await getLatestSuccessfulDeployId(repo, branch);
-      const analysisCached = await db.from("analysis_cache").select("result").eq("repo", repo).eq("branch", branch).maybeSingle();
+      const latestDeployId = await getLatestSuccessfulDeployId(auth.tenantId, repo, branch);
+      const analysisCached = await db.from("analysis_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repo).eq("branch", branch).maybeSingle();
       const cachedResult = parseJsonField<FaviconCache>(analysisCached.data?.result);
       if (isRepoFaviconCacheValid(cachedResult?.repoFavicon, latestDeployId)) {
         const cachedUrl = cachedResult!.repoFavicon!.dataUrl;
@@ -344,7 +344,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       };
 
       if (cachedResult) {
-        await updateAnalysisCache(repo, branch, mergedResult as Json, log);
+        await updateAnalysisCache(auth.tenantId, repo, branch, mergedResult as Json, log);
       } else {
         await writeAnalysisCache({
           tenantId: auth.tenantId,
@@ -384,7 +384,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const repoKey = `${request.query.owner}/${request.query.repo}`;
-      const cached = await db.from("analysis_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
+      const cached = await db.from("analysis_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repoKey).eq("branch", branch).maybeSingle();
       if (cached.data?.result) {
         let parsed = parseJsonField<Record<string, unknown>>(cached.data.result)!;
         const ref = { owner: request.query.owner, repo: request.query.repo, branch };
@@ -395,7 +395,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         if (!("detectedDbEngine" in parsed)) {
           const detectedDbEngine = await detectDbEngine(conn, ref);
           parsed = { ...parsed, detectedDbEngine };
-          await updateAnalysisCache(repoKey, branch, parsed as unknown as Json, log);
+          await updateAnalysisCache(auth.tenantId, repoKey, branch, parsed as unknown as Json, log);
         }
 
         // Same backfill for `multiService` and `compose`, so a stale row still
@@ -409,7 +409,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
               multiService: detectMultiService(tree),
               compose: await analyzeComposeRepo(conn, ref, tree),
             };
-            await updateAnalysisCache(repoKey, branch, parsed as unknown as Json, log);
+            await updateAnalysisCache(auth.tenantId, repoKey, branch, parsed as unknown as Json, log);
           } catch {
             // Best-effort: a failed tree fetch leaves the fields absent so the
             // backfill retries, rather than failing a cached analysis read.
@@ -426,7 +426,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
           );
           if (aiResult) {
             const updated = { ...parsed, aiAnalysis: aiResult };
-            await updateAnalysisCache(repoKey, branch, updated as unknown as Json, log);
+            await updateAnalysisCache(auth.tenantId, repoKey, branch, updated as unknown as Json, log);
             return updated;
           }
         }

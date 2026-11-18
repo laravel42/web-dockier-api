@@ -36,4 +36,6 @@ export const fixIssuePlanSchema = z.object({
   issueNumber: z.number().int(),
   issueTitle: z.string(),
   files: z.array(z.object({ path: z.string(), before: z.string(), after: z.string() })),
+  /** HMAC over the plan, so apply only commits what plan generated (fix-plan-signature.ts). */
+  signature: z.string(),
 });

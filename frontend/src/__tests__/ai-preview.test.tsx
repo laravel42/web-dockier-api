@@ -20,6 +20,7 @@ const plan: FixPlan = {
   baseBranch: "main",
   issueNumber: 42,
   issueTitle: "Crash on logout",
+  signature: "ab12",
   files: [
     { path: "src/auth.ts", before: "const id = session.user.id;\nreturn id;", after: "const id = session?.user?.id;\nreturn id;" },
     { path: "src/new.ts", before: "", after: "export const x = 1;" },

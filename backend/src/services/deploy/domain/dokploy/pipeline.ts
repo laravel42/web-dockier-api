@@ -382,7 +382,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     // disabled (it requires "live") — leaving users unable to destroy resources
     // they just created. Notifications and the favicon cache were missing too.
     // (infra_state is marked live before the success flip above.)
-    await clearRepoFaviconFromAnalysisCache(repo, branch, logger);
+    await clearRepoFaviconFromAnalysisCache(tenantId, repo, branch, logger);
     emitDeploySuccessNotification({
       tenantId,
       deploymentId,

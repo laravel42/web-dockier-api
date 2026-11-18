@@ -17,6 +17,7 @@ import { requireConnection, isPlaceholderStats, needsContributorProfileRefresh }
 import { planIssueFix, applyIssueFix, type FixIssuePlan } from "../domain/ai/fix-issue-ai.js";
 import { generatePRReview, postPRReview } from "../domain/ai/review-pr-ai.js";
 import { fixIssuePlanSchema } from "../schemas.js";
+import { isFixPlanSignatureValid, signFixPlan } from "../domain/ai/fix-plan-signature.js";
 import { env } from "../../../shared/config.js";
 
 export async function registerRepositoryRoutes(app: FastifyInstance) {
@@ -330,7 +331,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
       const repoKey = `${request.query.owner}/${request.query.repo}`;
       const branch = request.query.branch || "main";
       if (!request.query.refresh) {
-        const cached = await db.from("stats_cache").select("result").eq("repo", repoKey).eq("branch", branch).maybeSingle();
+        const cached = await db.from("stats_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repoKey).eq("branch", branch).maybeSingle();
         if (cached.data?.result) {
           const parsed = parseJsonField<RepoStats>(cached.data.result)!;
           if (!isPlaceholderStats(parsed) && !needsContributorProfileRefresh(parsed, conn.provider)) {
@@ -392,7 +393,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
   typed.post(
     "/git/connections/:connectionId/branches",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "git-create-branch" })],
+      preHandler: [app.requirePermission(PERMISSIONS.SCAN_CREATE_MR), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "git-create-branch" })],
       schema: {
         tags: ["git-integration"],
         summary: "Create a new branch from a base branch",
@@ -452,7 +453,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
       }
 
       try {
-        return await planIssueFix(conn, {
+        const plan = await planIssueFix(conn, {
           owner: request.body.owner,
           repo: request.body.repo,
           baseBranch: request.body.baseBranch,
@@ -460,6 +461,8 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
           issueTitle: request.body.issueTitle,
           issueBody: request.body.issueBody,
         }, env.OPENAI_API_KEY, env.OPENAI_MODEL);
+        const scope = { tenantId: auth.tenantId, connectionId: conn.id, owner: request.body.owner, repo: request.body.repo };
+        return { ...plan, signature: signFixPlan(plan, scope, env.JWT_SECRET) };
       } catch (err: unknown) {
         request.log.error({ err }, "[AI-FixIssue] Pipeline failed");
         const message = getErrMsg(err) || "AI fix pipeline failed";
@@ -472,7 +475,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
   typed.post(
     "/git/connections/:connectionId/fix-issue/apply",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-fix-apply" })],
+      preHandler: [app.requirePermission(PERMISSIONS.SCAN_CREATE_MR), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-fix-apply" })],
       schema: {
         tags: ["git-integration"],
         summary: "Open a pull request from a previously generated fix plan",
@@ -496,6 +499,10 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = getAuth(request);
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
+      const { owner, repo, plan } = request.body;
+      if (!isFixPlanSignatureValid(plan, plan.signature, { tenantId: auth.tenantId, connectionId: conn.id, owner, repo }, env.JWT_SECRET)) {
+        throw app.httpErrors.badRequest("This fix plan was changed after it was generated. Generate the fix again.");
+      }
       try {
         return await applyIssueFix(conn, request.body.owner, request.body.repo, request.body.plan as FixIssuePlan);
       } catch (err: unknown) {
@@ -563,7 +570,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
   typed.post(
     "/git/connections/:connectionId/review-pr/post",
     {
-      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-review-post" })],
+      preHandler: [app.requirePermission(PERMISSIONS.SCAN_CREATE_MR), tenantRateLimit({ max: 5, windowMs: 60_000, prefix: "git-review-post" })],
       schema: {
         tags: ["git-integration"],
         summary: "Post an approved set of review comments to a pull request",

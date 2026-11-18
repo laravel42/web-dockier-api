@@ -276,8 +276,8 @@ export async function applyDeploymentWebhookUpdate(
   await supabaseAdmin.from("deployments").update(updates).eq("id", buildId);
 
   if (payload.status === "success") {
-    if (current?.repo && current?.branch) {
-      await clearRepoFaviconFromAnalysisCache(current.repo, current.branch, logger);
+    if (current?.organization_id && current?.repo && current?.branch) {
+      await clearRepoFaviconFromAnalysisCache(current.organization_id, current.repo, current.branch, logger);
     }
   }
 

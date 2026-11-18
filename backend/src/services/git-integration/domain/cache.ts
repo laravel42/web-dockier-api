@@ -144,6 +144,7 @@ export async function writeAnalysisCache(
  * Update an existing analysis cache row (e.g. to add AI analysis to an existing entry).
  */
 export async function updateAnalysisCache(
+  tenantId: string,
   repoKey: string,
   branch: string,
   result: Json,
@@ -151,7 +152,8 @@ export async function updateAnalysisCache(
 ): Promise<void> {
   const db = supabaseAdmin;
   await runCacheWrite("analysis_cache", () =>
-    db.from("analysis_cache").update({ result: result as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"] }).eq("repo", repoKey).eq("branch", branch),
+    db.from("analysis_cache").update({ result: result as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"] })
+      .eq("organization_id", tenantId).eq("repo", repoKey).eq("branch", branch),
   logger);
 }
 
@@ -160,12 +162,14 @@ export async function updateAnalysisCache(
  * Used to scope favicon cache validity until the next deploy.
  */
 export async function getLatestSuccessfulDeployId(
+  tenantId: string,
   repoKey: string,
   branch: string,
 ): Promise<string | null> {
   const { data } = await supabaseAdmin
     .from("deployments")
     .select("id")
+    .eq("organization_id", tenantId)
     .eq("repo", repoKey)
     .eq("branch", branch)
     .eq("status", "success")
@@ -181,6 +185,7 @@ export async function getLatestSuccessfulDeployId(
  * Called when a deployment succeeds (repo content may have changed).
  */
 export async function clearRepoFaviconFromAnalysisCache(
+  tenantId: string,
   repoKey: string,
   branch: string,
   logger: CacheLogger,
@@ -189,6 +194,7 @@ export async function clearRepoFaviconFromAnalysisCache(
   const { data } = await db
     .from("analysis_cache")
     .select("result")
+    .eq("organization_id", tenantId)
     .eq("repo", repoKey)
     .eq("branch", branch)
     .maybeSingle();
@@ -199,7 +205,7 @@ export async function clearRepoFaviconFromAnalysisCache(
   if (!parsed || !("repoFavicon" in parsed)) return;
 
   const { repoFavicon: _removed, ...rest } = parsed;
-  await updateAnalysisCache(repoKey, branch, rest as Json, logger);
+  await updateAnalysisCache(tenantId, repoKey, branch, rest as Json, logger);
 }
 
 /**
