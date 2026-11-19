@@ -18,7 +18,7 @@ Connect GitHub, GitLab (cloud + self-hosted) repositories via personal access to
 
 ### 2. AI-Powered Project Analysis
 
-Dockier generates an eight-section project overview using OpenAI (gpt-5.4-mini):
+Dockier generates an eight-section project overview using OpenAI (the model set in `OPENAI_MODEL`):
 
 - Overview
 - How It Works
@@ -352,7 +352,7 @@ The AI receives the finding context (rule, file, snippet, severity) and generate
 │  Processes │ Integrations │ Image Builder                     │
 ├────────────────┬──────────────────┬──────────────────────────┤
 │   Supabase     │    pg-boss       │      OpenAI              │
-│   Postgres     │    Job Queue     │      gpt-5.4-mini        │
+│   Postgres     │    Job Queue     │      OPENAI_MODEL        │
 ├────────────────┼──────────────────┼──────────────────────────┤
 │      AWS       │       GCP        │      Semgrep             │
 │  ECS/EC2/S3    │ Cloud Run/GCE    │      SonarQube           │

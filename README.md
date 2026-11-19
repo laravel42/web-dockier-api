@@ -16,7 +16,7 @@ See [`PRODUCT.md`](PRODUCT.md) for the feature overview and [`DESCRIPTION.md`](D
 | ---- | ------- |
 | **Git** | Connect GitHub, GitLab (cloud + self-hosted), and Bitbucket via PATs. Browse repos, branches, files, and stats. |
 | **Projects** | Link a repo + branch; track tech stack badges, commits, scans, and deploys. |
-| **AI analysis** | Eight-section project overview (OpenAI gpt-5.4-mini), cached per commit SHA. |
+| **AI analysis** | Eight-section project overview (OpenAI, model from `OPENAI_MODEL`), cached per commit SHA. |
 | **Sensitive data** | Pattern-based scanner for migrations, ORM schemas, and model files — no AI credits. |
 | **Dependencies** | Parses npm, Composer, pip, and Bundler manifests; checks OSV.dev. |
 | **Security scans** | Semgrep, optional SonarQube, and 30+ custom regex rules. |

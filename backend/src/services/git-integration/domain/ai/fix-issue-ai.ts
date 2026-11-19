@@ -745,8 +745,9 @@ export async function planIssueFix(
     throw new Error(`Could not read any of the identified files (${tried}) from branch "${baseBranch}". Debug: ${debugInfo}. Tree size: ${fileTree.length}, SHAs: ${blobShaMap.size}.${errors}`);
   }
 
-  // 4. Generate fixes (use a stronger model for code generation if available)
-  const fixModel = model.includes("mini") ? model.replace("-mini", "") : model;
+  // 4. Generate fixes with the configured model. This used to swap "-mini" for the
+  // full model on its own, silently running (and billing) a model nobody configured.
+  const fixModel = model;
   const fixPlan = await generateFixes(apiKey, fixModel, issueTitle, issueBody, fileContents);
   logger.info(`[AI-FixIssue] Generated fixes for ${fixPlan.fixes.length} files (model: ${fixModel})`);
 

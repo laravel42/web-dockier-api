@@ -27,14 +27,14 @@ const supabaseSecretKeySchema = z
  * sites' own "unset" handling applies, which is what happened before these
  * variables were brought under the schema.
  */
+function blankToUndefined(value: unknown): unknown {
+  return typeof value === "string" && value.trim() === "" ? undefined : value;
+}
 function optionalEnv<T extends z.ZodType>(schema: T) {
-  return z.preprocess(
-    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-    schema.optional(),
-  );
+  return z.preprocess(blankToUndefined, schema.optional());
 }
 
-const envSchema = z
+const envObjectSchema = z
   .object({
     NODE_ENV: z.string().default("development"),
     PORT: z.coerce.number().int().positive().default(4000),
@@ -49,7 +49,8 @@ const envSchema = z
     JWT_SECRET: z.string().min(16),
     CORS_ORIGIN: z.string().default("*"),
     OPENAI_API_KEY: optionalEnv(z.string()),
-    OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+    // Blank counts as unset: `OPENAI_MODEL=` (or `=   # note`) would otherwise send model "" to OpenAI.
+    OPENAI_MODEL: z.preprocess(blankToUndefined, z.string().default("gpt-4o-mini")),
     /** Toggle the AI Dockerfile review layer. Review runs only when an OpenAI key is also set. */
     AI_DOCKERFILE_REVIEW: z.enum(["on", "off"]).default("on"),
     WEBHOOK_SECRET: optionalEnv(z.string()),
@@ -106,16 +107,17 @@ const envSchema = z
      * process.
      */
     DIRECT_URL: optionalEnv(z.string().min(1)),
-  })
-  .superRefine((data, ctx) => {
-    if (!data.SUPABASE_SECRET_KEY && !data.SUPABASE_SERVICE_ROLE_KEY) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Set SUPABASE_SECRET_KEY (sb_secret_...) or legacy SUPABASE_SERVICE_ROLE_KEY",
-        path: ["SUPABASE_SECRET_KEY"],
-      });
-    }
   });
+// Typed explicitly so editors that do not infer through the large object schema do not flag implicit any.
+const envSchema = envObjectSchema.superRefine((data: z.output<typeof envObjectSchema>, ctx: z.RefinementCtx) => {
+  if (!data.SUPABASE_SECRET_KEY && !data.SUPABASE_SERVICE_ROLE_KEY) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Set SUPABASE_SECRET_KEY (sb_secret_...) or legacy SUPABASE_SERVICE_ROLE_KEY",
+      path: ["SUPABASE_SECRET_KEY"],
+    });
+  }
+});
 
 export type AppEnv = z.infer<typeof envSchema>;
 

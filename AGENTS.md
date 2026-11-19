@@ -20,7 +20,7 @@ Delivery is tracked in Linear project *Dockier App — UX Parity & Hardening*; s
 - **Package manager:** pnpm (v11, pinned via root `packageManager`) — do NOT use npm or yarn
 - **Language:** TypeScript (strict mode, ES2022 target, bundler module resolution)
 - **Testing:** Vitest — tests live in `__tests__/` directories, files named `*.test.ts`
-- **AI:** OpenAI API (gpt-5.4-mini) — server-side only
+- **AI:** OpenAI API, model from `OPENAI_MODEL` (see `shared/config.ts` for the default) — server-side only
 - **Infrastructure:** Pulumi (GCP), CloudFormation (AWS)
 - **Scanning:** Semgrep (curated opengrep corpus in `code-analysis/rules/opengrep`), SonarQube Community (self-hosted, see *Security scans*), and Dockier's own regex rules
 

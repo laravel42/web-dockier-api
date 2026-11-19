@@ -66,7 +66,7 @@ Scanners that only report, and deploy tools that only build, each solve one half
 
 - **Tenancy is flat.** A single `tenantId` scope (app_id model) carries membership and roles; there is no org hierarchy, no cross-org sharing, and no SSO/SAML. Design should not imply nesting, org switching between parents, or federated identity. Membership and 30+ granular `resource:action` permissions operate *within* one flat scope.
 - **Responsiveness is required** down to phone widths (see *Platform*).
-- **AI is server-side and fixed.** OpenAI `gpt-5.4-mini`, JSON response format, no user-facing model selection, no fine-tuning, no local LLMs.
+- **AI is server-side and fixed per deployment.** OpenAI, model set by the operator in `OPENAI_MODEL`, JSON response format, no user-facing model selection, no fine-tuning, no local LLMs.
 - **Static analysis only.** SAST and dependency (SCA) scanning. No DAST, IAST, or container image scanning.
 - **Not a CI/CD engine.** No pipeline definitions, conditional steps, or matrix builds. It is a deploy button.
 - **Degradation is a requirement, not a nicety.** Scans must still return custom-regex results when Semgrep or SonarQube are unavailable, and AI features must return fallback states rather than crashing when the OpenAI key is missing or the API fails after retries.
@@ -160,7 +160,7 @@ What the implementation already establishes as de facto baseline:
 | Frontend | Vite, React 19, Tailwind CSS v4, react-router-dom, shadcn/ui primitives |
 | Database | Supabase Postgres; typed access via `@supabase/supabase-js` |
 | Auth | Supabase Auth (passwordless) + app JWT + RLS on tenant tables |
-| AI | OpenAI API (gpt-5.4-mini), server-side only, JSON response format |
+| AI | OpenAI API (model from `OPENAI_MODEL`), server-side only, JSON response format |
 | Scanning | Semgrep + optional SonarQube + custom regex engine |
 | Vulnerabilities | OSV.dev batch API |
 | Builds | Auto-generated Dockerfiles; Railpack/Nixpacks available as alternatives |

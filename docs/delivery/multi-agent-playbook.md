@@ -142,7 +142,7 @@ North Star: **The Lamplit Control Room** — warm graphite surfaces, one ochre l
 
 ### OpenAI (already in backend)
 
-- Project analysis: `gpt-5.4-mini` server-side only
+- Project analysis: OpenAI model from `OPENAI_MODEL`, server-side only
 - **New use:** batch-generate Vitest tests from Linear issue acceptance criteria (script in `scripts/generate-tests.ts` — future task)
 
 ### Claude
