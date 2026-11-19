@@ -16,6 +16,7 @@ import {
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import { providers } from "./domain/providers/index.js";
+import { DomainError } from "../../shared/supabase/errors.js";
 import {
   createPMIntegration,
   deletePMIntegration,
@@ -26,18 +27,8 @@ import {
   updatePMIntegration,
 } from "./domain/pm-integrations.js";
 
-async function resolvePMConfig(
-  request: FastifyRequest,
-  body: { integrationId?: string; type?: string; config?: Record<string, string> },
-) {
-  const auth = getAuth(request);
-  if (body.integrationId) {
-    return getPMIntegrationConfig(body.integrationId, auth.tenantId);
-  }
-  if (!body.type || !body.config) {
-    throw new IntegrationsError("Either integrationId or type+config is required", "bad_request");
-  }
-  return { type: body.type, config: body.config };
+async function resolvePMConfig(request: FastifyRequest, body: { integrationId: string }) {
+  return getPMIntegrationConfig(body.integrationId, getAuth(request).tenantId);
 }
 
 export async function registerIntegrationsRoutes(app: FastifyInstance) {
@@ -226,7 +217,8 @@ export async function registerIntegrationsRoutes(app: FastifyInstance) {
           assigneeId,
         });
       } catch (error) {
-        if (error instanceof IntegrationsError) throw error;
+        // Our own errors (provider status, refused address) already carry a user-facing message.
+        if (error instanceof DomainError) throw error;
         throw new IntegrationsError("Failed to create issue in external provider", "service_unavailable", error);
       }
     },

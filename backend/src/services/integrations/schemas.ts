@@ -21,57 +21,19 @@ export const teamMemberSchema = z.object({
   avatarUrl: z.string().optional(),
 });
 
-const integrationRequestBaseSchema = z.object({
-  integrationId: z.uuid().optional(),
-  type: z.string().min(1).max(50).optional(),
-  config: z.record(z.string().max(100), z.string().max(5000)).optional(),
+// Always a stored integration: inline type+config let any project viewer make the
+// backend call an arbitrary host (SSRF) and skipped the provider allowlist and `enabled`.
+export const integrationRequestSchema = z.object({ integrationId: z.uuid() });
+export const integrationWithTeamSchema = integrationRequestSchema.extend({ teamId: z.string().max(200) });
+export const integrationCreateIssueSchema = integrationRequestSchema.extend({
+  teamId: z.string().max(200),
+  projectId: z.string().max(200),
+  title: z.string().min(1).max(500),
+  description: z.string().max(5000).default(""),
+  priority: z.number().int().min(0).max(4).optional(),
+  estimateMinutes: z.number().int().positive().optional(),
+  assigneeId: z.string().max(200).optional(),
 });
-
-function hasIntegrationCredentials(data: {
-  integrationId?: string;
-  type?: string;
-  config?: Record<string, string>;
-}) {
-  return !!data.integrationId || !!(data.type && data.config);
-}
-
-export const integrationRequestSchema = integrationRequestBaseSchema.refine(hasIntegrationCredentials, {
-  message: "Either integrationId or type+config is required",
-});
-
-export const integrationWithTeamSchema = integrationRequestBaseSchema
-  .extend({ teamId: z.string().max(200) })
-  .refine(hasIntegrationCredentials, {
-    message: "Either integrationId or type+config is required",
-  });
-
-export const integrationCreateTaskSchema = integrationRequestBaseSchema
-  .extend({
-    title: z.string().min(1).max(500),
-    description: z.string().max(5000).optional(),
-    assigneeId: z.string().max(200).optional(),
-  })
-  .refine(hasIntegrationCredentials, {
-    message: "Either integrationId or type+config is required",
-  });
-
-export const integrationCreateIssueSchema = z
-  .object({
-    integrationId: z.uuid().optional(),
-    type: z.string().min(1).max(50).optional(),
-    config: z.record(z.string().max(100), z.string().max(5000)).optional(),
-    teamId: z.string().max(200),
-    projectId: z.string().max(200),
-    title: z.string().min(1).max(500),
-    description: z.string().max(5000).default(""),
-    priority: z.number().optional(),
-    estimateMinutes: z.number().optional(),
-    assigneeId: z.string().max(200).optional(),
-  })
-  .refine((data) => data.integrationId || (data.type && data.config), {
-    message: "Either integrationId or type+config is required",
-  });
-
 // ─── Response Schemas ──────────────────────────────────────────────
 
 export const listIntegrationsResponseSchema = z.object({

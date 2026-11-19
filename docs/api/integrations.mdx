@@ -1,13 +1,15 @@
 # Integrations API
-
 ## Endpoints
-
+- `GET /integrations/pm`
+- `POST /integrations/pm`
+- `PUT /integrations/pm/:integrationId`
+- `DELETE /integrations/pm/:integrationId`
 - `POST /integrations/pm/teams`
 - `POST /integrations/pm/team-projects`
 - `POST /integrations/pm/team-members`
 - `POST /integrations/pm/issues`
-
 ## Notes
-
-- Provider support is partially migrated; unsupported providers return empty results or `501`.
-- Additional PM adapters are marked as TODO in route implementation.
+- Supported providers: `jira` and `linear`.
+- The teams, team-projects, team-members and issues endpoints take an `integrationId` of a stored, enabled integration. Inline `type` + `config` credentials are not accepted.
+- A Jira URL must be `https://` and may not resolve to a private or internal address.
+- A provider failure (rejected credentials, rate limit, outage) is returned as an error, not as an empty list.

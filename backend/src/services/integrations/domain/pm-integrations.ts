@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { encryptJson, decryptJson } from "../../../shared/auth/crypto.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { nowIso } from "../../../shared/utils/time.js";
@@ -10,8 +9,8 @@ import { rowToSummary } from "./mappers.js";
 export const PM_PROVIDERS = ["linear", "jira"] as const;
 export type PMProvider = (typeof PM_PROVIDERS)[number];
 
-export const IntegrationsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "conflict" | "internal" | "service_unavailable">("IntegrationsError");
-export type IntegrationsError = InstanceType<typeof IntegrationsError>;
+import { IntegrationsError } from "./errors.js";
+export { IntegrationsError } from "./errors.js";
 
 export interface PMIntegrationRow {
   id: string;
@@ -40,6 +39,22 @@ function parseCredentials(encrypted: string): PMIntegrationCredentials {
   return { config: normalized };
 }
 
+/**
+ * Jira's `host` is tenant-supplied and every call goes to it: https only, no
+ * credentials in the URL. Internal addresses are refused at fetch time (shared/http/guarded-fetch.ts).
+ */
+function assertValidConfig(provider: string, config: Record<string, string>): void {
+  if (provider !== "jira" || !config.host) return;
+  let url: URL;
+  try {
+    url = new URL(config.host);
+  } catch {
+    throw new IntegrationsError("Jira URL must be a valid https:// URL", "bad_request");
+  }
+  if (url.protocol !== "https:" || url.username || url.password) {
+    throw new IntegrationsError("Jira URL must be an https:// URL without credentials", "bad_request");
+  }
+}
 export function assertPMProvider(provider: string): PMProvider {
   if (!PM_PROVIDERS.includes(provider as PMProvider)) {
     throw new IntegrationsError(`Unsupported PM provider: ${provider}`, "bad_request");
@@ -79,7 +94,7 @@ export interface CreatePMIntegrationParams {
 export async function createPMIntegration(params: CreatePMIntegrationParams) {
   const { tenantId, provider, name, config, enabled = true } = params;
   assertPMProvider(provider);
-
+  assertValidConfig(provider, config);
   const { data: existing, error: checkError } = await supabaseAdmin
     .from("pm_integrations")
     .select("id")
@@ -134,6 +149,7 @@ export async function updatePMIntegration(params: UpdatePMIntegrationParams) {
   if (name !== undefined) updates.name = name;
   if (enabled !== undefined) updates.enabled = enabled;
   if (config !== undefined) {
+    assertValidConfig(existing.provider, config);
     updates.credentials_encrypted = encryptJson({ config });
   }
 

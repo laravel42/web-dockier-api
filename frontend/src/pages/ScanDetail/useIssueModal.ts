@@ -53,8 +53,9 @@ export function useIssueModal(project: Project | null) {
         if (res.projectLabel) fetchPmSubProjects(pm, res.teams[0].id);
         fetchPmMembers(pm, res.teams[0].id);
       }
-    } catch {
-      /* PM teams optional — leave lists empty */
+    } catch (err) {
+      // Without teams no issue can be created, so say why (revoked token, provider down).
+      setIssueError(getErrorMessage(err, "Couldn't load teams from this integration"));
     }
     finally { setPmProjectsLoading(false); }
   };
@@ -115,6 +116,7 @@ export function useIssueModal(project: Project | null) {
 
   const handleIntegrationChange = (integrationId: string) => {
     setIssueIntegration(integrationId);
+    setIssueError("");
     const pm = pmIntegrations.find(i => i.id === integrationId);
     if (pm) fetchPmTeams(pm);
   };
