@@ -1,5 +1,5 @@
 import { createDomainErrorClass } from "../../../../shared/supabase/errors.js";
-import { gitFetch } from "./guarded-fetch.js";
+import { guardedFetch } from "../../../../shared/http/guarded-fetch.js";
 
 export type GitProvider = string;
 
@@ -164,7 +164,7 @@ async function listGitHubRepos(
     `${origin}/user/repos?per_page=${perPage}&sort=updated&visibility=all&affiliation=owner,collaborator,organization_member`;
 
   for (let page = 0; page < maxPages && nextUrl; page += 1) {
-    const response = await gitFetch(nextUrl, { headers });
+    const response = await guardedFetch(nextUrl, { headers });
     if (!response.ok) throw providerApiError("GitHub", response.status, await readErrorBody(response));
     const data = (await response.json()) as Array<{
       archived?: boolean;
@@ -249,7 +249,7 @@ async function listGitLabViaMembership(
       `&page=${page}&order_by=updated_at&archived=false` +
       // GitLab supports server-side search on this endpoint.
       (opts.search ? `&search=${encodeURIComponent(opts.search)}` : "");
-    const response = await gitFetch(url, { headers });
+    const response = await guardedFetch(url, { headers });
     if (!response.ok) {
       return { ok: false, status: response.status, body: await readErrorBody(response) };
     }
@@ -282,7 +282,7 @@ async function listGitLabViaAssociations(
 
   for (let page = 1; page <= maxPages; page += 1) {
     const url = `${origin}/api/v4/personal_access_tokens/self/associations?per_page=${perPage}&page=${page}`;
-    const response = await gitFetch(url, { headers });
+    const response = await guardedFetch(url, { headers });
     if (!response.ok) {
       return { ok: false, status: response.status, body: await readErrorBody(response) };
     }
@@ -355,7 +355,7 @@ async function listBitbucketRepos(
     (opts.search ? `&q=${encodeURIComponent(`name~"${opts.search}"`)}` : "");
 
   for (let page = 0; page < maxPages && nextUrl; page += 1) {
-    const response = await gitFetch(nextUrl, { headers });
+    const response = await guardedFetch(nextUrl, { headers });
     if (!response.ok) throw providerApiError("Bitbucket", response.status, await readErrorBody(response));
     const data = (await response.json()) as {
       values?: Array<{
@@ -406,19 +406,19 @@ export async function listBranches(connection: ConnectionLike, ref: RepoRef): Pr
   const origin = baseUrl(connection.provider, connection.endpoint);
 
   if (connection.provider === "github") {
-    const response = await gitFetch(`${origin}/repos/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/branches?per_page=100`, { headers });
+    const response = await guardedFetch(`${origin}/repos/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/branches?per_page=100`, { headers });
     if (!response.ok) throw providerApiError("GitHub", response.status, await readErrorBody(response));
     return ((await response.json()) as Array<{ name: string }>).map((row) => row.name);
   }
 
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
     const projectPath = encodeURIComponent(`${ref.owner}/${ref.repo}`);
-    const response = await gitFetch(`${origin}/api/v4/projects/${projectPath}/repository/branches?per_page=100`, { headers });
+    const response = await guardedFetch(`${origin}/api/v4/projects/${projectPath}/repository/branches?per_page=100`, { headers });
     if (!response.ok) throw providerApiError("GitLab", response.status, await readErrorBody(response));
     return ((await response.json()) as Array<{ name: string }>).map((row) => row.name);
   }
 
-  const response = await gitFetch(`${origin}/2.0/repositories/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/refs/branches?pagelen=100`, { headers });
+  const response = await guardedFetch(`${origin}/2.0/repositories/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/refs/branches?pagelen=100`, { headers });
   if (!response.ok) throw providerApiError("Bitbucket", response.status, await readErrorBody(response));
   const data = (await response.json()) as { values?: Array<{ name: string }> };
   return (data.values ?? []).map((row) => row.name);
@@ -429,7 +429,7 @@ export async function getRepoFileTree(connection: ConnectionLike, ref: RepoRef):
   const origin = baseUrl(connection.provider, connection.endpoint);
 
   if (connection.provider === "github") {
-    const response = await gitFetch(`${origin}/repos/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/git/trees/${encodeURIComponent(ref.branch)}?recursive=1`, { headers });
+    const response = await guardedFetch(`${origin}/repos/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/git/trees/${encodeURIComponent(ref.branch)}?recursive=1`, { headers });
     if (!response.ok) throw providerApiError("GitHub", response.status, await readErrorBody(response));
     const data = (await response.json()) as { tree?: Array<{ path: string; type: string }> };
     return (data.tree ?? []).filter((entry) => entry.type === "blob").map((entry) => entry.path);
@@ -439,7 +439,7 @@ export async function getRepoFileTree(connection: ConnectionLike, ref: RepoRef):
     const projectPath = encodeURIComponent(`${ref.owner}/${ref.repo}`);
     const files: string[] = [];
     for (let page = 1; page <= 20; page += 1) {
-      const response = await gitFetch(
+      const response = await guardedFetch(
         `${origin}/api/v4/projects/${projectPath}/repository/tree?ref=${encodeURIComponent(ref.branch)}&recursive=true&per_page=100&page=${page}`,
         { headers },
       );
@@ -455,7 +455,7 @@ export async function getRepoFileTree(connection: ConnectionLike, ref: RepoRef):
     return files;
   }
 
-  const response = await gitFetch(`${origin}/2.0/repositories/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/src/${encodeURIComponent(ref.branch)}/?pagelen=100`, { headers });
+  const response = await guardedFetch(`${origin}/2.0/repositories/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/src/${encodeURIComponent(ref.branch)}/?pagelen=100`, { headers });
   if (!response.ok) throw providerApiError("Bitbucket", response.status, await readErrorBody(response));
   const data = (await response.json()) as { values?: Array<{ path: string; type: string }> };
   return (data.values ?? []).filter((entry) => entry.type === "commit_file").map((entry) => entry.path);
@@ -505,7 +505,7 @@ export async function fetchRepoFileBuffer(
   const origin = baseUrl(connection.provider, connection.endpoint);
 
   if (connection.provider === "github") {
-    const response = await gitFetch(`${origin}/repos/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/contents/${urlFilePath(path)}?ref=${encodeURIComponent(ref.branch)}`, {
+    const response = await guardedFetch(`${origin}/repos/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/contents/${urlFilePath(path)}?ref=${encodeURIComponent(ref.branch)}`, {
       headers: { ...headers, Accept: "application/vnd.github.v3.raw" },
     });
     if (!response.ok) return fileMissingOrThrow("GitHub", response);
@@ -515,12 +515,12 @@ export async function fetchRepoFileBuffer(
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
     const projectPath = encodeURIComponent(`${ref.owner}/${ref.repo}`);
     const filePath = encodeURIComponent(path);
-    const response = await gitFetch(`${origin}/api/v4/projects/${projectPath}/repository/files/${filePath}/raw?ref=${encodeURIComponent(ref.branch)}`, { headers });
+    const response = await guardedFetch(`${origin}/api/v4/projects/${projectPath}/repository/files/${filePath}/raw?ref=${encodeURIComponent(ref.branch)}`, { headers });
     if (!response.ok) return fileMissingOrThrow("GitLab", response);
     return readCapped(response);
   }
 
-  const response = await gitFetch(`${origin}/2.0/repositories/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/src/${encodeURIComponent(ref.branch)}/${urlFilePath(path)}`, { headers });
+  const response = await guardedFetch(`${origin}/2.0/repositories/${urlSeg(ref.owner)}/${urlSeg(ref.repo)}/src/${encodeURIComponent(ref.branch)}/${urlFilePath(path)}`, { headers });
   if (!response.ok) return fileMissingOrThrow("Bitbucket", response);
   return readCapped(response);
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { gitFetch, isBlockedAddress } from "../providers/guarded-fetch.js";
+import { guardedFetch, isBlockedAddress } from "../guarded-fetch.js";
 
 function res(status: number, location?: string): Response {
   return { status, ok: status < 300, headers: new Headers(location ? { location } : {}) } as unknown as Response;
@@ -12,20 +12,20 @@ describe("isBlockedAddress", () => {
   it.each(["8.8.8.8", "140.82.112.6", "2606:4700::1111"])("allows %s", (ip) => expect(isBlockedAddress(ip)).toBe(false));
 });
 
-describe("gitFetch", () => {
+describe("guardedFetch", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("refuses an endpoint that is an internal address", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    await expect(gitFetch("http://169.254.169.254/latest/meta-data/")).rejects.toMatchObject({ code: "bad_request" });
+    await expect(guardedFetch("http://169.254.169.254/latest/meta-data/")).rejects.toMatchObject({ code: "bad_request" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("refuses a redirect to an internal address", async () => {
     const fetchMock = vi.fn().mockResolvedValue(res(302, "http://127.0.0.1:8080/admin"));
     vi.stubGlobal("fetch", fetchMock);
-    await expect(gitFetch("https://api.github.com/repos/a/b")).rejects.toMatchObject({ code: "bad_request" });
+    await expect(guardedFetch("https://api.github.com/repos/a/b")).rejects.toMatchObject({ code: "bad_request" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -34,7 +34,7 @@ describe("gitFetch", () => {
       .mockResolvedValueOnce(res(301, "https://8.8.8.8/elsewhere"))
       .mockResolvedValueOnce(res(200));
     vi.stubGlobal("fetch", fetchMock);
-    const out = await gitFetch("https://api.github.com/repos/a/b", { headers: { Authorization: "Bearer t", Accept: "x" } });
+    const out = await guardedFetch("https://api.github.com/repos/a/b", { headers: { Authorization: "Bearer t", Accept: "x" } });
     expect(out.status).toBe(200);
     const second = fetchMock.mock.calls[1]![1] as RequestInit;
     expect(new Headers(second.headers).get("authorization")).toBeNull();
@@ -44,7 +44,7 @@ describe("gitFetch", () => {
   it("does not follow a redirect of a write", async () => {
     const fetchMock = vi.fn().mockResolvedValue(res(307, "https://8.8.8.8/x"));
     vi.stubGlobal("fetch", fetchMock);
-    const out = await gitFetch("https://api.github.com/repos/a/b/pulls", { method: "POST" });
+    const out = await guardedFetch("https://api.github.com/repos/a/b/pulls", { method: "POST" });
     expect(out.status).toBe(307);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

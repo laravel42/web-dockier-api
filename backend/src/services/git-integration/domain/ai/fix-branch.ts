@@ -1,7 +1,7 @@
 import { urlSeg, urlFilePath } from "../providers/provider-client.js";
 import type { ConnectionLike } from "../providers/provider-client.js";
 import { baseUrl as providerBaseUrl } from "../providers/provider-client.js";
-import { gitFetch } from "../providers/guarded-fetch.js";
+import { guardedFetch } from "../../../../shared/http/guarded-fetch.js";
 
 function baseUrl(connection: ConnectionLike): string {
   return providerBaseUrl(connection.provider, connection.endpoint);
@@ -44,10 +44,10 @@ export async function deleteFixBranch(
     if (connection.provider === "github") {
       // GitHub takes the ref's slashes literally; GitLab wants the branch as one encoded segment.
       const ref = branch.split("/").map(encodeURIComponent).join("/");
-      await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/refs/heads/${ref}`, { method: "DELETE", headers: githubHeaders(connection) });
+      await guardedFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/refs/heads/${ref}`, { method: "DELETE", headers: githubHeaders(connection) });
     } else if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
       const project = encodeURIComponent(`${owner}/${repo}`);
-      await gitFetch(`${origin}/api/v4/projects/${project}/repository/branches/${encodeURIComponent(branch)}`, { method: "DELETE", headers: gitlabHeaders(connection) });
+      await guardedFetch(`${origin}/api/v4/projects/${project}/repository/branches/${encodeURIComponent(branch)}`, { method: "DELETE", headers: gitlabHeaders(connection) });
     }
   } catch {
     // Cleanup only; the original failure is what the caller reports.
@@ -60,7 +60,7 @@ async function getGitHubRefSha(
   branch: string,
 ): Promise<string> {
   const origin = baseUrl(connection);
-  const res = await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/ref/heads/${encodeURIComponent(branch)}`, {
+  const res = await guardedFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/ref/heads/${encodeURIComponent(branch)}`, {
     headers: githubHeaders(connection),
   });
   if (!res.ok) {
@@ -79,7 +79,7 @@ async function createGitHubBranch(
   baseSha: string,
 ): Promise<void> {
   const origin = baseUrl(connection);
-  const res = await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/refs`, {
+  const res = await guardedFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/refs`, {
     method: "POST",
     headers: githubHeaders(connection),
     body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: baseSha }),
@@ -98,7 +98,7 @@ async function getGitHubFileSha(
   branch: string,
 ): Promise<string | undefined> {
   const origin = baseUrl(connection);
-  const res = await gitFetch(
+  const res = await guardedFetch(
     `${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/contents/${urlFilePath(path)}?ref=${encodeURIComponent(branch)}`,
     { headers: githubHeaders(connection) },
   );
@@ -119,7 +119,7 @@ async function commitGitHubFile(
   fileSha?: string,
 ): Promise<void> {
   const origin = baseUrl(connection);
-  const res = await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/contents/${urlFilePath(path)}`, {
+  const res = await guardedFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/contents/${urlFilePath(path)}`, {
     method: "PUT",
     headers: githubHeaders(connection),
     body: JSON.stringify({
@@ -148,7 +148,7 @@ async function commitGitLabFile(
   const origin = baseUrl(connection);
   const project = encodeURIComponent(`${owner}/${repo}`);
   const filePath = encodeURIComponent(path);
-  const res = await gitFetch(`${origin}/api/v4/projects/${project}/repository/files/${filePath}`, {
+  const res = await guardedFetch(`${origin}/api/v4/projects/${project}/repository/files/${filePath}`, {
     method: "PUT",
     headers: gitlabHeaders(connection),
     body: JSON.stringify({

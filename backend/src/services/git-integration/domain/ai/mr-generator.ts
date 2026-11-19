@@ -6,7 +6,7 @@ import { commitFixToBranch, deleteFixBranch } from "./fix-branch.js";
 import { isSecretFilePath } from "./secret-files.js";
 import { DomainError } from "../../../../shared/supabase/errors.js";
 import { env } from "../../../../shared/config.js";
-import { gitFetch } from "../providers/guarded-fetch.js";
+import { guardedFetch } from "../../../../shared/http/guarded-fetch.js";
 
 type CreateMergeRequestInput = {
   owner: string;
@@ -122,7 +122,7 @@ async function createProviderMergeRequest(
       "Content-Type": "application/json",
     };
     const origin = baseUrl(connection);
-    const createRes = await gitFetch(`${origin}/repos/${urlSeg(input.owner)}/${urlSeg(input.repo)}/pulls`, {
+    const createRes = await guardedFetch(`${origin}/repos/${urlSeg(input.owner)}/${urlSeg(input.repo)}/pulls`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -151,7 +151,7 @@ async function createProviderMergeRequest(
     const project = encodeURIComponent(`${input.owner}/${input.repo}`);
     const headers = { "PRIVATE-TOKEN": connection.personal_token, "Content-Type": "application/json" };
     const origin = baseUrl(connection);
-    const response = await gitFetch(`${origin}/api/v4/projects/${project}/merge_requests`, {
+    const response = await guardedFetch(`${origin}/api/v4/projects/${project}/merge_requests`, {
       method: "POST",
       headers,
       body: JSON.stringify({

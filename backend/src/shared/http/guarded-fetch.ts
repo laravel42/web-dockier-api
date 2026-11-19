@@ -1,15 +1,15 @@
 /**
- * Every call to a git provider goes through `gitFetch`, because a connection's
- * `endpoint` is tenant-supplied: without this guard a tenant could point it
- * (or a redirect from it) at cloud metadata or an internal service and read the
- * reply back through the file-content route.
+ * Outbound calls to a tenant-supplied address (a git connection's `endpoint`, a
+ * Jira `host`) go through `guardedFetch`: without it a tenant could point that
+ * address, or a redirect from it, at cloud metadata or an internal service and
+ * read the reply back through our API.
  */
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
-import { fetchWithTimeout, type FetchWithTimeoutInit } from "../../../../shared/http/fetch.js";
-import { createDomainErrorClass } from "../../../../shared/supabase/errors.js";
+import { fetchWithTimeout, type FetchWithTimeoutInit } from "./fetch.js";
+import { createDomainErrorClass } from "../supabase/errors.js";
 
-const UnsafeEndpointError = createDomainErrorClass<"bad_request">("GitIntegrationError");
+const UnsafeEndpointError = createDomainErrorClass<"bad_request">("UnsafeEndpointError");
 
 // The default public API hosts, skipped to save a DNS lookup on every call.
 const PUBLIC_API_HOSTS = new Set(["api.github.com", "gitlab.com", "api.bitbucket.org"]);
@@ -37,14 +37,14 @@ async function assertPublicHost(url: URL): Promise<void> {
   const addresses = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);
   if (addresses.some(isBlockedAddress)) {
     throw new UnsafeEndpointError(
-      "This connection's endpoint points to a private or internal network address, which is not allowed.",
+      "This address points to a private or internal network address, which is not allowed.",
       "bad_request",
     );
   }
 }
 
 /** `fetchWithTimeout` that refuses internal addresses, re-checking every redirect hop. */
-export async function gitFetch(url: string | URL, init: FetchWithTimeoutInit = {}): Promise<Response> {
+export async function guardedFetch(url: string | URL, init: FetchWithTimeoutInit = {}): Promise<Response> {
   let target = new URL(url);
   let headers = init.headers;
   const method = (init.method ?? "GET").toUpperCase();
@@ -54,7 +54,7 @@ export async function gitFetch(url: string | URL, init: FetchWithTimeoutInit = {
     const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
     // Only GET/HEAD are followed: fetch would rewrite a redirected POST into a GET.
     if (!location || (method !== "GET" && method !== "HEAD")) return res;
-    if (hop >= MAX_REDIRECTS) throw new UnsafeEndpointError("The git provider redirected too many times.", "bad_request");
+    if (hop >= MAX_REDIRECTS) throw new UnsafeEndpointError("The provider redirected too many times.", "bad_request");
     const next = new URL(location, target);
     if (next.origin !== target.origin) {
       const stripped = new Headers(headers);
