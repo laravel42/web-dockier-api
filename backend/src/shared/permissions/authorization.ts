@@ -238,13 +238,31 @@ export function canAssignPermissions(actor: ResolvedAuth, permissionsToAssign: P
   return true;
 }
 
+/** A role as the escalation check sees it: its system key and its permission ids. */
+export interface ManagedRole {
+  systemKey: string | null;
+  permissions: readonly string[];
+}
 /**
- * Check if an actor can manage a target role based on hierarchy.
- * Users can assign/edit roles at their own level or below, but not above.
+ * Whether an actor may assign, edit, delete or act on holders of a role: at
+ * their own hierarchy level or below AND holding every permission of it.
+ *
+ * The level alone was not enough: custom roles have no level (Infinity), so a
+ * custom role with user:manage could hand out or remove any custom role,
+ * including one with more permissions than its own. Creating and editing roles
+ * already required holding the permissions (roles.ts); this closes assignment.
  */
-export function canManageRole(actor: ResolvedAuth, targetSystemKey: string | null): boolean {
-  const targetLevel = getHierarchyLevel(targetSystemKey);
-  return actor.hierarchyLevel <= targetLevel;
+export function canManageRole(actor: ResolvedAuth, target: ManagedRole): boolean {
+  if (actor.isOwner) return true;
+  if (actor.hierarchyLevel > getHierarchyLevel(target.systemKey)) return false;
+  return target.permissions.every((p) => actor.permissions.includes(p as PermissionKey));
+}
+/** Permission ids of a role, for canManageRole. No role (a member without one) has none. */
+export async function loadRolePermissions(roleId: string | null): Promise<string[]> {
+  if (!roleId) return [];
+  const { data, error } = await supabaseAdmin.from("role_permissions").select("permission_id").eq("role_id", roleId);
+  if (error) throw new Error("Failed to load role permissions");
+  return (data ?? []).map((row) => row.permission_id);
 }
 
 export const authorizationPlugin = fp(async (app: FastifyInstance) => {

@@ -20,10 +20,20 @@ vi.mock("../../../shared/config.js", () => ({
 }));
 
 const mockFrom = vi.fn();
-
+// Permission ids per role id, read by loadRolePermissions (canManageRole). Empty by default.
+const rolePermissions: Record<string, string[]> = {};
+function rolePermissionsTable() {
+  let roleId = "";
+  const chain = {
+    select: () => chain,
+    eq: (_col: string, value: string) => { roleId = value; return chain; },
+    then: (resolve: (v: unknown) => void) => resolve({ data: (rolePermissions[roleId] ?? []).map((p) => ({ permission_id: p })), error: null }),
+  };
+  return chain;
+}
 vi.mock("../../../shared/supabase/client.js", () => ({
   supabaseAdmin: {
-    from: (...args: unknown[]) => mockFrom(...args),
+    from: (table: string) => (table === "role_permissions" ? rolePermissionsTable() : mockFrom(table)),
     auth: { admin: {} },
   },
 }));
@@ -71,6 +81,7 @@ function mockRolesTable(result: { data: unknown; error: unknown }) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  for (const key of Object.keys(rolePermissions)) delete rolePermissions[key];
 });
 
 describe("validateRoleAssignment", () => {
@@ -118,6 +129,26 @@ describe("validateRoleAssignment", () => {
   });
 });
 
+describe("custom-role escalation", () => {
+  it("refuses assigning a custom role with a permission the actor lacks", async () => {
+    rolePermissions["custom-rich"] = ["billing:manage"];
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "roles") return mockRolesTable({ data: { id: "custom-rich", system_key: null }, error: null });
+      return {};
+    });
+    await expect(validateRoleAssignment("custom-rich", TEST_TENANT_ID, { ...memberAuth, permissions: ["user:manage"] }))
+      .rejects.toMatchObject({ code: "forbidden" });
+  });
+  it("allows assigning a custom role whose permissions the actor holds", async () => {
+    rolePermissions["custom-small"] = ["project:view"];
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "roles") return mockRolesTable({ data: { id: "custom-small", system_key: null }, error: null });
+      return {};
+    });
+    await expect(validateRoleAssignment("custom-small", TEST_TENANT_ID, { ...memberAuth, permissions: ["user:manage", "project:view"] }))
+      .resolves.toMatchObject({ id: "custom-small" });
+  });
+});
 describe("assignRoleToUser", () => {
   it("inserts a membership row on success", async () => {
     const roleRow = { id: TEST_ROLE_ID, system_key: "member" };

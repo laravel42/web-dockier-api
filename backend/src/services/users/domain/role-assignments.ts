@@ -8,7 +8,7 @@
 
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { throwOnError, type PostgrestError } from "../../../shared/supabase/query.js";
-import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
+import { canManageRole, loadRolePermissions, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { UsersError } from "./users.js";
 
 /**
@@ -25,7 +25,7 @@ export async function validateRoleAssignment(roleId: string, tenantId: string, a
     .maybeSingle();
   if (error) throw new UsersError("Failed to look up role", "internal");
   if (!role) throw new UsersError("Role not found", "bad_request");
-  if (!canManageRole(actor, role.system_key)) {
+  if (!canManageRole(actor, { systemKey: role.system_key, permissions: await loadRolePermissions(role.id) })) {
     throw new UsersError("Cannot assign a role at or above your own level", "forbidden");
   }
   return role;
@@ -89,7 +89,8 @@ export async function updateUserRole(
 
   // Prevent changing role of users at or above actor's level
   const targetCurrentSystemKey = targetMembership?.roles?.system_key ?? null;
-  if (!canManageRole(resolvedAuth, targetCurrentSystemKey)) {
+  const targetCurrentPermissions = await loadRolePermissions(targetMembership.role_id);
+  if (!canManageRole(resolvedAuth, { systemKey: targetCurrentSystemKey, permissions: targetCurrentPermissions })) {
     throw new UsersError("Cannot change the role of a user at or above your own level", "forbidden");
   }
 

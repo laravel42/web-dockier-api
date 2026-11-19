@@ -5,7 +5,7 @@ import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { selectAllRows, throwOnError, unwrapList, unwrapQuery, type PostgrestError } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { ALL_PERMISSIONS, withBaselinePermissions, type PermissionKey } from "../../../shared/permissions/constants.js";
-import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
+import { canManageRole, loadRolePermissions, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { SYSTEM_ROLE_KEYS } from "../../../shared/permissions/role-templates.js";
 import { rowToRole } from "./mappers.js";
 
@@ -191,7 +191,7 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
   if (!role.is_editable) throw new RolesError("This role cannot be edited", "forbidden");
 
   // Escalation check: cannot edit roles at or above your level
-  if (!canManageRole(resolvedAuth, role.system_key)) {
+  if (!canManageRole(resolvedAuth, { systemKey: role.system_key, permissions: await loadRolePermissions(role.id) })) {
     throw new RolesError("Cannot edit a role at or above your own level", "forbidden");
   }
 
@@ -294,7 +294,7 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
   if (!role.is_deletable) throw new RolesError("This role cannot be deleted", "forbidden");
 
   // Escalation check
-  if (!canManageRole(resolvedAuth, role.system_key)) {
+  if (!canManageRole(resolvedAuth, { systemKey: role.system_key, permissions: await loadRolePermissions(role.id) })) {
     throw new RolesError("Cannot delete a role at or above your own level", "forbidden");
   }
 

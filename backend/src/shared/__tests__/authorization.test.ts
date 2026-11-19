@@ -131,51 +131,64 @@ describe("canAssignPermissions", () => {
 describe("canManageRole", () => {
   it("admin (level 0) can manage member (level 1)", () => {
     const actor = makeResolved({ systemKey: "admin", hierarchyLevel: 0 });
-    expect(canManageRole(actor, "member")).toBe(true);
+    expect(canManageRole(actor, { systemKey: "member", permissions: [] })).toBe(true);
   });
 
   it("admin (level 0) can manage admin (same level)", () => {
     const actor = makeResolved({ systemKey: "admin", hierarchyLevel: 0 });
-    expect(canManageRole(actor, "admin")).toBe(true);
+    expect(canManageRole(actor, { systemKey: "admin", permissions: [] })).toBe(true);
   });
 
   it("member (level 1) cannot manage admin (level 0)", () => {
     const actor = makeResolved({ systemKey: "member", hierarchyLevel: 1 });
-    expect(canManageRole(actor, "admin")).toBe(false);
+    expect(canManageRole(actor, { systemKey: "admin", permissions: [] })).toBe(false);
   });
 
   it("member (level 1) can manage member (same level)", () => {
     const actor = makeResolved({ systemKey: "member", hierarchyLevel: 1 });
-    expect(canManageRole(actor, "member")).toBe(true);
+    expect(canManageRole(actor, { systemKey: "member", permissions: [] })).toBe(true);
   });
 
   it("admin can manage custom roles (null systemKey = Infinity level)", () => {
     const actor = makeResolved({ systemKey: "admin", hierarchyLevel: 0 });
-    expect(canManageRole(actor, null)).toBe(true);
+    expect(canManageRole(actor, { systemKey: null, permissions: [] })).toBe(true);
   });
 
   it("member can manage custom roles (null systemKey = Infinity level)", () => {
     const actor = makeResolved({ systemKey: "member", hierarchyLevel: 1 });
-    expect(canManageRole(actor, null)).toBe(true);
+    expect(canManageRole(actor, { systemKey: null, permissions: [] })).toBe(true);
   });
 
   it("custom role (Infinity) cannot manage admin (level 0)", () => {
     const actor = makeResolved({ systemKey: null, hierarchyLevel: Infinity });
-    expect(canManageRole(actor, "admin")).toBe(false);
+    expect(canManageRole(actor, { systemKey: "admin", permissions: [] })).toBe(false);
   });
 
   it("custom role (Infinity) cannot manage member (level 1)", () => {
     const actor = makeResolved({ systemKey: null, hierarchyLevel: Infinity });
-    expect(canManageRole(actor, "member")).toBe(false);
+    expect(canManageRole(actor, { systemKey: "member", permissions: [] })).toBe(false);
   });
 
   it("custom role can manage other custom roles (Infinity <= Infinity)", () => {
     const actor = makeResolved({ systemKey: null, hierarchyLevel: Infinity });
-    expect(canManageRole(actor, null)).toBe(true);
+    expect(canManageRole(actor, { systemKey: null, permissions: [] })).toBe(true);
   });
 
+  it("custom role with user:manage cannot manage a custom role holding a permission it lacks", () => {
+    const actor = makeResolved({ systemKey: null, hierarchyLevel: Infinity, permissions: [PERMISSIONS.USER_MANAGE] });
+    expect(canManageRole(actor, { systemKey: null, permissions: [PERMISSIONS.USER_MANAGE, PERMISSIONS.BILLING_MANAGE] })).toBe(false);
+    expect(canManageRole(actor, { systemKey: null, permissions: [PERMISSIONS.USER_MANAGE] })).toBe(true);
+  });
+  it("admin cannot manage a custom role holding a permission the admin lacks", () => {
+    const actor = makeResolved({ systemKey: "admin", hierarchyLevel: 0, permissions: [PERMISSIONS.PROJECT_VIEW] });
+    expect(canManageRole(actor, { systemKey: null, permissions: [PERMISSIONS.BILLING_MANAGE] })).toBe(false);
+  });
+  it("the owner can manage any role", () => {
+    const actor = makeResolved({ isOwner: true, permissions: [] });
+    expect(canManageRole(actor, { systemKey: null, permissions: [PERMISSIONS.BILLING_MANAGE] })).toBe(true);
+  });
   it("unknown systemKey target treated as lowest priority (Infinity)", () => {
     const actor = makeResolved({ hierarchyLevel: 0 });
-    expect(canManageRole(actor, "some-unknown-key")).toBe(true);
+    expect(canManageRole(actor, { systemKey: "some-unknown-key", permissions: [] })).toBe(true);
   });
 });

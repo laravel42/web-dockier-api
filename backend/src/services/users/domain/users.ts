@@ -2,7 +2,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, normalizePagination, paginatedRows, type PostgrestError } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
-import { canManageRole, invalidatePermissionCache, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
+import { canManageRole, invalidatePermissionCache, loadRolePermissions, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { postgrestIlikeContains } from "../../../shared/http/security.js";
 import { logger } from "../../../shared/logger.js";
 import { nowIso } from "../../../shared/utils/time.js";
@@ -230,10 +230,10 @@ export async function removeUser(params: RemoveUserParams) {
 
   const { data: targetMembership, error: membershipErr } = await supabaseAdmin
     .from("organization_memberships")
-    .select("is_owner, roles!left(system_key)")
+    .select("is_owner, role_id, roles!left(system_key)")
     .eq("organization_id", tenantId)
     .eq("user_id", userId)
-    .maybeSingle() as { data: { is_owner: boolean; roles: { system_key: string | null } | null } | null; error: PostgrestError | null };
+    .maybeSingle() as { data: { is_owner: boolean; role_id: string | null; roles: { system_key: string | null } | null } | null; error: PostgrestError | null };
   throwOnError(membershipErr, UsersError, { internalMsg: "Failed to check membership" });
   if (!targetMembership) throw new UsersError("User is not a member of this organization", "not_found");
   if (targetMembership.is_owner) {
@@ -242,7 +242,7 @@ export async function removeUser(params: RemoveUserParams) {
 
   // Prevent removing users at or above actor's level
   const targetSystemKey = targetMembership.roles?.system_key ?? null;
-  if (!canManageRole(resolvedAuth, targetSystemKey)) {
+  if (!canManageRole(resolvedAuth, { systemKey: targetSystemKey, permissions: await loadRolePermissions(targetMembership.role_id) })) {
     throw new UsersError("Cannot remove a user at or above your own level", "forbidden");
   }
 
