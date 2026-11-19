@@ -17,6 +17,9 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [otpToken, setOtpToken] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  // Set once the email code is accepted for an account with 2FA.
+  const [challengeToken, setChallengeToken] = useState("");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
   const [loginMode, setLoginMode] = useState<"otp" | "password">("otp");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -45,6 +48,11 @@ export default function Login() {
         login(res.session.token, res.session.userId);
         await refreshPermissions();
         navigate("/dashboard");
+      } else if (challengeToken) {
+        const res = await authApi.verify2FA({ challengeToken, code: twoFactorCode });
+        login(res.session.token, res.session.userId);
+        await refreshPermissions();
+        navigate("/dashboard");
       } else if (!otpSent) {
         if (cooldownSeconds > 0) {
           throw new Error(`Please wait ${cooldownSeconds}s before requesting another code.`);
@@ -59,6 +67,10 @@ export default function Login() {
           token: otpToken,
           type: "email",
         });
+        if ("twoFactorRequired" in res) {
+          setChallengeToken(res.challengeToken);
+          return;
+        }
         login(res.session.token, res.session.userId);
         await refreshPermissions();
         navigate("/dashboard");
@@ -76,6 +88,8 @@ export default function Login() {
   const resetFlow = () => {
     setOtpSent(false);
     setOtpToken("");
+    setChallengeToken("");
+    setTwoFactorCode("");
     setPassword("");
     setError("");
     setNotice("");
@@ -112,7 +126,9 @@ export default function Login() {
       <p className="mt-1 mb-6 text-sm text-muted-foreground">
         {loginMode === "password"
           ? "Sign in with your email and password"
-          : otpSent
+          : challengeToken
+            ? "Enter the code from your authenticator app, or a recovery code"
+            : otpSent
             ? "Enter the code sent to your email"
             : "Sign in with a secure email code"}
       </p>
@@ -140,7 +156,21 @@ export default function Login() {
             autoComplete="current-password"
           />
         )}
-        {loginMode === "otp" && otpSent && (
+        {loginMode === "otp" && challengeToken && (
+          <InputWithLabel
+            id="two-factor-code"
+            label="Authentication code"
+            type="text"
+            value={twoFactorCode}
+            onChange={(e) => setTwoFactorCode(e.target.value)}
+            placeholder="123456 or ABCDE-FGHIJ"
+            minLength={6}
+            required
+            autoFocus
+            autoComplete="one-time-code"
+          />
+        )}
+        {loginMode === "otp" && otpSent && !challengeToken && (
           <InputWithLabel
             id="otp-token"
             label="Email code"

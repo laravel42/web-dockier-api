@@ -46,6 +46,8 @@ export default function ProfileTab() {
   const [verifyToken, setVerifyToken] = useState("");
   const [twoFactorMessage, setTwoFactorMessage] = useState<Msg>(null);
   const [twoFactorLoading, setTwoFactorLoading] = useState(false);
+  // Shown once, right after enabling: the server stores only their hashes.
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
 
   const [billing, setBilling] = useState<BillingDetails>(emptyBillingDetails());
   const [billingLoading, setBillingLoading] = useState(canViewBilling);
@@ -139,8 +141,9 @@ export default function ProfileTab() {
     setTwoFactorLoading(true);
     setTwoFactorMessage(null);
     try {
-      await authApi.enable2FA(verifyToken);
+      const res = await authApi.enable2FA(verifyToken);
       setTwoFactorEnabled(true);
+      setRecoveryCodes(res.recoveryCodes);
       setTwoFactorMessage({ text: "2FA enabled successfully", variant: "success" });
       setQrCode(null);
       setSecret(null);
@@ -324,7 +327,20 @@ export default function ProfileTab() {
         <p className="text-sm text-text-secondary mb-5">Add an extra layer of security with an authenticator app.</p>
         {twoFactorMessage && <Alert variant={twoFactorMessage.variant} className="mb-4">{twoFactorMessage.text}</Alert>}
         {twoFactorEnabled ? (
-          <Alert variant="success">Two-factor authentication is enabled on your account.</Alert>
+          <div className="space-y-3">
+            <Alert variant="success">Two-factor authentication is enabled on your account.</Alert>
+            {recoveryCodes.length > 0 && (
+              <div className="rounded-card border border-border p-4">
+                <p className="text-sm font-medium text-foreground">Save your recovery codes</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  If you lose your authenticator, each code signs you in once. They are shown only now.
+                </p>
+                <ul aria-label="Recovery codes" className="mt-3 grid grid-cols-2 gap-1 font-mono text-sm">
+                  {recoveryCodes.map((code) => <li key={code}>{code}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
         ) : !qrCode ? (
           <Button
             onClick={handleSetup2FA}

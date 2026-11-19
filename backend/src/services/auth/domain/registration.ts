@@ -4,7 +4,8 @@ import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError } from "../../../shared/supabase/query.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
 import { listMembershipsForUser, type Membership } from "./membership.js";
-import { signTenantToken } from "./session.js";
+import { signTenantToken, signTwoFactorChallenge, verifyTwoFactorChallenge, type TwoFactorChallenge } from "./session.js";
+import { isTwoFactorEnabled, verifySecondFactor } from "./two-factor.js";
 import { emit } from "../../../shared/events.js";
 
 export const RegistrationError = createDomainErrorClass<"unauthorized" | "forbidden" | "bad_request" | "too_many_requests" | "internal">("RegistrationError");
@@ -242,17 +243,24 @@ export interface VerifyOtpParams {
   tenantName?: string;
 }
 
+/** The email code was right but the account has 2FA: the client must send the second factor. */
+export interface TwoFactorRequiredResult {
+  twoFactorRequired: true;
+  challengeToken: string;
+}
 /**
  * Verify OTP/magic link and provision user + tenant if needed.
+ *
+ * For an account with 2FA enabled no session is issued here: the email code
+ * alone used to be enough, which made enabling 2FA protect nothing.
  */
-export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<LoginResult> {
+export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<LoginResult | TwoFactorRequiredResult> {
   const { data, error } = await supabaseAdmin.auth.verifyOtp({
     email: params.email,
     token: params.token,
     type: params.type,
   });
   if (error || !data.user) throw new RegistrationError(error?.message ?? "Invalid OTP token", "unauthorized");
-
   const userId = data.user.id;
   const email = data.user.email ?? params.email;
   const displayName =
@@ -261,7 +269,25 @@ export async function verifyOtpAndProvision(params: VerifyOtpParams): Promise<Lo
     email.split("@")[0];
   const metadataTenantName =
     typeof data.user.user_metadata?.tenant_name === "string" ? data.user.user_metadata.tenant_name : undefined;
-
+  const challenge: TwoFactorChallenge = {
+    userId, email, displayName, metadataTenantName, tenantSlug: params.tenantSlug, tenantName: params.tenantName,
+  };
+  if (await isTwoFactorEnabled(userId)) {
+    return { twoFactorRequired: true, challengeToken: signTwoFactorChallenge(challenge) };
+  }
+  return provisionSession(challenge);
+}
+/** Second step of a 2FA sign-in: the challenge from the email step plus a TOTP or recovery code. */
+export async function completeTwoFactorLogin(challengeToken: string, code: string): Promise<LoginResult> {
+  const challenge = verifyTwoFactorChallenge(challengeToken);
+  if (!challenge) throw new RegistrationError("This sign-in expired. Request a new email code.", "unauthorized");
+  if (!(await verifySecondFactor(challenge.userId, code))) {
+    throw new RegistrationError("Invalid authentication or recovery code", "unauthorized");
+  }
+  return provisionSession(challenge);
+}
+async function provisionSession(params: TwoFactorChallenge): Promise<LoginResult> {
+  const { userId, email, displayName, metadataTenantName } = params;
   // Upsert user record
   const { error: userError } = await supabaseAdmin.from("users").upsert(
     { id: userId, email, name: displayName, organization_id: null, created_at: nowIso() },

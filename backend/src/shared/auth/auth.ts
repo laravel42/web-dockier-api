@@ -64,8 +64,9 @@ export function getResolvedAuth(request: FastifyRequest): ResolvedAuth {
 
 export function verifyAuthToken(token: string): AuthContext | null {
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as Partial<AuthContext>;
-    if (!decoded.userId || !decoded.email || !decoded.tenantId) return null;
+    const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as Partial<AuthContext> & { purpose?: string };
+    // A purpose-bound token (the 2FA sign-in challenge) is never a session.
+    if (decoded.purpose || !decoded.userId || !decoded.email || !decoded.tenantId) return null;
     return {
       userId: decoded.userId,
       email: decoded.email,

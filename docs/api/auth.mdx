@@ -5,18 +5,21 @@
 - `POST /auth/register/start`
 - `POST /auth/passwordless/start`
 - `POST /auth/passwordless/verify`
+- `POST /auth/2fa/setup`
+- `POST /auth/2fa/enable`
+- `POST /auth/2fa/verify`
 - `GET /auth/me`
 - `GET /auth/memberships`
 - `POST /auth/tenants`
 - `POST /auth/tenants/:tenantId/switch`
-- `GET /auth/tenants/:tenantId/memberships`
-- `POST /auth/tenants/:tenantId/memberships`
+- `POST /auth/tenants/:tenantId/transfer-ownership`
 
 ## Auth model
+- Members are added, re-roled and removed through the users API (`/users`), which enforces role hierarchy and owner protection. Removing a member deletes their account only when they belong to no other organization.
 
 - Registration is passwordless: call `POST /auth/register/start`, then verify OTP via `POST /auth/passwordless/verify` with `type=signup`.
 - Supabase Auth handles passwordless email OTP/magic-link verification.
-- Dockier issues a tenant-scoped API JWT after OTP verification.
+- Dockier issues a tenant-scoped API JWT after OTP verification. For an account with 2FA enabled, `POST /auth/passwordless/verify` returns `{ twoFactorRequired: true, challengeToken }` instead (valid 5 minutes); `POST /auth/2fa/verify` with that token and an authenticator code or a one-time recovery code issues the session. Enabling 2FA returns 10 recovery codes once; only their hashes are stored.
 - Tenant role is app-managed in `organization_memberships` (`admin` or `member`).
 - New self-registered users default to `member` role unless explicitly provisioned as `admin` (for example via admin seeding).
 - Authorization does not rely on mutable `user_metadata`.

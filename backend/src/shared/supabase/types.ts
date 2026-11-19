@@ -34,6 +34,8 @@ export type Database = {
           timezone: string;
           two_factor_enabled: boolean;
           two_factor_secret: string | null;
+          two_factor_secret_encrypted: string | null;
+          two_factor_recovery_codes: Json;
           created_at: string;
           updated_at: string | null;
         };

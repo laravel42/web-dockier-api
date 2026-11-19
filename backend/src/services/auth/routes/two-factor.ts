@@ -10,6 +10,8 @@ import { z } from "zod";
 import { getAuth } from "../../../shared/auth/auth.js";
 import { rateLimit } from "../../../shared/http/rate-limit.js";
 import { setupTwoFactor, enableTwoFactor } from "../domain/two-factor.js";
+import { completeTwoFactorLogin } from "../domain/registration.js";
+import { authSessionSchema, membershipSchema } from "../schemas.js";
 
 export async function registerTwoFactorRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -47,12 +49,29 @@ export async function registerTwoFactorRoutes(app: FastifyInstance) {
         body: z.object({
           token: z.string().trim().min(6).max(8),
         }),
-        response: { 200: z.object({ success: z.literal(true) }) },
+        response: { 200: z.object({ success: z.literal(true), recoveryCodes: z.array(z.string()) }) },
       },
     },
     async (request) => {
       const auth = getAuth(request);
       return await enableTwoFactor(auth.userId, request.body.token);
     },
+  );
+  typed.post(
+    "/auth/2fa/verify",
+    {
+      // Unauthenticated by design: the challenge token is the proof of the email step.
+      preHandler: auth2faLimit,
+      schema: {
+        tags: ["auth"],
+        summary: "Second sign-in step: verify a TOTP or recovery code and issue the session",
+        body: z.object({
+          challengeToken: z.string().min(1).max(2000),
+          code: z.string().trim().min(6).max(20),
+        }),
+        response: { 200: z.object({ session: authSessionSchema, memberships: z.array(membershipSchema) }) },
+      },
+    },
+    async (request) => completeTwoFactorLogin(request.body.challengeToken, request.body.code),
   );
 }

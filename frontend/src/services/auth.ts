@@ -6,6 +6,11 @@ interface AuthSessionResponse {
   session: { token: string; userId: string; tenantId: string };
   memberships: TenantMembership[];
 }
+/** The email code was right but the account has 2FA: send challengeToken + code to verify2FA. */
+export interface TwoFactorChallengeResponse {
+  twoFactorRequired: true;
+  challengeToken: string;
+}
 
 export const authApi = {
   demoLogin: () =>
@@ -29,7 +34,7 @@ export const authApi = {
     }),
 
   verifyRegistration: (data: { email: string; token: string; tenantName?: string }) =>
-    request<AuthSessionResponse>("/auth/passwordless/verify", {
+    request<AuthSessionResponse | TwoFactorChallengeResponse>("/auth/passwordless/verify", {
       method: "POST",
       body: JSON.stringify({
         ...data,
@@ -52,7 +57,14 @@ export const authApi = {
     tenantSlug?: string;
     tenantName?: string;
   }) =>
-    request<AuthSessionResponse>("/auth/passwordless/verify", {
+    request<AuthSessionResponse | TwoFactorChallengeResponse>("/auth/passwordless/verify", {
+      method: "POST",
+      body: JSON.stringify(data),
+      headers: { Authorization: "" },
+    }),
+  /** Second sign-in step for 2FA accounts: an authenticator code or a recovery code. */
+  verify2FA: (data: { challengeToken: string; code: string }) =>
+    request<AuthSessionResponse>("/auth/2fa/verify", {
       method: "POST",
       body: JSON.stringify(data),
       headers: { Authorization: "" },
@@ -72,7 +84,7 @@ export const authApi = {
     }),
 
   enable2FA: (token: string) =>
-    request<{ success: boolean }>("/auth/2fa/enable", {
+    request<{ success: boolean; recoveryCodes: string[] }>("/auth/2fa/enable", {
       method: "POST",
       body: JSON.stringify({ token }),
     }),

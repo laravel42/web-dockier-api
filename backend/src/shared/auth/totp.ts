@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
@@ -85,4 +85,24 @@ export function buildOtpAuthUrl(email: string, secret: string, issuer = "Dockier
     period: "30",
   });
   return `otpauth://totp/${label}?${params.toString()}`;
+}
+
+const RECOVERY_CODE_COUNT = 10;
+
+/** Codes are compared case- and separator-insensitively: users retype them by hand. */
+function normalizeRecoveryCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z2-7]/g, "");
+}
+
+export function hashRecoveryCode(code: string): string {
+  return createHash("sha256").update(normalizeRecoveryCode(code)).digest("hex");
+}
+
+/** Ten one-time codes like `ABCDE-FGHIJ` (50 random bits each) plus the hashes to store. */
+export function generateRecoveryCodes(): { codes: string[]; hashes: string[] } {
+  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () => {
+    const raw = base32Encode(randomBytes(7)).slice(0, 10);
+    return `${raw.slice(0, 5)}-${raw.slice(5)}`;
+  });
+  return { codes, hashes: codes.map(hashRecoveryCode) };
 }

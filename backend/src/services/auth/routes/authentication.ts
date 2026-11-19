@@ -156,7 +156,13 @@ export async function registerAuthenticationRoutes(app: FastifyInstance) {
           tenantSlug: z.string().min(2).max(60).optional(),
           tenantName: z.string().min(2).max(120).optional(),
         }),
-        response: { 200: z.object({ session: authSessionSchema, memberships: z.array(membershipSchema) }) },
+        response: {
+          200: z.union([
+            z.object({ session: authSessionSchema, memberships: z.array(membershipSchema) }),
+            // 2FA account: no session yet; send challengeToken + code to POST /auth/2fa/verify.
+            z.object({ twoFactorRequired: z.literal(true), challengeToken: z.string() }),
+          ]),
+        },
       },
     },
     async (request) => {

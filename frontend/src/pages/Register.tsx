@@ -57,6 +57,9 @@ export default function Register() {
           token: otpToken,
           tenantName: workspaceName.trim() || undefined,
         });
+        if ("twoFactorRequired" in res) {
+          throw new Error("This account already exists and uses two-factor authentication. Sign in from the login page.");
+        }
         login(res.session.token, res.session.userId);
         await refreshPermissions();
         navigate("/dashboard");
