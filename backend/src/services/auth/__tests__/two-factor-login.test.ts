@@ -28,13 +28,32 @@ const SECRET = "JBSWY3DPEHPK3PXP";
 let userRow: Record<string, unknown>;
 const updates: Array<Record<string, unknown>> = [];
 
-/** Every builder method returns the chain; maybeSingle/await resolve to the current users row. */
+/**
+ * Every builder method returns the chain; maybeSingle reads the current users row.
+ * An update applies to `userRow` only if its conditional filter (`or` on the TOTP
+ * counter, `contains` on the recovery codes) still holds, like Postgres would.
+ */
 function chain() {
+  let pending: Record<string, unknown> | null = null;
+  let orFilter = "";
+  let containsHash: string | null = null;
   const c: Record<string, unknown> = {};
   for (const m of ["select", "eq", "upsert"]) c[m] = vi.fn(() => c);
-  c.update = vi.fn((u: Record<string, unknown>) => { updates.push(u); return c; });
+  c.update = vi.fn((u: Record<string, unknown>) => { pending = u; return c; });
+  c.or = vi.fn((f: string) => { orFilter = f; return c; });
+  c.contains = vi.fn((_col: string, v: string[]) => { containsHash = v[0]!; return c; });
   c.maybeSingle = vi.fn(async () => ({ data: userRow, error: null }));
-  c.then = (resolve: (v: unknown) => void) => resolve({ data: null, error: null });
+  c.then = (resolve: (v: unknown) => void) => {
+    if (!pending) return resolve({ data: null, error: null });
+    const last = userRow.two_factor_last_counter as number | null | undefined;
+    const counter = Number(orFilter.match(/lt\.(\d+)/)?.[1]);
+    const okCounter = !orFilter || last == null || last < counter;
+    const okCode = containsHash === null || (userRow.two_factor_recovery_codes as string[]).includes(containsHash);
+    if (!okCounter || !okCode) return resolve({ data: [], error: null });
+    updates.push(pending);
+    userRow = { ...userRow, ...pending };
+    return resolve({ data: [{ id: TEST_USER_ID }], error: null });
+  };
   return c;
 }
 
@@ -76,6 +95,15 @@ describe("sign-in with 2FA enabled", () => {
     expect(verifyAuthToken(res.session.token)).toMatchObject({ userId: TEST_USER_ID, tenantId: TEST_TENANT_ID });
   });
 
+  it("refuses the same authenticator code a second time", async () => {
+    userRow = { two_factor_enabled: true, two_factor_secret: SECRET, two_factor_secret_encrypted: null, two_factor_recovery_codes: [], two_factor_last_counter: null };
+    const first = (await verifyOtpAndProvision({ email: TEST_EMAIL, token: "1", type: "email" })) as { challengeToken: string };
+    const code = currentTotp(SECRET);
+    await completeTwoFactorLogin(first.challengeToken, code);
+    const second = (await verifyOtpAndProvision({ email: TEST_EMAIL, token: "1", type: "email" })) as { challengeToken: string };
+    await expect(completeTwoFactorLogin(second.challengeToken, code)).rejects.toMatchObject({ code: "unauthorized" });
+  });
+
   it("refuses a wrong code and a forged challenge", async () => {
     userRow = { two_factor_enabled: true, two_factor_secret: SECRET, two_factor_secret_encrypted: null, two_factor_recovery_codes: [] };
     const { challengeToken } = (await verifyOtpAndProvision({ email: TEST_EMAIL, token: "1", type: "email" })) as { challengeToken: string };
@@ -91,6 +119,26 @@ describe("sign-in with 2FA enabled", () => {
     const saved = updates.find((u) => "two_factor_recovery_codes" in u)!.two_factor_recovery_codes as string[];
     expect(saved).toHaveLength(9);
     expect(saved).not.toContain(hashes[0]);
+  });
+
+  it("disables 2FA with a recovery code and clears every secret", async () => {
+    const { disableTwoFactor } = await import("../domain/two-factor.js");
+    const { codes, hashes } = generateRecoveryCodes();
+    userRow = { two_factor_enabled: true, two_factor_secret: SECRET, two_factor_secret_encrypted: null, two_factor_recovery_codes: hashes };
+    await expect(disableTwoFactor(TEST_USER_ID, "000000")).rejects.toMatchObject({ code: "bad_request" });
+    await disableTwoFactor(TEST_USER_ID, codes[3]!);
+    expect(userRow).toMatchObject({ two_factor_enabled: false, two_factor_secret: null, two_factor_secret_encrypted: null, two_factor_recovery_codes: [] });
+  });
+
+  it("regenerates recovery codes, invalidating the old ones", async () => {
+    const { regenerateRecoveryCodes } = await import("../domain/two-factor.js");
+    const { hashes } = generateRecoveryCodes();
+    userRow = { two_factor_enabled: true, two_factor_secret: SECRET, two_factor_secret_encrypted: null, two_factor_recovery_codes: hashes, two_factor_last_counter: null };
+    const { recoveryCodes } = await regenerateRecoveryCodes(TEST_USER_ID, currentTotp(SECRET));
+    expect(recoveryCodes).toHaveLength(10);
+    const stored = userRow.two_factor_recovery_codes as string[];
+    expect(stored).toHaveLength(10);
+    expect(stored.some((h) => hashes.includes(h))).toBe(false);
   });
 
   it("signs in without a challenge when 2FA is off", async () => {

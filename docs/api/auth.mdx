@@ -8,6 +8,8 @@
 - `POST /auth/2fa/setup`
 - `POST /auth/2fa/enable`
 - `POST /auth/2fa/verify`
+- `POST /auth/2fa/disable`
+- `POST /auth/2fa/recovery-codes`
 - `GET /auth/me`
 - `GET /auth/memberships`
 - `POST /auth/tenants`
@@ -19,7 +21,7 @@
 
 - Registration is passwordless: call `POST /auth/register/start`, then verify OTP via `POST /auth/passwordless/verify` with `type=signup`.
 - Supabase Auth handles passwordless email OTP/magic-link verification.
-- Dockier issues a tenant-scoped API JWT after OTP verification. For an account with 2FA enabled, `POST /auth/passwordless/verify` returns `{ twoFactorRequired: true, challengeToken }` instead (valid 5 minutes); `POST /auth/2fa/verify` with that token and an authenticator code or a one-time recovery code issues the session. Enabling 2FA returns 10 recovery codes once; only their hashes are stored.
+- Dockier issues a tenant-scoped API JWT after OTP verification. For an account with 2FA enabled, `POST /auth/passwordless/verify` returns `{ twoFactorRequired: true, challengeToken }` instead (valid 5 minutes); `POST /auth/2fa/verify` with that token and an authenticator code or a one-time recovery code issues the session. Enabling 2FA returns 10 recovery codes once; only their hashes are stored. Disabling 2FA and replacing the recovery codes both require a current authenticator or recovery code. An authenticator code is accepted once (its 30 s time step must be later than the last one used).
 - Tenant role is app-managed in `organization_memberships` (`admin` or `member`).
 - New self-registered users default to `member` role unless explicitly provisioned as `admin` (for example via admin seeding).
 - Authorization does not rely on mutable `user_metadata`.

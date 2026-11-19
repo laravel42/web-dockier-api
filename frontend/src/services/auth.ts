@@ -89,6 +89,11 @@ export const authApi = {
       body: JSON.stringify({ token }),
     }),
 
+  /** Both need a current authenticator or recovery code, so a stolen session cannot use them. */
+  disable2FA: (code: string) =>
+    request<{ success: true }>("/auth/2fa/disable", { method: "POST", body: JSON.stringify({ code }) }),
+  regenerateRecoveryCodes: (code: string) =>
+    request<{ recoveryCodes: string[] }>("/auth/2fa/recovery-codes", { method: "POST", body: JSON.stringify({ code }) }),
   socialLogin: (data: {
     provider: string;
     code: string;
@@ -112,5 +117,6 @@ export const authApi = {
       permissions: string[];
       memberships: TenantMembership[];
       twoFactorEnabled: boolean;
+      twoFactorRecoveryCodesRemaining: number;
     }>("/auth/me"),
 };

@@ -3,6 +3,7 @@ import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList } from "../../../shared/supabase/query.js";
 import { invalidatePermissionCache } from "../../../shared/permissions/authorization.js";
 import { seedDefaultRoles } from "../../roles/seed.js";
+import { countRecoveryCodes } from "./two-factor.js";
 
 export interface Membership {
   id: string;
@@ -132,7 +133,7 @@ export type MembershipError = InstanceType<typeof MembershipError>;
 export async function getAuthenticatedUser(userId: string, tenantId: string) {
   const { data: user, error: userError } = await supabaseAdmin
     .from("users")
-    .select("id,email,name,two_factor_enabled")
+    .select("id,email,name,two_factor_enabled,two_factor_recovery_codes")
     .eq("id", userId)
     .maybeSingle();
 
@@ -156,5 +157,6 @@ export async function getAuthenticatedUser(userId: string, tenantId: string) {
     permissions: resolved.permissions,
     memberships,
     twoFactorEnabled: user.two_factor_enabled ?? false,
+    twoFactorRecoveryCodesRemaining: countRecoveryCodes(user.two_factor_recovery_codes),
   };
 }

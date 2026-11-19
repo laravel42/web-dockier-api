@@ -9,7 +9,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth } from "../../../shared/auth/auth.js";
 import { rateLimit } from "../../../shared/http/rate-limit.js";
-import { setupTwoFactor, enableTwoFactor } from "../domain/two-factor.js";
+import { setupTwoFactor, enableTwoFactor, disableTwoFactor, regenerateRecoveryCodes } from "../domain/two-factor.js";
 import { completeTwoFactorLogin } from "../domain/registration.js";
 import { authSessionSchema, membershipSchema } from "../schemas.js";
 
@@ -56,6 +56,33 @@ export async function registerTwoFactorRoutes(app: FastifyInstance) {
       const auth = getAuth(request);
       return await enableTwoFactor(auth.userId, request.body.token);
     },
+  );
+  const codeBody = z.object({ code: z.string().trim().min(6).max(20) });
+  typed.post(
+    "/auth/2fa/disable",
+    {
+      preHandler: [app.requireAuth, auth2faLimit],
+      schema: {
+        tags: ["auth"],
+        summary: "Disable 2FA (needs a current authenticator or recovery code)",
+        body: codeBody,
+        response: { 200: z.object({ success: z.literal(true) }) },
+      },
+    },
+    async (request) => disableTwoFactor(getAuth(request).userId, request.body.code),
+  );
+  typed.post(
+    "/auth/2fa/recovery-codes",
+    {
+      preHandler: [app.requireAuth, auth2faLimit],
+      schema: {
+        tags: ["auth"],
+        summary: "Replace all recovery codes (needs a current authenticator or recovery code)",
+        body: codeBody,
+        response: { 200: z.object({ recoveryCodes: z.array(z.string()) }) },
+      },
+    },
+    async (request) => regenerateRecoveryCodes(getAuth(request).userId, request.body.code),
   );
   typed.post(
     "/auth/2fa/verify",

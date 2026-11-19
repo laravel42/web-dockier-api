@@ -36,6 +36,7 @@ export type Database = {
           two_factor_secret: string | null;
           two_factor_secret_encrypted: string | null;
           two_factor_recovery_codes: Json;
+          two_factor_last_counter: number | null;
           created_at: string;
           updated_at: string | null;
         };

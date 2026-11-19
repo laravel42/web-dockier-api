@@ -224,6 +224,7 @@ describe("GET /auth/me", () => {
       permissions: [PERMISSIONS.PROJECT_VIEW],
       memberships: [{ id: TEST_USER_ID, tenantId: TEST_TENANT_ID, tenantName: "Test Org", tenantSlug: "test-org", roleName: "Admin", isOwner: false }],
       twoFactorEnabled: false,
+      twoFactorRecoveryCodesRemaining: 0,
     };
     mockGetAuthenticatedUser.mockResolvedValue(mockUser);
 

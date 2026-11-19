@@ -38,6 +38,7 @@ export const authMeSchema = z.object({
   permissions: z.array(z.string()),
   memberships: z.array(membershipSchema),
   twoFactorEnabled: z.boolean(),
+  twoFactorRecoveryCodesRemaining: z.number().int().nonnegative(),
 });
 
 export const billingDetailsSchema = z.object({

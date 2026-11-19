@@ -63,18 +63,19 @@ function generateTotpCode(secret: string, counter: number): string {
   return String(binary % 1_000_000).padStart(6, "0");
 }
 
-export function verifyTotpToken(token: string, secret: string, window = 1): boolean {
+/** The time step a code matches (within `window` steps of now), or null. */
+export function matchTotpCounter(token: string, secret: string, window = 1): number | null {
   const code = token.replace(/\s/g, "");
-  if (!/^\d{6}$/.test(code)) return false;
-
+  if (!/^\d{6}$/.test(code)) return null;
   const counter = Math.floor(Date.now() / 1000 / 30);
   for (let offset = -window; offset <= window; offset += 1) {
-    if (generateTotpCode(secret, counter + offset) === code) return true;
+    if (generateTotpCode(secret, counter + offset) === code) return counter + offset;
   }
-
-  return false;
+  return null;
 }
-
+export function verifyTotpToken(token: string, secret: string, window = 1): boolean {
+  return matchTotpCounter(token, secret, window) !== null;
+}
 export function buildOtpAuthUrl(email: string, secret: string, issuer = "Dockier"): string {
   const label = encodeURIComponent(`${issuer}:${email}`);
   const params = new URLSearchParams({

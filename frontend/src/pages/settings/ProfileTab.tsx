@@ -9,6 +9,8 @@ import Button from "@/components/ui/Button";
 import PageLoading from "@/components/ui/PageLoading";
 import Alert from "@/components/ui/Alert";
 import { getErrorMessage } from "@/utils/errors";
+import { useConfirmableAction } from "@/hooks/useConfirmableAction";
+import ConfirmModal from "@/components/ConfirmModal";
 import { emptyBillingDetails, type BillingDetails } from "@/types/billing";
 
 type Msg = { text: string; variant: "error" | "success" | "info" } | null;
@@ -48,6 +50,9 @@ export default function ProfileTab() {
   const [twoFactorLoading, setTwoFactorLoading] = useState(false);
   // Shown once, right after enabling: the server stores only their hashes.
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [recoveryCodesRemaining, setRecoveryCodesRemaining] = useState(0);
+  // Disabling 2FA or replacing the recovery codes asks for a current code first.
+  const [manageCode, setManageCode] = useState("");
 
   const [billing, setBilling] = useState<BillingDetails>(emptyBillingDetails());
   const [billingLoading, setBillingLoading] = useState(canViewBilling);
@@ -78,7 +83,10 @@ export default function ProfileTab() {
         setEmail(authEmail || "");
         setMessage({ text: getErrorMessage(err, "Failed to load profile"), variant: "error" });
       }),
-      authApi.getMe().then((me) => setTwoFactorEnabled(me.twoFactorEnabled)),
+      authApi.getMe().then((me) => {
+        setTwoFactorEnabled(me.twoFactorEnabled);
+        setRecoveryCodesRemaining(me.twoFactorRecoveryCodesRemaining);
+      }),
       canViewBilling
         ? billingApi.get().then(setBilling).catch((err) => {
             setBillingMessage({ text: getErrorMessage(err, "Failed to load billing details"), variant: "error" });
@@ -144,6 +152,7 @@ export default function ProfileTab() {
       const res = await authApi.enable2FA(verifyToken);
       setTwoFactorEnabled(true);
       setRecoveryCodes(res.recoveryCodes);
+      setRecoveryCodesRemaining(res.recoveryCodes.length);
       setTwoFactorMessage({ text: "2FA enabled successfully", variant: "success" });
       setQrCode(null);
       setSecret(null);
@@ -155,6 +164,37 @@ export default function ProfileTab() {
     }
   };
 
+  const handleRegenerateCodes = async () => {
+    setTwoFactorLoading(true);
+    setTwoFactorMessage(null);
+    try {
+      const res = await authApi.regenerateRecoveryCodes(manageCode);
+      setRecoveryCodes(res.recoveryCodes);
+      setRecoveryCodesRemaining(res.recoveryCodes.length);
+      setTwoFactorMessage({ text: "New recovery codes generated. The old ones no longer work.", variant: "success" });
+      setManageCode("");
+    } catch (err) {
+      setTwoFactorMessage({ text: getErrorMessage(err, "That code did not work"), variant: "error" });
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+  // Confirmed first: the button sits next to "New recovery codes" and shares its code field.
+  const disableConfirm = useConfirmableAction(
+    async () => {
+      await authApi.disable2FA(manageCode);
+    },
+    {
+      onSuccess: () => {
+        setTwoFactorEnabled(false);
+        setRecoveryCodes([]);
+        setRecoveryCodesRemaining(0);
+        setManageCode("");
+        setTwoFactorMessage({ text: "Two-factor authentication disabled", variant: "success" });
+      },
+      errorFallback: "That code did not work",
+    },
+  );
   if (loading) return <PageLoading />;
 
   return (
@@ -340,6 +380,51 @@ export default function ProfileTab() {
                 </ul>
               </div>
             )}
+            {recoveryCodes.length === 0 && (
+              <p className="text-sm text-text-secondary">
+                {recoveryCodesRemaining === 0
+                  ? "You have no recovery codes left. Generate new ones so a lost phone does not lock you out."
+                  : `${recoveryCodesRemaining} recovery code${recoveryCodesRemaining === 1 ? "" : "s"} left.`}
+              </p>
+            )}
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-3">
+              <SettingsTextField
+                id="manage-2fa-code"
+                label="Authenticator or recovery code"
+                type="text"
+                autoComplete="one-time-code"
+                value={manageCode}
+                onChange={(e) => setManageCode(e.target.value.trim())}
+                placeholder="123456 or ABCDE-FGHIJ"
+              />
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={twoFactorLoading || manageCode.length < 6}
+                  onClick={handleRegenerateCodes}
+                >
+                  New recovery codes
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline-danger"
+                  disabled={twoFactorLoading || disableConfirm.running || manageCode.length < 6}
+                  onClick={disableConfirm.open}
+                >
+                  Disable 2FA
+                </Button>
+              </div>
+            </form>
+            <ConfirmModal
+              open={disableConfirm.showModal}
+              onClose={disableConfirm.close}
+              onConfirm={disableConfirm.execute}
+              title="Disable two-factor authentication?"
+              message="Signing in will need only the email code. Your recovery codes stop working, and turning 2FA back on means scanning a new QR code."
+              confirmLabel="Disable 2FA"
+              destructive
+            />
           </div>
         ) : !qrCode ? (
           <Button
