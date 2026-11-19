@@ -227,7 +227,7 @@ describe("tenantRateLimit", () => {
 /**
  * `rateLimit()` keys on `request.ip`, which Fastify derives from
  * `X-Forwarded-For` only when `trustProxy` is set. These tests boot the real
- * app (buildApp sets `trustProxy: 1`) so they fail if that option is dropped.
+ * app (buildApp trusts one proxy hop) so they fail if that option is dropped.
  *
  * The numeric form matters: it trusts only the LAST hop, so prepending a fake
  * address neither evades the sender's own limit nor poisons another client's.

@@ -87,15 +87,18 @@ export async function buildApp(service: ServiceName) {
     // no such route option and nothing in this codebase implements one. Do not
     // add a route expecting them to bound anything.
     requestTimeout: 60_000,
-    // Numeric form on purpose: it trusts only the LAST N hops of
-    // X-Forwarded-For, so a client cannot spoof its address by prepending
-    // entries (which `true` would allow). 1 = Railway's single proxy hop —
-    // raise it if another proxy layer is added in front.
+    // Trust exactly one hop: the socket peer (Railway's proxy), so request.ip
+    // is the LAST X-Forwarded-For entry and a client cannot spoof its address
+    // by prepending entries (which `true` would allow). Raise the 1 only if
+    // another proxy layer is added in front.
     //
-    // Without this, request.ip is the proxy's address for every client and
-    // the IP-keyed rateLimit() collapses into one global bucket
-    // (see shared/http/rate-limit.ts).
-    trustProxy: 1,
+    // A function, not the number 1: since 5.12 Fastify treats a numeric
+    // trustProxy as "trust nothing" (fail closed), which would make request.ip
+    // the proxy's address for every client and collapse the IP-keyed
+    // rateLimit() into one global bucket (see shared/http/rate-limit.ts).
+    // This keeps the pre-5.12 numeric semantics, so it assumes the app is
+    // reachable only through that proxy, as on Railway.
+    trustProxy: (_address: string, hop: number) => hop < 1,
     // Prefer an inbound correlation id so a trace started by the frontend or a
     // load balancer survives the backend boundary. Fastify's default is a
     // per-process counter ("req-1", "req-2", ...) that restarts on every
