@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createTestEnv } from "../../__tests__/test-helpers.js";
-import { rateLimit, tenantRateLimit, clearRateLimitStore } from "../rate-limit.js";
+import { rateLimit, tenantRateLimit, emailRateLimit, clearRateLimitStore } from "../rate-limit.js";
 
 // Needed only by the trustProxy suite at the bottom, which boots the real app.
 vi.mock("../../config.js", () => ({ env: createTestEnv() }));
@@ -56,6 +56,23 @@ function doubles(opts: { ip?: string; tenantId?: string | null; withAuth?: boole
 
 beforeEach(() => {
   clearRateLimitStore();
+});
+describe("emailRateLimit", () => {
+  it("counts attempts per email across IPs, case-insensitively", async () => {
+    const limit = emailRateLimit({ max: 2, windowMs: 60_000, prefix: "t-email" });
+    const tooMany: string[] = [];
+    for (const [ip, email] of [["1.1.1.1", "a@x.com"], ["2.2.2.2", "A@x.com"], ["3.3.3.3", "a@x.com "]]) {
+      const d = doubles({ ip });
+      (d.request as unknown as { body: unknown }).body = { email };
+      await limit(d.request, d.reply);
+      tooMany.push(...d.tooMany);
+    }
+    expect(tooMany).toHaveLength(1);
+    const other = doubles({ ip: "4.4.4.4" });
+    (other.request as unknown as { body: unknown }).body = { email: "b@x.com" };
+    await limit(other.request, other.reply);
+    expect(other.tooMany).toHaveLength(0);
+  });
 });
 
 describe("rateLimit", () => {

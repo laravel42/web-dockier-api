@@ -130,6 +130,22 @@ export function tenantRateLimit(options: RateLimitOptions = {}) {
 }
 
 /**
+ * Rate limit keyed on the request body's `email`, for sign-in codes: the IP limit
+ * alone lets an attacker spread guesses at one account's code over many addresses.
+ * Must run after body validation (a preHandler), so `email` is already an email.
+ */
+export function emailRateLimit(options: RateLimitOptions = {}) {
+  const { max = 10, windowMs = 15 * 60_000, prefix = "erl" } = options;
+  return createLimiter(
+    (request) => {
+      const email = (request.body as { email?: unknown } | undefined)?.email;
+      return typeof email === "string" ? email.trim().toLowerCase() : null;
+    },
+    { max, windowMs, prefix },
+    "Too many attempts for this email. Request a new code and try again later.",
+  );
+}
+/**
  * Clear all rate limit entries. Useful for testing.
  */
 export function clearRateLimitStore(): void {

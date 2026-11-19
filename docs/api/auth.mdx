@@ -28,7 +28,8 @@
 
 - Enable **Email provider** with OTP/magic-link in Supabase Auth.
 - Keep **Enable email signups** turned on, or `POST /auth/register/start` will return a 403.
-- Ensure your redirect allow-list includes frontend callback URLs if you use magic-link redirects.
+- Magic links always redirect to the Supabase **Site URL**: the API takes no `redirectTo`, so a link cannot be pointed at another host. Set the Site URL to the frontend.
+- `POST /auth/passwordless/verify` is rate-limited per IP and per email (10 attempts per 15 minutes per email, per backend instance).
 
 ## Typing conventions
 

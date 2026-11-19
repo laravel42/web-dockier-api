@@ -18,7 +18,7 @@ import {
 import { env } from "../../../shared/config.js";
 import { resolveSupabaseSecretKey } from "../../../shared/supabase/keys.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
-import { rateLimit } from "../../../shared/http/rate-limit.js";
+import { emailRateLimit, rateLimit } from "../../../shared/http/rate-limit.js";
 import {
   listMembershipsForUser,
   getAuthenticatedUser,
@@ -36,6 +36,7 @@ export async function registerAuthenticationRoutes(app: FastifyInstance) {
   const authStartLimit = rateLimit({ max: 5, windowMs: 60_000, prefix: "auth-start" });
   const authVerifyLimit = rateLimit({ max: 10, windowMs: 60_000, prefix: "auth-verify" });
   const authLoginLimit = rateLimit({ max: 10, windowMs: 60_000, prefix: "auth-login" });
+  const authVerifyEmailLimit = emailRateLimit({ max: 10, windowMs: 15 * 60_000, prefix: "auth-verify-email" });
 
   // ─── Demo Login ────────────────────────────────────────────────────────────
 
@@ -106,9 +107,10 @@ export async function registerAuthenticationRoutes(app: FastifyInstance) {
     async (request) => {
       const { error } = await supabaseAdmin.auth.signInWithOtp({
         email: request.body.email,
+        // No caller-supplied redirect: Supabase uses the configured Site URL, so a
+        // magic link can never be pointed at another host.
         options: {
           shouldCreateUser: true,
-          emailRedirectTo: request.body.redirectTo,
           data: { display_name: request.body.displayName, tenant_name: request.body.tenantName },
         },
       });
@@ -126,14 +128,14 @@ export async function registerAuthenticationRoutes(app: FastifyInstance) {
       schema: {
         tags: ["auth"],
         summary: "Start passwordless authentication via Supabase email OTP/magic link",
-        body: z.object({ email: z.email(), redirectTo: z.string().url().optional() }),
+        body: z.object({ email: z.email() }),
         response: { 200: z.object({ success: z.literal(true), message: z.string() }) },
       },
     },
     async (request) => {
       const { error } = await supabaseAdmin.auth.signInWithOtp({
         email: request.body.email,
-        options: { shouldCreateUser: false, emailRedirectTo: request.body.redirectTo },
+        options: { shouldCreateUser: false },
       });
       if (error) throwAuthError(error.message);
       return { success: true as const, message: "Passwordless sign-in started. Check your email for OTP or magic link." };
@@ -145,7 +147,7 @@ export async function registerAuthenticationRoutes(app: FastifyInstance) {
   typed.post(
     "/auth/passwordless/verify",
     {
-      preHandler: authVerifyLimit,
+      preHandler: [authVerifyLimit, authVerifyEmailLimit],
       schema: {
         tags: ["auth"],
         summary: "Verify OTP/magic link token and issue tenant-scoped API JWT",

@@ -26,7 +26,7 @@ export const authApi = {
       headers: { Authorization: "" },
     }),
 
-  startRegistration: (data: { email: string; displayName: string; tenantName?: string; redirectTo?: string }) =>
+  startRegistration: (data: { email: string; displayName: string; tenantName?: string }) =>
     request<{ success: true; message: string }>("/auth/register/start", {
       method: "POST",
       body: JSON.stringify(data),
@@ -43,7 +43,7 @@ export const authApi = {
       headers: { Authorization: "" },
     }),
 
-  startPasswordless: (data: { email: string; redirectTo?: string }) =>
+  startPasswordless: (data: { email: string }) =>
     request<{ success: true; message: string }>("/auth/passwordless/start", {
       method: "POST",
       body: JSON.stringify(data),

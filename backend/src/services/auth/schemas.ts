@@ -4,7 +4,6 @@ export const registerStartBodySchema = z.object({
   email: z.email(),
   displayName: z.string().trim().min(2).max(120),
   tenantName: z.string().trim().min(2).max(120).optional(),
-  redirectTo: z.string().url().optional(),
 });
 
 export const registerStartResponseSchema = z.object({
