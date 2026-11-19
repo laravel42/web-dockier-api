@@ -12,7 +12,7 @@ import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { getGitProvider, type RepoStats } from "../domain/providers/git-provider.js";
-import { parseJsonField, writeRepoCache } from "../domain/cache.js";
+import { cacheFreshSince, parseJsonField, writeRepoCache } from "../domain/cache.js";
 import { requireConnection, isPlaceholderStats, needsContributorProfileRefresh } from "./shared.js";
 import { planIssueFix, applyIssueFix, type FixIssuePlan } from "../domain/ai/fix-issue-ai.js";
 import { generatePRReview, postPRReview } from "../domain/ai/review-pr-ai.js";
@@ -331,7 +331,7 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
       const repoKey = `${request.query.owner}/${request.query.repo}`;
       const branch = request.query.branch || "main";
       if (!request.query.refresh) {
-        const cached = await db.from("stats_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repoKey).eq("branch", branch).maybeSingle();
+        const cached = await db.from("stats_cache").select("result").eq("organization_id", auth.tenantId).gt("created_at", cacheFreshSince("stats_cache")).eq("repo", repoKey).eq("branch", branch).maybeSingle();
         if (cached.data?.result) {
           const parsed = parseJsonField<RepoStats>(cached.data.result)!;
           if (!isPlaceholderStats(parsed) && !needsContributorProfileRefresh(parsed, conn.provider)) {

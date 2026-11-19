@@ -217,6 +217,22 @@ export async function listCommits(
 /**
  * Get repository metadata (stars, forks, issues, watchers, language).
  */
+/**
+ * Total size of a GitHub list endpoint without paging through it: with
+ * `per_page=1` the page number of the `rel="last"` link is the item count.
+ * `null` when the call fails, so a caller keeps its fallback.
+ */
+export async function countListItems(connection: ConnectionLike, path: string): Promise<number | null> {
+  const url = new URL(`${getBaseUrl(connection)}${path}`);
+  url.searchParams.set("per_page", "1");
+  const res = await gitFetch(url.href, { headers: getHeaders(connection) });
+  if (!res.ok) return null;
+  if (res.status === 204) return 0; // empty repository
+  const last = res.headers.get("link")?.split(",").find((part) => /rel="last"/.test(part));
+  const href = last?.match(/<([^>]+)>/)?.[1];
+  if (href) return Number(new URL(href).searchParams.get("page")) || null;
+  return ((await res.json()) as unknown[]).length;
+}
 export async function getRepoInfo(
   connection: ConnectionLike,
   params: { owner: string; repo: string },
@@ -372,7 +388,8 @@ export async function listIssues(
     `${baseUrl}/repos/${owner}/${repo}/issues?state=open&per_page=${limit}&sort=created&direction=desc`,
     { headers },
   );
-  if (!res.ok) return [];
+  if (res.status === 410) return []; // issues disabled on the repo
+  assertOk(res, `listIssues ${owner}/${repo}`);
 
   const data = (await res.json()) as GitHubIssueListApiItem[];
   return data
@@ -408,7 +425,7 @@ export async function listPullRequests(
     `${baseUrl}/repos/${owner}/${repo}/pulls?state=open&per_page=${limit}&sort=created&direction=desc`,
     { headers },
   );
-  if (!res.ok) return [];
+  assertOk(res, `listPullRequests ${owner}/${repo}`);
 
   const data = (await res.json()) as GitHubIssueListApiItem[];
   return data.map((item) => ({
@@ -435,7 +452,8 @@ export async function getCollaborators(
   const { owner, repo } = params;
 
   const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/collaborators?per_page=100`, { headers });
-  if (!res.ok) return [];
+  if (res.status === 403) return []; // listing collaborators needs push access, which a read-only token lacks
+  assertOk(res, `getCollaborators ${owner}/${repo}`);
 
   const data = (await res.json()) as Array<{ id: number; login: string; avatar_url: string }>;
   return data.map((member) => ({

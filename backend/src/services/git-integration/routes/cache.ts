@@ -12,7 +12,6 @@ import { invalidateCache } from "../domain/cache.js";
 
 export async function registerCacheRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const log = app.log;
 
   typed.delete(
     "/git/stats-cache",
@@ -26,7 +25,7 @@ export async function registerCacheRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      await invalidateCache("stats_cache", getAuth(request).tenantId, request.query, log);
+      await invalidateCache("stats_cache", getAuth(request).tenantId, request.query);
       return { success: true as const };
     },
   );
@@ -43,7 +42,7 @@ export async function registerCacheRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      await invalidateCache("stack_cache", getAuth(request).tenantId, request.query, log);
+      await invalidateCache("stack_cache", getAuth(request).tenantId, request.query);
       return { success: true as const };
     },
   );
@@ -60,7 +59,7 @@ export async function registerCacheRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      await invalidateCache("analysis_cache", getAuth(request).tenantId, request.query, log);
+      await invalidateCache("analysis_cache", getAuth(request).tenantId, request.query);
       return { success: true as const };
     },
   );

@@ -29,6 +29,7 @@ import {
   updateAnalysisCache,
   writeSensitiveCache,
   getLatestSuccessfulDeployId,
+  cacheFreshSince,
 } from "../domain/cache.js";
 import { requireConnection } from "./shared.js";
 
@@ -60,7 +61,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const repoKey = `${request.query.owner}/${request.query.repo}`;
-      const cached = await db.from("stack_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repoKey).eq("branch", branch).maybeSingle();
+      const cached = await db.from("stack_cache").select("result").eq("organization_id", auth.tenantId).gt("created_at", cacheFreshSince("stack_cache")).eq("repo", repoKey).eq("branch", branch).maybeSingle();
       if (cached.data?.result) {
         return { stack: parseJsonField(cached.data.result), cached: true };
       }
@@ -219,7 +220,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       const branch = request.query.branch || "main";
       const repo = request.query.repo;
 
-      const stackCached = await db.from("stack_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repo).eq("branch", branch).maybeSingle();
+      const stackCached = await db.from("stack_cache").select("result").eq("organization_id", auth.tenantId).gt("created_at", cacheFreshSince("stack_cache")).eq("repo", repo).eq("branch", branch).maybeSingle();
       if (stackCached.data?.result) {
         const parsed = parseJsonField<{ components?: Array<{ techs?: string[] }> }>(stackCached.data.result)!;
         const techSet = new Set<string>();

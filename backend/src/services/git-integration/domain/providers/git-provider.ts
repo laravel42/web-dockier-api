@@ -25,6 +25,7 @@ import {
   createIssue as ghCreateIssue,
   closeIssue as ghCloseIssue,
   createBranch as ghCreateBranch,
+  countListItems as ghCountListItems,
 } from "./github-client.js";
 import {
   listCommits as glListCommits,
@@ -209,11 +210,14 @@ class GitHubProvider implements GitProviderClient {
 
   async getRepoStats(query: RepoQuery): Promise<RepoStats> {
     const { owner, repo, branch } = query;
-    const [repoInfo, commits, contributors, languages] = await Promise.all([
+    const path = `/repos/${owner}/${repo}`;
+    const [repoInfo, commits, contributors, languages, commitCount, contributorCount] = await Promise.all([
       ghGetRepoInfo(this.conn, { owner, repo }),
       ghListCommits(this.conn, { owner, repo, branch, limit: 20 }).catch(() => [] as RepoCommit[]),
       ghGetContributors(this.conn, { owner, repo, limit: 20 }),
       ghGetLanguages(this.conn, { owner, repo }),
+      ghCountListItems(this.conn, `${path}/commits?sha=${encodeURIComponent(branch)}`).catch(() => null),
+      ghCountListItems(this.conn, `${path}/contributors`).catch(() => null),
     ]);
 
     const stats = emptyStats();
@@ -224,8 +228,9 @@ class GitHubProvider implements GitProviderClient {
     stats.language = repoInfo.language;
     stats.languages = languages;
     applyLatestCommit(stats, commits);
-    if (commits.length > 0) stats.totalCommits = commits.length;
-    stats.contributors = contributors.length;
+    // The lists are capped at 20; the counts are the real totals.
+    stats.totalCommits = commitCount ?? commits.length;
+    stats.contributors = contributorCount ?? contributors.length;
     stats.topContributors = contributors;
     return stats;
   }

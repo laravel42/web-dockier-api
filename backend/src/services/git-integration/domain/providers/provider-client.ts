@@ -392,19 +392,19 @@ export async function listBranches(connection: ConnectionLike, ref: RepoRef): Pr
 
   if (connection.provider === "github") {
     const response = await gitFetch(`${origin}/repos/${ref.owner}/${ref.repo}/branches?per_page=100`, { headers });
-    if (!response.ok) throw new Error(`GitHub API error ${response.status}`);
+    if (!response.ok) throw providerApiError("GitHub", response.status, await readErrorBody(response));
     return ((await response.json()) as Array<{ name: string }>).map((row) => row.name);
   }
 
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
     const projectPath = encodeURIComponent(`${ref.owner}/${ref.repo}`);
     const response = await gitFetch(`${origin}/api/v4/projects/${projectPath}/repository/branches?per_page=100`, { headers });
-    if (!response.ok) throw new Error(`GitLab API error ${response.status}`);
+    if (!response.ok) throw providerApiError("GitLab", response.status, await readErrorBody(response));
     return ((await response.json()) as Array<{ name: string }>).map((row) => row.name);
   }
 
   const response = await gitFetch(`${origin}/2.0/repositories/${ref.owner}/${ref.repo}/refs/branches?pagelen=100`, { headers });
-  if (!response.ok) throw new Error(`Bitbucket API error ${response.status}`);
+  if (!response.ok) throw providerApiError("Bitbucket", response.status, await readErrorBody(response));
   const data = (await response.json()) as { values?: Array<{ name: string }> };
   return (data.values ?? []).map((row) => row.name);
 }
@@ -415,7 +415,7 @@ export async function getRepoFileTree(connection: ConnectionLike, ref: RepoRef):
 
   if (connection.provider === "github") {
     const response = await gitFetch(`${origin}/repos/${ref.owner}/${ref.repo}/git/trees/${encodeURIComponent(ref.branch)}?recursive=1`, { headers });
-    if (!response.ok) throw new Error(`GitHub API error ${response.status}`);
+    if (!response.ok) throw providerApiError("GitHub", response.status, await readErrorBody(response));
     const data = (await response.json()) as { tree?: Array<{ path: string; type: string }> };
     return (data.tree ?? []).filter((entry) => entry.type === "blob").map((entry) => entry.path);
   }
@@ -428,7 +428,8 @@ export async function getRepoFileTree(connection: ConnectionLike, ref: RepoRef):
         `${origin}/api/v4/projects/${projectPath}/repository/tree?ref=${encodeURIComponent(ref.branch)}&recursive=true&per_page=100&page=${page}`,
         { headers },
       );
-      if (!response.ok) break;
+      // Throw, never break: a partial or empty tree was cached as "this repo has no files".
+      if (!response.ok) throw providerApiError("GitLab", response.status, await readErrorBody(response));
       const data = (await response.json()) as Array<{ path: string; type: string }>;
       if (data.length === 0) break;
       for (const entry of data) {
@@ -440,7 +441,7 @@ export async function getRepoFileTree(connection: ConnectionLike, ref: RepoRef):
   }
 
   const response = await gitFetch(`${origin}/2.0/repositories/${ref.owner}/${ref.repo}/src/${encodeURIComponent(ref.branch)}/?pagelen=100`, { headers });
-  if (!response.ok) throw new Error(`Bitbucket API error ${response.status}`);
+  if (!response.ok) throw providerApiError("Bitbucket", response.status, await readErrorBody(response));
   const data = (await response.json()) as { values?: Array<{ path: string; type: string }> };
   return (data.values ?? []).filter((entry) => entry.type === "commit_file").map((entry) => entry.path);
 }
@@ -451,6 +452,11 @@ export async function fetchRepoFile(connection: ConnectionLike, ref: RepoRef, pa
   return file.buffer.toString("utf8");
 }
 
+/** A missing file is `null`; any other failure (bad token, rate limit) throws instead of reading as "no such file". */
+async function fileMissingOrThrow(provider: string, response: Response): Promise<null> {
+  if (response.status === 404) return null;
+  throw providerApiError(provider, response.status, await readErrorBody(response));
+}
 export async function fetchRepoFileBuffer(
   connection: ConnectionLike,
   ref: RepoRef,
@@ -463,7 +469,7 @@ export async function fetchRepoFileBuffer(
     const response = await gitFetch(`${origin}/repos/${ref.owner}/${ref.repo}/contents/${path}?ref=${encodeURIComponent(ref.branch)}`, {
       headers: { ...headers, Accept: "application/vnd.github.v3.raw" },
     });
-    if (!response.ok) return null;
+    if (!response.ok) return fileMissingOrThrow("GitHub", response);
     return { buffer: Buffer.from(await response.arrayBuffer()) };
   }
 
@@ -471,11 +477,11 @@ export async function fetchRepoFileBuffer(
     const projectPath = encodeURIComponent(`${ref.owner}/${ref.repo}`);
     const filePath = encodeURIComponent(path);
     const response = await gitFetch(`${origin}/api/v4/projects/${projectPath}/repository/files/${filePath}/raw?ref=${encodeURIComponent(ref.branch)}`, { headers });
-    if (!response.ok) return null;
+    if (!response.ok) return fileMissingOrThrow("GitLab", response);
     return { buffer: Buffer.from(await response.arrayBuffer()) };
   }
 
   const response = await gitFetch(`${origin}/2.0/repositories/${ref.owner}/${ref.repo}/src/${encodeURIComponent(ref.branch)}/${path}`, { headers });
-  if (!response.ok) return null;
+  if (!response.ok) return fileMissingOrThrow("Bitbucket", response);
   return { buffer: Buffer.from(await response.arrayBuffer()) };
 }

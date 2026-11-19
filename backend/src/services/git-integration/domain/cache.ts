@@ -9,6 +9,8 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Database, Json } from "../../../shared/supabase/types.js";
 import { nowIso } from "../../../shared/utils/time.js";
+import { throwOnError } from "../../../shared/supabase/query.js";
+import { GitIntegrationError } from "./connections.js";
 
 /** Minimal logger interface compatible with both pino and Fastify's logger. */
 export interface CacheLogger {
@@ -61,15 +63,22 @@ export async function invalidateCache(
   table: "stats_cache" | "stack_cache" | "analysis_cache",
   tenantId: string,
   filters: { repo?: string; branch?: string },
-  logger: CacheLogger,
 ): Promise<void> {
-  const db = supabaseAdmin;
-  await runCacheWrite(table, () => {
-    let del = db.from(table).delete().eq("organization_id", tenantId);
-    if (filters.repo) del = del.eq("repo", filters.repo);
-    if (filters.branch) del = del.eq("branch", filters.branch);
-    return del;
-  }, logger);
+  // Not best-effort like the writes: a caller told "cleared" goes on to trust a fresh read.
+  let del = supabaseAdmin.from(table).delete().eq("organization_id", tenantId);
+  if (filters.repo) del = del.eq("repo", filters.repo);
+  if (filters.branch) del = del.eq("branch", filters.branch);
+  const { error } = await del;
+  throwOnError(error, GitIntegrationError, { internalMsg: "Failed to clear the repository cache" });
+}
+/**
+ * Oldest `created_at` a stats/stack cache row may have and still be served.
+ * Neither is keyed by commit, so without an age limit stars, the last commit
+ * and a tree fetched during an outage were served forever.
+ */
+export const CACHE_TTL_MS = { stats_cache: 60 * 60_000, stack_cache: 24 * 60 * 60_000 } as const;
+export function cacheFreshSince(table: keyof typeof CACHE_TTL_MS, now = Date.now()): string {
+  return new Date(now - CACHE_TTL_MS[table]).toISOString();
 }
 
 // ─── Cache Writes ──────────────────────────────────────────────────

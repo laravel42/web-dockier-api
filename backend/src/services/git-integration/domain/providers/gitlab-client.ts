@@ -143,7 +143,8 @@ export async function listIssues(
     `${baseUrl}/api/v4/projects/${project}/issues?state=opened&per_page=${limit}&order_by=created_at&sort=desc`,
     { headers },
   );
-  if (!res.ok) return [];
+  if (res.status === 403) return []; // issues disabled on the project
+  assertOk(res, `listIssues ${params.owner}/${params.repo}`);
 
   const data = (await res.json()) as Array<Record<string, unknown>>;
   return data.map((issue) => {
@@ -178,7 +179,8 @@ export async function listPullRequests(
     `${baseUrl}/api/v4/projects/${project}/merge_requests?state=opened&per_page=${limit}&order_by=created_at&sort=desc`,
     { headers },
   );
-  if (!res.ok) return [];
+  if (res.status === 403) return []; // merge requests disabled on the project
+  assertOk(res, `listPullRequests ${params.owner}/${params.repo}`);
 
   const data = (await res.json()) as Array<Record<string, unknown>>;
   return data.map((mr) => {
