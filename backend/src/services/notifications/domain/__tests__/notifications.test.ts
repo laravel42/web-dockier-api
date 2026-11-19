@@ -48,17 +48,20 @@ describe("createChannel", () => {
 });
 
 describe("listChannels", () => {
-  it("masks webhook URLs from both encrypted and legacy plain-JSON rows", async () => {
+  it("masks webhook URLs, and reads an unencrypted config as empty", async () => {
     channelRows = [
       { id: "1", type: "slack", config: encryptJson({ webhookUrl: "https://hooks.slack.com/services/T/B/secret" }), enabled: true, created_at: "x" },
-      { id: "2", type: "webhook", config: JSON.stringify({ url: "https://ci.example.com/hook?token=abc" }), enabled: true, created_at: "x" },
-      { id: "3", type: "email", config: JSON.stringify({ email: "ops@example.com" }), enabled: true, created_at: "x" },
+      { id: "2", type: "webhook", config: encryptJson({ url: "https://ci.example.com/hook?token=abc" }), enabled: true, created_at: "x" },
+      { id: "3", type: "email", config: encryptJson({ email: "ops@example.com" }), enabled: true, created_at: "x" },
+      // The in-app channel created before encryption stored a plain "{}".
+      { id: "4", type: "in_app", config: "{}", enabled: true, created_at: "x" },
     ];
     const channels = await listChannels("t");
     expect(channels.map((c) => c.config)).toEqual([
       { webhookUrl: "https://hooks.slack.com/•••" },
       { url: "https://ci.example.com/•••" },
       { email: "ops@example.com" },
+      {},
     ]);
   });
 });

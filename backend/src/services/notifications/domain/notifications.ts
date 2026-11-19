@@ -17,32 +17,6 @@ export type ChannelType = "email" | "slack" | "webhook" | "in_app";
 
 const IN_APP_CHANNEL_TYPE: ChannelType = "in_app";
 
-const NOTIFICATION_LIST_COLUMNS_BASE = "id,channel,title,message,read,created_at";
-const NOTIFICATION_LIST_COLUMNS_WITH_METADATA = `${NOTIFICATION_LIST_COLUMNS_BASE},metadata`;
-
-let notificationsMetadataSupported: boolean | null = null;
-
-function isMissingNotificationsMetadataColumn(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const row = error as { code?: string; message?: string };
-  return row.code === "42703" && (row.message?.includes("notifications.metadata") ?? false);
-}
-
-async function notificationsMetadataColumnExists(): Promise<boolean> {
-  if (notificationsMetadataSupported !== null) return notificationsMetadataSupported;
-
-  const { error } = await supabaseAdmin.from("notifications").select("metadata").limit(0);
-  if (!error) {
-    notificationsMetadataSupported = true;
-    return true;
-  }
-  if (isMissingNotificationsMetadataColumn(error)) {
-    notificationsMetadataSupported = false;
-    return false;
-  }
-  throwOnError(error, NotificationsError, { internalMsg: "Failed to check notifications schema" });
-  return false;
-}
 
 async function insertInAppNotification(params: {
   tenantId: string;
@@ -61,23 +35,10 @@ async function insertInAppNotification(params: {
     created_at: nowIso(),
   };
 
-  const supportsMetadata = await notificationsMetadataColumnExists();
-  if (!supportsMetadata) {
-    const { error } = await supabaseAdmin.from("notifications").insert(basePayload);
-    throwOnError(error, NotificationsError, { internalMsg: "Failed to store notification" });
-    return;
-  }
-
   const { error } = await supabaseAdmin.from("notifications").insert({
     ...basePayload,
     metadata: metadata ?? null,
   });
-  if (isMissingNotificationsMetadataColumn(error)) {
-    notificationsMetadataSupported = false;
-    const { error: retryError } = await supabaseAdmin.from("notifications").insert(basePayload);
-    throwOnError(retryError, NotificationsError, { internalMsg: "Failed to store notification" });
-    return;
-  }
   throwOnError(error, NotificationsError, { internalMsg: "Failed to store notification" });
 }
 
@@ -97,7 +58,7 @@ export async function ensureDefaultInAppChannel(tenantId: string) {
     id,
     organization_id: tenantId,
     type: IN_APP_CHANNEL_TYPE,
-    config: "{}",
+    config: encryptJson({}),
     enabled: true,
     created_at: now,
   });
@@ -113,17 +74,14 @@ type ChannelConfig = Record<string, string>;
  * A Slack webhook URL is a credential (anyone holding it can post to the channel),
  * and a custom webhook URL often carries a token. So the config is stored with
  * encryptJson and never sent back in full.
- *
- * shortcut: rows written before encryption hold plain JSON ("{...}"); read both
- * until a backfill re-saves them.
  */
 function readChannelConfig(raw: unknown): ChannelConfig {
-  if (raw && typeof raw === "object") return raw as ChannelConfig;
   if (typeof raw !== "string" || raw === "") return {};
   try {
-    return (raw.trimStart().startsWith("{") ? JSON.parse(raw) : decryptJson(raw)) as ChannelConfig;
+    return decryptJson(raw) as ChannelConfig;
   } catch {
-    // An unreadable config (rotated key, corrupt row) sends nothing and lists as empty.
+    // An unreadable config (rotated key, corrupt row, the plain "{}" of an
+    // in-app channel created before encryption) sends nothing and lists as empty.
     return {};
   }
 }
@@ -332,52 +290,12 @@ function parseNotificationMetadata(value: unknown): NotificationMetadata | null 
 export async function listNotifications(tenantId: string, params?: { unreadOnly?: boolean; limit?: number; offset?: number }) {
   const limit = Math.min(Math.max(params?.limit ?? 30, 1), 100);
   const offset = Math.max(params?.offset ?? 0, 0);
-  const unreadOnly = params?.unreadOnly;
-
-  const supportsMetadata = await notificationsMetadataColumnExists();
-
-  if (supportsMetadata) {
-    let query = supabaseAdmin
-      .from("notifications")
-      .select(NOTIFICATION_LIST_COLUMNS_WITH_METADATA, { count: "exact" })
-      .eq("organization_id", tenantId)
-      .order("created_at", { ascending: false });
-    if (unreadOnly) query = query.eq("read", false);
-    query = query.range(offset, offset + limit - 1);
-    const { data, error, count } = await query;
-    if (isMissingNotificationsMetadataColumn(error)) {
-      notificationsMetadataSupported = false;
-      return listNotificationsWithoutMetadata(tenantId, { unreadOnly, limit, offset });
-    }
-    const rows = unwrapList(data, error, NotificationsError, { internalMsg: "Failed to list notifications" });
-    return {
-      notifications: rows.map((row) => ({
-        id: row.id,
-        channel: row.channel,
-        title: row.title,
-        message: row.message,
-        metadata: parseNotificationMetadata(row.metadata),
-        read: row.read,
-        createdAt: row.created_at,
-      })),
-      total: count ?? 0,
-    };
-  }
-
-  return listNotificationsWithoutMetadata(tenantId, { unreadOnly, limit, offset });
-}
-
-async function listNotificationsWithoutMetadata(tenantId: string, params?: { unreadOnly?: boolean; limit?: number; offset?: number }) {
-  const limit = params?.limit ?? 30;
-  const offset = params?.offset ?? 0;
-
   let query = supabaseAdmin
     .from("notifications")
-    .select(NOTIFICATION_LIST_COLUMNS_BASE, { count: "exact" })
+    .select("id,channel,title,message,read,created_at,metadata", { count: "exact" })
     .eq("organization_id", tenantId)
     .order("created_at", { ascending: false });
   if (params?.unreadOnly) query = query.eq("read", false);
-
   const result = await paginatedQuery(query, { limit, offset }, NotificationsError, {
     internalMsg: "Failed to list notifications",
     map: (row) => ({
@@ -385,18 +303,13 @@ async function listNotificationsWithoutMetadata(tenantId: string, params?: { unr
       channel: row.channel,
       title: row.title,
       message: row.message,
-      metadata: null,
+      metadata: parseNotificationMetadata(row.metadata),
       read: row.read,
       createdAt: row.created_at,
     }),
   });
-
-  return {
-    notifications: result.data,
-    total: result.total,
-  };
+  return { notifications: result.data, total: result.total };
 }
-
 export async function markNotificationRead(notificationId: string, tenantId: string) {
   const { data, error } = await supabaseAdmin
     .from("notifications")
