@@ -33,7 +33,6 @@ export type Database = {
           language: string;
           timezone: string;
           two_factor_enabled: boolean;
-          two_factor_secret: string | null;
           two_factor_secret_encrypted: string | null;
           two_factor_recovery_codes: Json;
           two_factor_last_counter: number | null;

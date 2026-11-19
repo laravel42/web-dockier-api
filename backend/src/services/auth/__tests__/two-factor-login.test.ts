@@ -23,6 +23,7 @@ vi.mock("../../roles/seed.js", () => ({ seedDefaultRoles: vi.fn() }));
 const { verifyOtpAndProvision, completeTwoFactorLogin } = await import("../domain/registration.js");
 const { verifyAuthToken } = await import("../../../shared/auth/auth.js");
 const { generateRecoveryCodes } = await import("../../../shared/auth/totp.js");
+const { encryptJson } = await import("../../../shared/auth/crypto.js");
 
 const SECRET = "JBSWY3DPEHPK3PXP";
 let userRow: Record<string, unknown>;
@@ -89,14 +90,14 @@ describe("sign-in with 2FA enabled", () => {
   });
 
   it("issues a session for a valid authenticator code", async () => {
-    userRow = { two_factor_enabled: true, two_factor_secret: SECRET, two_factor_secret_encrypted: null, two_factor_recovery_codes: [] };
+    userRow = { two_factor_enabled: true, two_factor_secret_encrypted: encryptJson(SECRET), two_factor_recovery_codes: [] };
     const { challengeToken } = (await verifyOtpAndProvision({ email: TEST_EMAIL, token: "1", type: "email" })) as { challengeToken: string };
     const res = await completeTwoFactorLogin(challengeToken, currentTotp(SECRET));
     expect(verifyAuthToken(res.session.token)).toMatchObject({ userId: TEST_USER_ID, tenantId: TEST_TENANT_ID });
   });
 
   it("refuses the same authenticator code a second time", async () => {
-    userRow = { two_factor_enabled: true, two_factor_secret: SECRET, two_factor_secret_encrypted: null, two_factor_recovery_codes: [], two_factor_last_counter: null };
+    userRow = { two_factor_enabled: true, two_factor_secret_encrypted: encryptJson(SECRET), two_factor_recovery_codes: [], two_factor_last_counter: null };
     const first = (await verifyOtpAndProvision({ email: TEST_EMAIL, token: "1", type: "email" })) as { challengeToken: string };
     const code = currentTotp(SECRET);
     await completeTwoFactorLogin(first.challengeToken, code);
@@ -105,7 +106,7 @@ describe("sign-in with 2FA enabled", () => {
   });
 
   it("refuses a wrong code and a forged challenge", async () => {
-    userRow = { two_factor_enabled: true, two_factor_secret: SECRET, two_factor_secret_encrypted: null, two_factor_recovery_codes: [] };
+    userRow = { two_factor_enabled: true, two_factor_secret_encrypted: encryptJson(SECRET), two_factor_recovery_codes: [] };
     const { challengeToken } = (await verifyOtpAndProvision({ email: TEST_EMAIL, token: "1", type: "email" })) as { challengeToken: string };
     await expect(completeTwoFactorLogin(challengeToken, "000000")).rejects.toMatchObject({ code: "unauthorized" });
     await expect(completeTwoFactorLogin("not-a-token", currentTotp(SECRET))).rejects.toMatchObject({ code: "unauthorized" });
@@ -113,7 +114,7 @@ describe("sign-in with 2FA enabled", () => {
 
   it("accepts a recovery code once and removes it", async () => {
     const { codes, hashes } = generateRecoveryCodes();
-    userRow = { two_factor_enabled: true, two_factor_secret: SECRET, two_factor_secret_encrypted: null, two_factor_recovery_codes: hashes };
+    userRow = { two_factor_enabled: true, two_factor_secret_encrypted: encryptJson(SECRET), two_factor_recovery_codes: hashes };
     const { challengeToken } = (await verifyOtpAndProvision({ email: TEST_EMAIL, token: "1", type: "email" })) as { challengeToken: string };
     await completeTwoFactorLogin(challengeToken, codes[0]!.toLowerCase());
     const saved = updates.find((u) => "two_factor_recovery_codes" in u)!.two_factor_recovery_codes as string[];
@@ -124,16 +125,16 @@ describe("sign-in with 2FA enabled", () => {
   it("disables 2FA with a recovery code and clears every secret", async () => {
     const { disableTwoFactor } = await import("../domain/two-factor.js");
     const { codes, hashes } = generateRecoveryCodes();
-    userRow = { two_factor_enabled: true, two_factor_secret: SECRET, two_factor_secret_encrypted: null, two_factor_recovery_codes: hashes };
+    userRow = { two_factor_enabled: true, two_factor_secret_encrypted: encryptJson(SECRET), two_factor_recovery_codes: hashes };
     await expect(disableTwoFactor(TEST_USER_ID, "000000")).rejects.toMatchObject({ code: "bad_request" });
     await disableTwoFactor(TEST_USER_ID, codes[3]!);
-    expect(userRow).toMatchObject({ two_factor_enabled: false, two_factor_secret: null, two_factor_secret_encrypted: null, two_factor_recovery_codes: [] });
+    expect(userRow).toMatchObject({ two_factor_enabled: false, two_factor_secret_encrypted: null, two_factor_recovery_codes: [] });
   });
 
   it("regenerates recovery codes, invalidating the old ones", async () => {
     const { regenerateRecoveryCodes } = await import("../domain/two-factor.js");
     const { hashes } = generateRecoveryCodes();
-    userRow = { two_factor_enabled: true, two_factor_secret: SECRET, two_factor_secret_encrypted: null, two_factor_recovery_codes: hashes, two_factor_last_counter: null };
+    userRow = { two_factor_enabled: true, two_factor_secret_encrypted: encryptJson(SECRET), two_factor_recovery_codes: hashes, two_factor_last_counter: null };
     const { recoveryCodes } = await regenerateRecoveryCodes(TEST_USER_ID, currentTotp(SECRET));
     expect(recoveryCodes).toHaveLength(10);
     const stored = userRow.two_factor_recovery_codes as string[];

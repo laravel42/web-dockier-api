@@ -1,5 +1,5 @@
 import QRCode from "qrcode";
-import { encryptJson, readEncryptedOr } from "../../../shared/auth/crypto.js";
+import { encryptJson, decryptJson } from "../../../shared/auth/crypto.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError } from "../../../shared/supabase/query.js";
@@ -16,7 +16,6 @@ export type TwoFactorError = InstanceType<typeof TwoFactorError>;
 
 interface TwoFactorRow {
   two_factor_enabled: boolean;
-  two_factor_secret: string | null;
   two_factor_secret_encrypted: string | null;
   two_factor_recovery_codes: unknown;
   two_factor_last_counter: number | null;
@@ -25,7 +24,7 @@ interface TwoFactorRow {
 async function loadTwoFactorRow(userId: string): Promise<TwoFactorRow> {
   const { data, error } = await supabaseAdmin
     .from("users")
-    .select("two_factor_enabled, two_factor_secret, two_factor_secret_encrypted, two_factor_recovery_codes, two_factor_last_counter")
+    .select("two_factor_enabled, two_factor_secret_encrypted, two_factor_recovery_codes, two_factor_last_counter")
     .eq("id", userId)
     .maybeSingle();
   throwOnError(error, TwoFactorError, { internalMsg: "Failed to load user" });
@@ -33,10 +32,10 @@ async function loadTwoFactorRow(userId: string): Promise<TwoFactorRow> {
   return data as TwoFactorRow;
 }
 
-/** shortcut: falls back to the plaintext column for secrets written before 0090; drop it once none is left. */
 function readSecret(row: TwoFactorRow): string | null {
+  if (!row.two_factor_secret_encrypted) return null;
   try {
-    return readEncryptedOr<string | null>(row.two_factor_secret_encrypted, row.two_factor_secret);
+    return decryptJson(row.two_factor_secret_encrypted) as string;
   } catch {
     throw new TwoFactorError("Could not read the two-factor secret. Contact an administrator.", "internal");
   }
@@ -102,7 +101,6 @@ export async function setupTwoFactor(userId: string, email: string) {
     .from("users")
     .update({
       two_factor_secret_encrypted: encryptJson(secret),
-      two_factor_secret: null,
       two_factor_last_counter: null,
       updated_at: nowIso(),
     })
@@ -148,7 +146,6 @@ export async function disableTwoFactor(userId: string, code: string) {
     .from("users")
     .update({
       two_factor_enabled: false,
-      two_factor_secret: null,
       two_factor_secret_encrypted: null,
       two_factor_recovery_codes: [],
       two_factor_last_counter: null,
