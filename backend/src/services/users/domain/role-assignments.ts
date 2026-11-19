@@ -68,8 +68,17 @@ export async function updateUserRole(
     .maybeSingle() as { data: { is_owner: boolean; role_id: string | null; roles: { system_key: string | null } | null } | null; error: PostgrestError | null };
   throwOnError(membershipLookupError, UsersError, { internalMsg: "Failed to look up membership" });
 
-  // If no active membership exists, create one (user was created without a role)
+  // No active membership: only a user this tenant created without a role gets one.
+  // Anyone else would be pulled into the tenant without consent (and could then be
+  // removed, which used to delete their whole account).
   if (!targetMembership) {
+    const { data: user, error: userError } = await supabaseAdmin
+      .from("users")
+      .select("organization_id")
+      .eq("id", userId)
+      .maybeSingle();
+    throwOnError(userError, UsersError, { internalMsg: "Failed to look up user" });
+    if (user?.organization_id !== tenantId) throw new UsersError("User not found", "not_found");
     await assignRoleToUser(userId, tenantId, roleId, resolvedAuth);
     return;
   }

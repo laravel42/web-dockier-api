@@ -8,15 +8,9 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth, getResolvedAuth } from "../../../shared/auth/auth.js";
+import { getAuth } from "../../../shared/auth/auth.js";
 import { authSessionSchema } from "../schemas.js";
-import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../../shared/schemas/responses.js";
-import {
-  addMemberToTenant,
-  removeMemberFromTenant,
-  listTenantMemberships,
-} from "../domain/membership.js";
 import {
   createTenant,
   switchTenant,
@@ -64,100 +58,9 @@ export async function registerTenantRoutes(app: FastifyInstance) {
     },
   );
 
-  // ─── List Tenant Memberships (Admin) ───────────────────────────────────────
-
-  typed.get(
-    "/auth/tenants/:tenantId/memberships",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.USER_VIEW),
-      schema: {
-        tags: ["auth"],
-        summary: "List tenant memberships",
-        params: z.object({ tenantId: z.uuid() }),
-        response: {
-          200: z.object({
-            memberships: z.array(
-              z.object({
-                id: z.uuid(),
-                userId: z.uuid(),
-                email: z.email(),
-                name: z.string(),
-                roleName: z.string(),
-                isOwner: z.boolean(),
-              }),
-            ),
-          }),
-        },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      if (auth.tenantId !== request.params.tenantId) {
-        throw app.httpErrors.forbidden("Switch to the tenant to view its memberships");
-      }
-      return { memberships: await listTenantMemberships(request.params.tenantId) };
-    },
-  );
-
-  // ─── Add Member to Tenant ──────────────────────────────────────────────────
-
-  typed.post(
-    "/auth/tenants/:tenantId/memberships",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.USER_MANAGE),
-      schema: {
-        tags: ["auth"],
-        summary: "Add existing user to tenant",
-        params: z.object({ tenantId: z.uuid() }),
-        body: z.object({
-          email: z.email(),
-          roleId: z.string().min(1).max(100),
-        }),
-        response: { 200: successResponseSchema },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      if (auth.tenantId !== request.params.tenantId) {
-        throw app.httpErrors.forbidden("Switch to the tenant before managing memberships");
-      }
-      await addMemberToTenant({
-        tenantId: auth.tenantId,
-        email: request.body.email,
-        roleId: request.body.roleId,
-        actorHierarchyLevel: getResolvedAuth(request).hierarchyLevel,
-      });
-      return { success: true as const };
-    },
-  );
-
-  // ─── Remove Member from Tenant ─────────────────────────────────────────────
-
-  typed.delete(
-    "/auth/tenants/:tenantId/memberships/:userId",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.USER_MANAGE),
-      schema: {
-        tags: ["auth"],
-        summary: "Remove a member from the tenant",
-        params: z.object({ tenantId: z.uuid(), userId: z.uuid() }),
-        response: { 200: successResponseSchema },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      if (auth.tenantId !== request.params.tenantId) {
-        throw app.httpErrors.forbidden("Switch to the tenant before managing memberships");
-      }
-      await removeMemberFromTenant({
-        tenantId: request.params.tenantId,
-        targetUserId: request.params.userId,
-        actorUserId: auth.userId,
-      });
-      return { success: true as const };
-    },
-  );
-
+  // Membership add/list/remove live in the users service (/users), which checks role
+  // hierarchy and owner protection. The copies that were here did neither: "adding"
+  // the owner demoted them, and anyone could be added by email without consent.
   // ─── Transfer Ownership ────────────────────────────────────────────────────
 
   typed.post(

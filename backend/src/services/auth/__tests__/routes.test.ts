@@ -17,7 +17,6 @@ import {
   authHeader,
   ADMIN_MEMBERSHIP,
   OWNER_MEMBERSHIP,
-  MEMBER_ROLE,
   createTestEnv,
   setupPermissionMocks as setupPerms,
 } from "../../../shared/__tests__/test-helpers.js";
@@ -60,16 +59,10 @@ vi.mock("../domain/registration.js", () => ({
 
 const mockListMembershipsForUser = vi.fn();
 const mockGetAuthenticatedUser = vi.fn();
-const mockAddMemberToTenant = vi.fn();
-const mockRemoveMemberFromTenant = vi.fn();
-const mockListTenantMemberships = vi.fn();
 
 vi.mock("../domain/membership.js", () => ({
   listMembershipsForUser: (...args: unknown[]) => mockListMembershipsForUser(...args),
   getAuthenticatedUser: (...args: unknown[]) => mockGetAuthenticatedUser(...args),
-  addMemberToTenant: (...args: unknown[]) => mockAddMemberToTenant(...args),
-  removeMemberFromTenant: (...args: unknown[]) => mockRemoveMemberFromTenant(...args),
-  listTenantMemberships: (...args: unknown[]) => mockListTenantMemberships(...args),
 }));
 
 const mockCreateTenant = vi.fn();
@@ -327,84 +320,17 @@ describe("POST /auth/tenants/:tenantId/switch", () => {
   });
 });
 
-describe("GET /auth/tenants/:tenantId/memberships", () => {
-  it("returns 403 when user is in a different tenant", async () => {
-    // Token is for TEST_TENANT_ID, but requesting OTHER_TENANT_ID
-    setupPermissionMocks({});
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/auth/tenants/${OTHER_TENANT_ID}/memberships`,
-      headers: { authorization: authHeader() },
-    });
-
-    expect(res.statusCode).toBe(403);
-  });
-
-  it("returns memberships when user has USER_VIEW permission in same tenant", async () => {
-    setupPermissionMocks({ permissions: [PERMISSIONS.USER_VIEW] });
-    mockListTenantMemberships.mockResolvedValue([
-      { id: TEST_USER_ID, userId: TEST_USER_ID, email: TEST_EMAIL, name: "Test", roleName: "Admin", isOwner: false },
-    ]);
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/auth/tenants/${TEST_TENANT_ID}/memberships`,
-      headers: { authorization: authHeader() },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json().memberships).toHaveLength(1);
+describe("removed membership routes", () => {
+  // Membership management lives in /users, which checks hierarchy and owner protection.
+  it.each([
+    ["GET", `/auth/tenants/${TEST_TENANT_ID}/memberships`],
+    ["POST", `/auth/tenants/${TEST_TENANT_ID}/memberships`],
+    ["DELETE", `/auth/tenants/${TEST_TENANT_ID}/memberships/${OTHER_TENANT_ID}`],
+  ] as const)("%s %s is gone", async (method, url) => {
+    const res = await app.inject({ method, url, headers: { authorization: authHeader() } });
+    expect(res.statusCode).toBe(404);
   });
 });
-
-describe("POST /auth/tenants/:tenantId/memberships", () => {
-  it("returns 403 without USER_MANAGE permission", async () => {
-    // Give only USER_VIEW — not USER_MANAGE
-    setupPermissionMocks({ permissions: [PERMISSIONS.USER_VIEW] });
-
-    const res = await app.inject({
-      method: "POST",
-      url: `/auth/tenants/${TEST_TENANT_ID}/memberships`,
-      headers: { authorization: authHeader() },
-      payload: { email: "new@user.com", roleId: MEMBER_ROLE.id },
-    });
-
-    expect(res.statusCode).toBe(403);
-  });
-
-  it("adds member with USER_MANAGE permission", async () => {
-    setupPermissionMocks({ permissions: Object.values(PERMISSIONS) });
-    mockAddMemberToTenant.mockResolvedValue(undefined);
-
-    const res = await app.inject({
-      method: "POST",
-      url: `/auth/tenants/${TEST_TENANT_ID}/memberships`,
-      headers: { authorization: authHeader() },
-      payload: { email: "new@user.com", roleId: MEMBER_ROLE.id },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json().success).toBe(true);
-    expect(mockAddMemberToTenant).toHaveBeenCalledOnce();
-  });
-});
-
-describe("DELETE /auth/tenants/:tenantId/memberships/:userId", () => {
-  it("returns 403 for different tenant", async () => {
-    setupPermissionMocks({});
-
-    const targetUserId = "f1a2b3c4-1234-4abc-8def-ffffffffffff";
-    const res = await app.inject({
-      method: "DELETE",
-      url: `/auth/tenants/${OTHER_TENANT_ID}/memberships/${targetUserId}`,
-      headers: { authorization: authHeader() },
-    });
-
-    expect(res.statusCode).toBe(403);
-  });
-});
-
 describe("POST /auth/tenants/:tenantId/transfer-ownership", () => {
   it("returns 403 when user is not owner", async () => {
     // Setup as non-owner

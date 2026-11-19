@@ -2,7 +2,7 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, normalizePagination, paginatedRows, type PostgrestError } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
-import { canManageRole, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
+import { canManageRole, invalidatePermissionCache, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { postgrestIlikeContains } from "../../../shared/http/security.js";
 import { logger } from "../../../shared/logger.js";
 import { nowIso } from "../../../shared/utils/time.js";
@@ -253,14 +253,35 @@ export async function removeUser(params: RemoveUserParams) {
     .eq("user_id", userId);
   throwOnError(error, UsersError, { internalMsg: "Failed to remove user" });
 
-  // Remove the user from the tenant's users table so they no longer appear in listings
-  const { error: userDeleteError } = await supabaseAdmin
-    .from("users")
-    .delete()
-    .eq("id", userId)
-    .eq("organization_id", tenantId);
+  invalidatePermissionCache(userId, tenantId);
+  await cleanUpAfterMembershipRemoval(userId, tenantId);
+}
+/**
+ * The account belongs to the person, not to this tenant: it is deleted only when
+ * no membership is left anywhere. memberships cascade from auth.users (0004), so
+ * deleting it unconditionally wiped the user's access to every other organization.
+ */
+async function cleanUpAfterMembershipRemoval(userId: string, tenantId: string): Promise<void> {
+  const { data: remaining, error } = await supabaseAdmin
+    .from("organization_memberships")
+    .select("organization_id,status")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  throwOnError(error, UsersError, { internalMsg: "Failed to check remaining memberships" });
+  // Any membership counts, active or not: deleting the account would cascade it away too.
+  if (remaining && remaining.length > 0) {
+    // Still a member elsewhere: only move their active organization off this one.
+    const next = remaining.find((m) => m.status === "active")?.organization_id ?? null;
+    const { error: moveError } = await supabaseAdmin
+      .from("users")
+      .update({ organization_id: next, updated_at: nowIso() })
+      .eq("id", userId)
+      .eq("organization_id", tenantId);
+    throwOnError(moveError, UsersError, { internalMsg: "Failed to update the user's active organization" });
+    return;
+  }
+  const { error: userDeleteError } = await supabaseAdmin.from("users").delete().eq("id", userId);
   throwOnError(userDeleteError, UsersError, { internalMsg: "Failed to remove user record" });
-
   // Remove from Supabase Auth so the email can be re-used
   const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
   if (authDeleteError) {

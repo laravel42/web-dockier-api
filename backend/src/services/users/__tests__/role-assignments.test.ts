@@ -188,11 +188,25 @@ describe("updateUserRole", () => {
         return chain;
       }
       if (table === "roles") return mockRolesTable({ data: roleRow, error: null });
+      if (table === "users") return mockRolesTable({ data: { organization_id: TEST_TENANT_ID }, error: null });
       return {};
     });
 
     await updateUserRole(TEST_USER_ID, TEST_TENANT_ID, TEST_ROLE_ID, adminAuth);
     expect(insertMock).toHaveBeenCalled();
+  });
+  it("refuses to pull in a user who belongs to another tenant", async () => {
+    const insertMock = vi.fn().mockResolvedValue({ error: null });
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "organization_memberships") {
+        return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }), insert: insertMock };
+      }
+      if (table === "users") return mockRolesTable({ data: { organization_id: "someone-elses-tenant" }, error: null });
+      if (table === "roles") return mockRolesTable({ data: { id: TEST_ROLE_ID, system_key: "member" }, error: null });
+      return {};
+    });
+    await expect(updateUserRole(TEST_USER_ID, TEST_TENANT_ID, TEST_ROLE_ID, adminAuth)).rejects.toMatchObject({ code: "not_found" });
+    expect(insertMock).not.toHaveBeenCalled();
   });
 
   it("throws forbidden when target is the organization owner", async () => {
