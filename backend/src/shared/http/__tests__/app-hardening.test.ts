@@ -46,6 +46,11 @@ describe("security response headers", () => {
     expect(res.headers["strict-transport-security"]).toBe("max-age=31536000; includeSubDomains");
   });
 
+  it("serves the OpenAPI document", async () => {
+    const res = await app.inject({ method: "GET", url: "/docs/json" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().openapi).toMatch(/^3\./);
+  });
   it("sets them on an error response too", async () => {
     const res = await app.inject({ method: "GET", url: "/__does-not-exist" });
 
@@ -54,9 +59,11 @@ describe("security response headers", () => {
   });
 
   it("leaves the swagger-ui subtree alone so its own CSP applies", async () => {
-    const res = await app.inject({ method: "GET", url: "/docs/static/index.html" });
-
-    // Whatever swagger-ui answers, the hook must not have stamped our headers.
+    // "/docs" itself: since @fastify/swagger-ui 6, /docs/static/index.html is only a redirect to it.
+    const res = await app.inject({ method: "GET", url: "/docs" });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/text\/html/);
+    // The hook must not have stamped our headers.
     expect(res.headers["x-frame-options"]).toBeUndefined();
     expect(res.headers["referrer-policy"]).toBeUndefined();
   });
