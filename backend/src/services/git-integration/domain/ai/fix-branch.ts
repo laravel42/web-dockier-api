@@ -28,32 +28,30 @@ export function sanitizeBranchName(ruleId: string): string {
   return `dockier/fix-${slug || "finding"}-${suffix}`;
 }
 
-export async function getDefaultBranch(
+/**
+ * Best-effort removal of a fix branch whose commit or PR failed, so a retry does
+ * not hit "Reference already exists" and the repo is not left with dead branches.
+ */
+export async function deleteFixBranch(
   connection: ConnectionLike,
   owner: string,
   repo: string,
-  fallback: string,
-): Promise<string> {
+  branch: string,
+): Promise<void> {
   const origin = baseUrl(connection);
-
-  if (connection.provider === "github") {
-    const res = await gitFetch(`${origin}/repos/${owner}/${repo}`, { headers: githubHeaders(connection) });
-    if (!res.ok) return fallback;
-    const body = (await res.json()) as { default_branch?: string };
-    return body.default_branch || fallback;
+  try {
+    if (connection.provider === "github") {
+      // GitHub takes the ref's slashes literally; GitLab wants the branch as one encoded segment.
+      const ref = branch.split("/").map(encodeURIComponent).join("/");
+      await gitFetch(`${origin}/repos/${owner}/${repo}/git/refs/heads/${ref}`, { method: "DELETE", headers: githubHeaders(connection) });
+    } else if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
+      const project = encodeURIComponent(`${owner}/${repo}`);
+      await gitFetch(`${origin}/api/v4/projects/${project}/repository/branches/${encodeURIComponent(branch)}`, { method: "DELETE", headers: gitlabHeaders(connection) });
+    }
+  } catch {
+    // Cleanup only; the original failure is what the caller reports.
   }
-
-  if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
-    const project = encodeURIComponent(`${owner}/${repo}`);
-    const res = await gitFetch(`${origin}/api/v4/projects/${project}`, { headers: gitlabHeaders(connection) });
-    if (!res.ok) return fallback;
-    const body = (await res.json()) as { default_branch?: string };
-    return body.default_branch || fallback;
-  }
-
-  return fallback;
 }
-
 async function getGitHubRefSha(
   connection: ConnectionLike,
   owner: string,
@@ -103,7 +101,8 @@ async function getGitHubFileSha(
     `${origin}/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`,
     { headers: githubHeaders(connection) },
   );
-  if (!res.ok) return undefined;
+  if (res.status === 404) return undefined; // new file
+  if (!res.ok) throw new Error(`Failed to read ${path}: ${connection.provider} API ${res.status}`);
   const body = (await res.json()) as { sha?: string };
   return body.sha;
 }
@@ -135,32 +134,13 @@ async function commitGitHubFile(
   }
 }
 
-async function createGitLabBranch(
-  connection: ConnectionLike,
-  owner: string,
-  repo: string,
-  branchName: string,
-  baseBranch: string,
-): Promise<void> {
-  const origin = baseUrl(connection);
-  const project = encodeURIComponent(`${owner}/${repo}`);
-  const res = await gitFetch(`${origin}/api/v4/projects/${project}/repository/branches`, {
-    method: "POST",
-    headers: gitlabHeaders(connection),
-    body: JSON.stringify({ branch: branchName, ref: baseBranch }),
-  });
-  if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { message?: string };
-    throw new Error(err.message || `Failed to create branch ${branchName}`);
-  }
-}
-
 async function commitGitLabFile(
   connection: ConnectionLike,
   owner: string,
   repo: string,
   path: string,
   branchName: string,
+  baseBranch: string,
   content: string,
   message: string,
 ): Promise<void> {
@@ -172,6 +152,8 @@ async function commitGitLabFile(
     headers: gitlabHeaders(connection),
     body: JSON.stringify({
       branch: branchName,
+      // start_branch creates the branch in the same call, so a failed commit leaves no branch behind.
+      start_branch: baseBranch,
       content,
       commit_message: message,
     }),
@@ -201,34 +183,40 @@ export async function commitFixToBranch(
   connection: ConnectionLike,
   input: CommitFixInput,
 ): Promise<CommitFixResult> {
-  const targetBranch = await getDefaultBranch(connection, input.owner, input.repo, input.baseBranch);
+  // The branch the file was read from: basing the fix on another branch would revert that branch's other changes.
+  const targetBranch = input.baseBranch;
   const fixBranch = sanitizeBranchName(input.ruleId);
 
   if (connection.provider === "github") {
     const baseSha = await getGitHubRefSha(connection, input.owner, input.repo, targetBranch);
-    await createGitHubBranch(connection, input.owner, input.repo, fixBranch, baseSha);
     const fileSha = await getGitHubFileSha(connection, input.owner, input.repo, input.filePath, targetBranch);
-    await commitGitHubFile(
-      connection,
-      input.owner,
-      input.repo,
-      input.filePath,
-      fixBranch,
-      input.fixedContent,
-      input.commitMessage,
-      fileSha,
-    );
+    await createGitHubBranch(connection, input.owner, input.repo, fixBranch, baseSha);
+    try {
+      await commitGitHubFile(
+        connection,
+        input.owner,
+        input.repo,
+        input.filePath,
+        fixBranch,
+        input.fixedContent,
+        input.commitMessage,
+        fileSha,
+      );
+    } catch (err) {
+      await deleteFixBranch(connection, input.owner, input.repo, fixBranch);
+      throw err;
+    }
     return { fixBranch, targetBranch };
   }
 
   if (connection.provider === "gitlab" || connection.provider === "gitlab_self_hosted") {
-    await createGitLabBranch(connection, input.owner, input.repo, fixBranch, targetBranch);
     await commitGitLabFile(
       connection,
       input.owner,
       input.repo,
       input.filePath,
       fixBranch,
+      targetBranch,
       input.fixedContent,
       input.commitMessage,
     );

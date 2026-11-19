@@ -175,6 +175,7 @@ export async function registerConnectionRoutes(app: FastifyInstance) {
 
       const REPO_CACHE_TTL_MS = 10 * 60 * 1000;
       const DEFAULT_REPO_LIMIT = 30;
+      const REPO_PAGE_SIZE = 100;
 
       const search = request.query.search?.trim() ?? "";
       const limit = request.query.limit ?? DEFAULT_REPO_LIMIT;
@@ -209,15 +210,15 @@ export async function registerConnectionRoutes(app: FastifyInstance) {
       if (!request.query.refresh) {
         const cachedRepos = await readFreshCache();
         if (cachedRepos) {
-          return { repos: cachedRepos.slice(0, limit), cached: true, hasMore: cachedRepos.length > limit };
+          return { repos: cachedRepos.slice(0, limit), cached: true, hasMore: cachedRepos.length > limit || cachedRepos.length >= REPO_PAGE_SIZE };
         }
       }
 
-      // Only the first page — fast. Everything beyond it is reachable via search.
-      const repos = await listRepos(conn, { perPage: limit, maxPages: 1 });
-
+      // One full provider page whatever `limit` is: caching only `limit` repos made a later,
+      // larger request read the short list as complete. Beyond it is reachable via search.
+      const repos = await listRepos(conn, { perPage: REPO_PAGE_SIZE, maxPages: 1 });
       await writeRepoListCache(request.params.connectionId, auth.tenantId, repos, log);
-      return { repos, cached: false, hasMore: repos.length >= limit };
+      return { repos: repos.slice(0, limit), cached: false, hasMore: repos.length > limit || repos.length >= REPO_PAGE_SIZE };
     },
   );
 

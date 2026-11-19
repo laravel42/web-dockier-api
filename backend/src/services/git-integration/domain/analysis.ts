@@ -207,7 +207,7 @@ export async function detectDbEngine(
 ): Promise<string | undefined> {
   try {
     const files = await getRepoFileTree(connection, ref);
-    const path = files.find((file) => file.toLowerCase().endsWith(".env.example"));
+    const path = pickManifest(files, ".env.example");
     if (!path) return undefined;
     const content = await fetchRepoFile(connection, ref, path);
     if (!content) return undefined;
@@ -265,6 +265,29 @@ export function hasRootDockerfile(files: string[]): boolean {
   return files.some((file) => file.replace(/^\.\//, "") === "Dockerfile");
 }
 
+/**
+ * The repo's own copy of a manifest: the root one, else the shallowest file with
+ * exactly that name outside vendored trees. A suffix match picked
+ * `backend/package.json` over the root one in monorepos (the tree is sorted) and
+ * matched `dev-requirements.txt` or `node_modules/x/package.json`.
+ */
+export function pickManifest(files: string[], name: string): string | undefined {
+  // Names may carry a directory (prisma/schema.prisma): match whole trailing segments.
+  const target = name.toLowerCase().split("/");
+  let best: string | undefined;
+  let bestDepth = Infinity;
+  for (const file of files) {
+    const parts = file.replace(/^\.\//, "").split("/");
+    const tail = parts.slice(-target.length).map((part) => part.toLowerCase());
+    if (tail.length !== target.length || tail.some((part, i) => part !== target[i])) continue;
+    if (parts.some((part) => part === "node_modules" || part === "vendor")) continue;
+    if (parts.length < bestDepth) {
+      best = file;
+      bestDepth = parts.length;
+    }
+  }
+  return best;
+}
 export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef): Promise<RepoAnalysisResult> {
   const files = await getRepoFileTree(connection, ref);
   const techStack = detectTechStack(files);
@@ -273,7 +296,7 @@ export async function runRepoAnalysis(connection: ConnectionLike, ref: RepoRef):
 
   const configFiles: Record<string, string> = {};
   for (const candidate of CONFIG_FILES_TO_FETCH) {
-    const path = files.find((file) => file.toLowerCase().endsWith(candidate.toLowerCase()));
+    const path = pickManifest(files, candidate);
     if (!path) continue;
     const content = await fetchRepoFile(connection, ref, path);
     if (content) configFiles[path] = content;

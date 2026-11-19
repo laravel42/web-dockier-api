@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseDbEngineFromEnvExample } from "../analysis.js";
+import { parseDbEngineFromEnvExample, pickManifest } from "../analysis.js";
 
 /**
  * Dockier never reads the user's real `.env`, so the AI used to guess the DB
@@ -57,4 +57,12 @@ describe("parseDbEngineFromEnvExample", () => {
   it("returns undefined for an empty DB_CONNECTION value", () => {
     expect(parseDbEngineFromEnvExample({ ".env.example": "DB_CONNECTION=\n" })).toBeUndefined();
   });
+});
+
+describe("pickManifest", () => {
+  const tree = ["backend/package.json", "dev-requirements.txt", "node_modules/x/package.json", "package.json", "apps/api/prisma/schema.prisma", "web/requirements.txt"];
+  it("prefers the root file over a nested one listed first", () => expect(pickManifest(tree, "package.json")).toBe("package.json"));
+  it("matches the exact name, not a suffix", () => expect(pickManifest(tree, "requirements.txt")).toBe("web/requirements.txt"));
+  it("matches a name with a directory", () => expect(pickManifest(tree, "prisma/schema.prisma")).toBe("apps/api/prisma/schema.prisma"));
+  it("ignores vendored copies", () => expect(pickManifest(["node_modules/x/package.json"], "package.json")).toBeUndefined());
 });

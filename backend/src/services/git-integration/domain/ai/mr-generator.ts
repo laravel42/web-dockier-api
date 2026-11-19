@@ -1,7 +1,7 @@
 import { fetchRepoFile, baseUrl as providerBaseUrl } from "../providers/provider-client.js";
 import type { ConnectionLike } from "../providers/provider-client.js";
 import { generateCodeFix } from "./ai-fix.js";
-import { commitFixToBranch } from "./fix-branch.js";
+import { commitFixToBranch, deleteFixBranch } from "./fix-branch.js";
 import { DomainError } from "../../../../shared/supabase/errors.js";
 import { env } from "../../../../shared/config.js";
 import { gitFetch } from "../providers/guarded-fetch.js";
@@ -217,7 +217,12 @@ async function createAiFixMergeRequest(
     ruleId: input.ruleId,
   });
 
-  return createProviderMergeRequest(connection, input, fixBranch, targetBranch, title, fix.summary);
+  try {
+    return await createProviderMergeRequest(connection, input, fixBranch, targetBranch, title, fix.summary);
+  } catch (err) {
+    await deleteFixBranch(connection, input.owner, input.repo, fixBranch);
+    throw err;
+  }
 }
 
 export async function createMergeRequest(
