@@ -1,16 +1,15 @@
 # Notifications API
-
 ## Endpoints
-
 - `POST /notifications/channels`
 - `GET /notifications/channels`
 - `PUT /notifications/channels/:channelId/toggle`
 - `DELETE /notifications/channels/:channelId`
-- `POST /notifications/send`
 - `GET /notifications`
 - `PUT /notifications/:notificationId/read`
-
+- `PUT /notifications/mark-all-read`
 ## Notes
-
-- In-app notifications are always persisted in `notifications`.
-- Slack/webhook delivery runs best-effort per configured channel.
+- Notifications are produced only by domain events (deploys, scans); there is no endpoint to send free text.
+- In-app notifications are persisted in `notifications`, per tenant (read state is shared by its members).
+- Slack/webhook delivery runs best-effort per configured channel; only a 2xx response counts as delivered.
+- A Slack channel needs an `https://hooks.slack.com/...` URL and a webhook channel an `https://` URL; neither may resolve to a private or internal address.
+- Channel config is stored encrypted, and the list returns webhook URLs reduced to their origin (`https://hooks.slack.com/•••`).

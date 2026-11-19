@@ -44,14 +44,4 @@ export const notificationsApi = {
   markAllRead: () =>
     request<{ success: boolean; updated: number }>("/notifications/mark-all-read", { method: "PUT" }),
 
-  send: (data: {
-    userId: string;
-    title: string;
-    message: string;
-    channels?: string[];
-  }) =>
-    request<{ success: true }>("/notifications/send", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
 };

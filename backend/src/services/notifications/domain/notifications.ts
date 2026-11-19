@@ -4,6 +4,8 @@ import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapList, paginatedQuery, deleteOrThrow } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { sendEmailNotification } from "./email-dispatch.js";
+import { encryptJson, decryptJson } from "../../../shared/auth/crypto.js";
+import { guardedFetch } from "../../../shared/http/guarded-fetch.js";
 import { notificationMetadataSchema, type NotificationMetadata } from "../schemas.js";
 
 export const NotificationsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal">("NotificationsError");
@@ -105,6 +107,69 @@ export async function ensureDefaultInAppChannel(tenantId: string) {
   });
 }
 
+// ─── Channel config ──────────────────────────────────────────────────────────
+type ChannelConfig = Record<string, string>;
+/**
+ * A Slack webhook URL is a credential (anyone holding it can post to the channel),
+ * and a custom webhook URL often carries a token. So the config is stored with
+ * encryptJson and never sent back in full.
+ *
+ * shortcut: rows written before encryption hold plain JSON ("{...}"); read both
+ * until a backfill re-saves them.
+ */
+function readChannelConfig(raw: unknown): ChannelConfig {
+  if (raw && typeof raw === "object") return raw as ChannelConfig;
+  if (typeof raw !== "string" || raw === "") return {};
+  try {
+    return (raw.trimStart().startsWith("{") ? JSON.parse(raw) : decryptJson(raw)) as ChannelConfig;
+  } catch {
+    // An unreadable config (rotated key, corrupt row) sends nothing and lists as empty.
+    return {};
+  }
+}
+/** What the API returns: the URL's origin only, so a member can tell channels apart but not reuse them. */
+function maskChannelConfig(config: ChannelConfig): ChannelConfig {
+  const masked: ChannelConfig = { ...config };
+  for (const key of ["webhookUrl", "url"]) {
+    const value = masked[key];
+    if (!value) continue;
+    try {
+      masked[key] = `${new URL(value).origin}/•••`;
+    } catch {
+      masked[key] = "•••";
+    }
+  }
+  return masked;
+}
+function assertHttpsUrl(value: string | undefined, label: string, host?: string): void {
+  let url: URL;
+  try {
+    url = new URL(value ?? "");
+  } catch {
+    throw new NotificationsError(`${label} must be a valid https:// URL`, "bad_request");
+  }
+  if (url.protocol !== "https:" || url.username || url.password) {
+    throw new NotificationsError(`${label} must be an https:// URL without credentials`, "bad_request");
+  }
+  if (host && url.hostname !== host) throw new NotificationsError(`${label} must be a ${host} URL`, "bad_request");
+}
+function assertValidChannelConfig(type: ChannelType, config: ChannelConfig): void {
+  if (type === "slack") assertHttpsUrl(config.webhookUrl, "Slack webhook URL", "hooks.slack.com");
+  if (type === "webhook") assertHttpsUrl(config.url, "Webhook URL");
+  if (type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.email ?? "")) {
+    throw new NotificationsError("Enter a valid email address", "bad_request");
+  }
+}
+/** POST to a tenant-supplied URL through the internal-address guard; only a 2xx counts as delivered. */
+async function postJson(url: string, body: unknown): Promise<boolean> {
+  const res = await guardedFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeoutMs: 5000,
+  });
+  return res.ok;
+}
 export interface CreateChannelParams {
   tenantId: string;
   type: ChannelType;
@@ -118,13 +183,14 @@ export async function createChannel(params: CreateChannelParams) {
     throw new NotificationsError("The in-app channel is included by default and cannot be added manually", "bad_request");
   }
 
+  assertValidChannelConfig(type, config);
   const id = randomUUID();
   const now = nowIso();
   const payload = {
     id,
     organization_id: tenantId,
     type,
-    config: JSON.stringify(config),
+    config: encryptJson(config),
     enabled: true,
     created_at: now,
   };
@@ -133,7 +199,7 @@ export async function createChannel(params: CreateChannelParams) {
     internalMsg: "Failed to create channel",
     duplicateMsg: "A channel of this type already exists",
   });
-  return { id, type, config, enabled: true, createdAt: now };
+  return { id, type, config: maskChannelConfig(config), enabled: true, createdAt: now };
 }
 
 export async function listChannels(tenantId: string) {
@@ -148,7 +214,7 @@ export async function listChannels(tenantId: string) {
   return rows.map((row) => ({
     id: row.id,
     type: row.type as ChannelType,
-    config: (typeof row.config === "string" ? JSON.parse(row.config) : row.config) as Record<string, string>,
+    config: maskChannelConfig(readChannelConfig(row.config)),
     enabled: row.enabled,
     createdAt: row.created_at,
   }));
@@ -232,42 +298,24 @@ export async function sendNotification(params: SendNotificationParams): Promise<
   // 3. Dispatch external notifications concurrently with timeouts
   const sendPromises = channels.map(async (channel) => {
     if (filterChannels && !filterChannels.includes(channel.type)) return false;
-    const config = typeof channel.config === "string" ? JSON.parse(channel.config) : channel.config;
+    const config = readChannelConfig(channel.config);
     try {
-      // AbortSignal.timeout rather than a shared AbortController: the manual
-      // controller's clearTimeout only ran on the success paths, so a rejected
-      // fetch left the timer pending, and the email branch was wrapped in a
-      // timeout it never passed to anything.
-      if (channel.type === "slack" && config?.webhookUrl) {
-        await fetch(config.webhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: `*${title}*\n${message}` }),
-          signal: AbortSignal.timeout(5000),
-        });
-        return true;
-      } else if (channel.type === "email" && config?.email) {
-        return await sendEmailNotification({
-          to: config.email,
-          title,
-          message,
-          idempotencyKey: `notification/${tenantId}/${channel.id}/${title}`,
-        });
-      } else if (channel.type === "webhook" && config?.url) {
-        await fetch(config.url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, message, tenantId }),
-          signal: AbortSignal.timeout(5000),
-        });
-        return true;
+      if (channel.type === "slack" && config.webhookUrl) {
+        return await postJson(config.webhookUrl, { text: `*${title}*\n${message}` });
+      }
+      if (channel.type === "email" && config.email) {
+        // No idempotency key: one keyed on the title made Resend drop every later
+        // email with the same title (two scans of one repo) for 24 hours.
+        return await sendEmailNotification({ to: config.email, title, message });
+      }
+      if (channel.type === "webhook" && config.url) {
+        return await postJson(config.url, { title, message, tenantId });
       }
     } catch {
-      // Ignore failures to allow other channels to succeed
+      // Ignore failures (timeout, refused internal address) to allow other channels to succeed
     }
     return false;
   });
-
   const results = await Promise.all(sendPromises);
   const sent = results.filter(Boolean).length + (inAppEnabled && wantsInApp ? 1 : 0);
 

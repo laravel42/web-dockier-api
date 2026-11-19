@@ -6,7 +6,6 @@ import {
   channelSchema,
   channelTypeSchema,
   listChannelsResponseSchema,
-  sendNotificationResponseSchema,
   listNotificationsResponseSchema,
 } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
@@ -16,7 +15,6 @@ import {
   listChannels,
   toggleChannel,
   deleteChannel,
-  sendNotification,
   listNotifications,
   markNotificationRead,
   markAllNotificationsRead,
@@ -103,32 +101,8 @@ export async function registerNotificationsRoutes(app: FastifyInstance) {
     },
   );
 
-  typed.post(
-    "/notifications/send",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.NOTIFICATION_SEND),
-      schema: {
-        tags: ["notifications"],
-        summary: "Send notification to enabled channels",
-        body: z.object({
-          title: z.string().min(1).max(200),
-          message: z.string().min(1).max(5000),
-          channels: z.array(channelTypeSchema).optional(),
-        }),
-        response: { 200: sendNotificationResponseSchema },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      return await sendNotification({
-        tenantId: auth.tenantId,
-        title: request.body.title,
-        message: request.body.message,
-        channels: request.body.channels,
-      });
-    },
-  );
-
+  // No free-text send route: it mailed arbitrary content from Dockier's sender to any
+  // configured address. Notifications come only from domain events (deploys, scans).
   typed.get(
     "/notifications",
     {

@@ -59,10 +59,6 @@ export const listChannelsResponseSchema = z.object({
   channels: z.array(channelSchema),
 });
 
-export const sendNotificationResponseSchema = z.object({
-  sent: z.number().int().nonnegative(),
-});
-
 export const listNotificationsResponseSchema = z.object({
   notifications: z.array(notificationSchema),
   pagination: paginationMetaSchema,

@@ -21,7 +21,6 @@ export async function sendEmailNotification(params: {
   to: string;
   title: string;
   message: string;
-  idempotencyKey?: string;
 }): Promise<boolean> {
   const resend = getResendClient();
   if (!resend) return false;
@@ -35,7 +34,6 @@ export async function sendEmailNotification(params: {
       html: `<p>${escapeHtml(params.message)}</p>`,
       text: params.message,
     },
-    params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : undefined,
   );
 
   return !error;
