@@ -13,6 +13,7 @@
  * this module composes them behind one interface.
  */
 
+import { urlSeg } from "./provider-client.js";
 import type { ConnectionLike } from "./provider-client.js";
 import {
   listCommits as ghListCommits,
@@ -24,7 +25,6 @@ import {
   listPullRequests as ghListPullRequests,
   createIssue as ghCreateIssue,
   closeIssue as ghCloseIssue,
-  createBranch as ghCreateBranch,
   countListItems as ghCountListItems,
 } from "./github-client.js";
 import {
@@ -160,8 +160,6 @@ export interface GitProviderClient {
   createIssue?(input: IssueInput): Promise<IssueResult>;
   /** Close an issue. Present only on providers that support issue management. */
   closeIssue?(params: { owner: string; repo: string; issueNumber: number }): Promise<void>;
-  /** Create a branch from a base branch. Present only on providers that support branch creation. */
-  createBranch?(params: { owner: string; repo: string; branchName: string; baseBranch?: string }): Promise<{ ref: string; sha: string }>;
 }
 
 // ─── Shared helpers ─────────────────────────────────────────────────────────────
@@ -210,7 +208,7 @@ class GitHubProvider implements GitProviderClient {
 
   async getRepoStats(query: RepoQuery): Promise<RepoStats> {
     const { owner, repo, branch } = query;
-    const path = `/repos/${owner}/${repo}`;
+    const path = `/repos/${urlSeg(owner)}/${urlSeg(repo)}`;
     const [repoInfo, commits, contributors, languages, commitCount, contributorCount] = await Promise.all([
       ghGetRepoInfo(this.conn, { owner, repo }),
       ghListCommits(this.conn, { owner, repo, branch, limit: 20 }).catch(() => [] as RepoCommit[]),
@@ -255,9 +253,6 @@ class GitHubProvider implements GitProviderClient {
     return ghCloseIssue(this.conn, params);
   }
 
-  createBranch(params: { owner: string; repo: string; branchName: string; baseBranch?: string }): Promise<{ ref: string; sha: string }> {
-    return ghCreateBranch(this.conn, params);
-  }
 }
 
 class GitLabProvider implements GitProviderClient {

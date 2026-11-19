@@ -8,8 +8,8 @@ import { z } from "zod";
 import { getAuth } from "../../../shared/auth/auth.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
-import { analyzeSensitiveDataFromText, detectDbEngine, runRepoAnalysis, type SensitiveColumn } from "../domain/analysis.js";
-import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
+import { analyzeSensitiveDataFromText, detectDbEngine, runRepoAnalysis } from "../domain/analysis.js";
+import { getRepoFileTree } from "../domain/providers/provider-client.js";
 import { detectMultiService } from "../domain/multi-service.js";
 import { analyzeComposeRepo } from "../domain/compose-analysis.js";
 import { resolveRepoFaviconDataUrl, isRepoFaviconCacheValid, isValidFaviconDataUrl, REPO_FAVICON_RESOLVER_VERSION, type RepoFaviconCacheEntry } from "../domain/repo-favicon.js";
@@ -96,62 +96,6 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         result: stack,
       }, log);
       return { stack, cached: false };
-    },
-  );
-
-  typed.get(
-    "/git/connections/:connectionId/sensitive-data",
-    {
-      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "git-sensitive" })],
-      handlerTimeout: 45_000,
-      schema: {
-        tags: ["git-integration"],
-        summary: "Scan repository for sensitive schema fields",
-        params: z.object({ connectionId: z.uuid() }),
-        querystring: z.object({ owner: z.string(), repo: z.string(), branch: z.string().optional() }),
-        response: {
-          200: z.object({
-            sensitiveData: z.array(
-              z.object({
-                entity: z.string(),
-                field: z.string(),
-                sensitivity: z.enum(["personal", "sensitive", "secret"]),
-                reason: z.string(),
-              }),
-            ),
-          }),
-        },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
-      const branch = request.query.branch || "main";
-      const files = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
-      const schemaFiles = files.filter((file) => /migrations?.*\.sql$|schema\.sql$/i.test(file)).slice(0, 40);
-      const BATCH_SIZE = 8;
-      const contents: string[] = [];
-      for (let i = 0; i < schemaFiles.length; i += BATCH_SIZE) {
-        const batch = schemaFiles.slice(i, i + BATCH_SIZE);
-        const results = await Promise.all(
-          batch.map((file) => fetchRepoFile(conn, { owner: request.query.owner, repo: request.query.repo, branch }, file)),
-        );
-        for (const content of results) {
-          if (content) contents.push(content);
-        }
-      }
-      const schemaText = contents.join("\n");
-      const analyzed = analyzeSensitiveDataFromText(schemaText);
-      return {
-        sensitiveData: analyzed.tables.flatMap((table) =>
-          table.columns.map((column: SensitiveColumn) => ({
-            entity: table.name,
-            field: column.name,
-            sensitivity: column.category,
-            reason: column.reason,
-          })),
-        ),
-      };
     },
   );
 

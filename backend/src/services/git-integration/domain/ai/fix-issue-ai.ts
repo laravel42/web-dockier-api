@@ -9,6 +9,7 @@
  * 5. Create a branch, commit the changes, open a PR
  */
 
+import { urlSeg } from "../providers/provider-client.js";
 import type { ConnectionLike, RepoRef } from "../providers/provider-client.js";
 import { fetchRepoFile, getRepoFileTree, baseUrl as providerBaseUrl } from "../providers/provider-client.js";
 import { logger } from "../../../../shared/logger.js";
@@ -16,6 +17,7 @@ import { getErrMsg } from "../../../../shared/utils/error-message.js";
 import { callOpenAIChat } from "./openai-client.js";
 import { gitFetch } from "../providers/guarded-fetch.js";
 import { deleteFixBranch } from "./fix-branch.js";
+import { isSecretFilePath } from "./secret-files.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -94,7 +96,7 @@ async function getFileTreeWithShas(
       Accept: "application/vnd.github.v3+json",
     };
     const res = await gitFetch(
-      `${origin}/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+      `${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
       { headers },
     );
     if (!res.ok) {
@@ -137,7 +139,7 @@ async function fetchBlobByShaWithError(
     Accept: "application/vnd.github.v3+json",
   };
 
-  const url = `${origin}/repos/${owner}/${repo}/git/blobs/${sha}`;
+  const url = `${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/blobs/${sha}`;
 
   try {
     const res = await gitFetch(url, { headers });
@@ -473,13 +475,13 @@ async function commitMultipleFiles(
     };
 
     // Get the base branch SHA
-    const refRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(baseBranch)}`, { headers });
+    const refRes = await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/ref/heads/${encodeURIComponent(baseBranch)}`, { headers });
     if (!refRes.ok) throw new Error(`Failed to resolve branch ${baseBranch}`);
     const refData = (await refRes.json()) as { object: { sha: string } };
     const baseSha = refData.object.sha;
 
     // Get the base tree
-    const commitRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/commits/${baseSha}`, { headers });
+    const commitRes = await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/commits/${baseSha}`, { headers });
     if (!commitRes.ok) throw new Error("Failed to get base commit");
     const commitData = (await commitRes.json()) as { tree: { sha: string } };
     const baseTreeSha = commitData.tree.sha;
@@ -487,7 +489,7 @@ async function commitMultipleFiles(
     // Create blobs for each file
     const treeEntries: Array<{ path: string; mode: string; type: string; sha: string }> = [];
     for (const fix of fixes) {
-      const blobRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/blobs`, {
+      const blobRes = await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/blobs`, {
         method: "POST",
         headers,
         body: JSON.stringify({ content: fix.content, encoding: "utf-8" }),
@@ -498,7 +500,7 @@ async function commitMultipleFiles(
     }
 
     // Create tree
-    const treeRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/trees`, {
+    const treeRes = await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/trees`, {
       method: "POST",
       headers,
       body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries }),
@@ -507,7 +509,7 @@ async function commitMultipleFiles(
     const treeData = (await treeRes.json()) as { sha: string };
 
     // Create commit
-    const newCommitRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/commits`, {
+    const newCommitRes = await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/commits`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -520,7 +522,7 @@ async function commitMultipleFiles(
     const newCommitData = (await newCommitRes.json()) as { sha: string };
 
     // Create the branch ref
-    const createRefRes = await gitFetch(`${origin}/repos/${owner}/${repo}/git/refs`, {
+    const createRefRes = await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/git/refs`, {
       method: "POST",
       headers,
       body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: newCommitData.sha }),
@@ -582,7 +584,7 @@ async function createPullRequest(
       "Content-Type": "application/json",
     };
 
-    const res = await gitFetch(`${origin}/repos/${owner}/${repo}/pulls`, {
+    const res = await gitFetch(`${origin}/repos/${urlSeg(owner)}/${urlSeg(repo)}/pulls`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -653,7 +655,10 @@ export async function planIssueFix(
 
   // 1. Fetch repo file tree (with SHAs for direct blob access)
   const ref: RepoRef = { owner, repo, branch: baseBranch };
-  const { fileTree, blobShaMap } = await getFileTreeWithShas(connection, owner, repo, baseBranch);
+  const tree = await getFileTreeWithShas(connection, owner, repo, baseBranch);
+  // Secret files are dropped from the tree, so they can be neither mentioned, picked nor read into a prompt.
+  const fileTree = tree.fileTree.filter((path) => !isSecretFilePath(path));
+  const { blobShaMap } = tree;
   logger.info(`[AI-FixIssue] File tree has ${fileTree.length} entries (first 5: ${fileTree.slice(0, 5).join(", ")})`);
   logger.info(`[AI-FixIssue] Blob SHA map has ${blobShaMap.size} entries`);
   if (fileTree.length === 0) {

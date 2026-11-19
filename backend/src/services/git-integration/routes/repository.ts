@@ -9,7 +9,7 @@ import { getAuth } from "../../../shared/auth/auth.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
-import { fetchRepoFile, getRepoFileTree } from "../domain/providers/provider-client.js";
+import { fetchRepoFile } from "../domain/providers/provider-client.js";
 import { getErrMsg } from "../../../shared/utils/error-message.js";
 import { getGitProvider, type RepoStats } from "../domain/providers/git-provider.js";
 import { cacheFreshSince, parseJsonField, writeRepoCache } from "../domain/cache.js";
@@ -60,43 +60,6 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
     },
   );
 
-  typed.post(
-    "/git/connections/:connectionId/pull",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
-      schema: {
-        tags: ["git-integration"],
-        summary: "Fetch latest commits as pull preview",
-        params: z.object({ connectionId: z.uuid() }),
-        body: z.object({
-          owner: z.string(),
-          repo: z.string(),
-          branch: z.string().default("main"),
-          currentHash: z.string().optional(),
-        }),
-        response: { 200: z.object({ log: z.array(z.string()) }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
-      const branch = request.body.branch || "main";
-      const log: string[] = [`$ git pull origin ${branch}`, `From ${conn.endpoint || "remote"}:${request.body.owner}/${request.body.repo}`];
-      const commits = await getGitProvider(conn).listCommits({
-        owner: request.body.owner,
-        repo: request.body.repo,
-        branch,
-        limit: 10,
-      });
-      if (commits.length === 0 || (request.body.currentHash && commits[0].hash === request.body.currentHash)) {
-        log.push("Already up to date.");
-      } else {
-        for (const commit of commits) log.push(`${commit.shortHash} ${commit.message}`);
-      }
-      return { log };
-    },
-  );
-
   typed.get(
     "/git/connections/:connectionId/recent-commits",
     {
@@ -135,28 +98,6 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
       const limit = request.query.limit ?? 5;
       const commits = await getGitProvider(conn).listCommits({ owner: request.query.owner, repo: request.query.repo, branch, limit });
       return { commits };
-    },
-  );
-
-  typed.get(
-    "/git/connections/:connectionId/repo-tree",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
-      schema: {
-        tags: ["git-integration"],
-        summary: "Get repository file tree",
-        params: z.object({ connectionId: z.uuid() }),
-        querystring: z.object({ owner: z.string(), repo: z.string(), branch: z.string().optional() }),
-        response: { 200: z.object({ files: z.array(z.object({ path: z.string(), type: z.enum(["file", "dir"]), size: z.number() })) }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
-      const branch = request.query.branch || "main";
-      const tree = await getRepoFileTree(conn, { owner: request.query.owner, repo: request.query.repo, branch });
-      const files = tree.map((path) => ({ path, type: "file" as const, size: 0 }));
-      return { files };
     },
   );
 
@@ -387,39 +328,6 @@ export async function registerRepositoryRoutes(app: FastifyInstance) {
         issueNumber: request.params.issueNumber,
       });
       return { success: true };
-    },
-  );
-
-  typed.post(
-    "/git/connections/:connectionId/branches",
-    {
-      preHandler: [app.requirePermission(PERMISSIONS.SCAN_CREATE_MR), tenantRateLimit({ max: 10, windowMs: 60_000, prefix: "git-create-branch" })],
-      schema: {
-        tags: ["git-integration"],
-        summary: "Create a new branch from a base branch",
-        params: z.object({ connectionId: z.uuid() }),
-        body: z.object({
-          owner: z.string(),
-          repo: z.string(),
-          branchName: z.string().min(1),
-          baseBranch: z.string().optional(),
-        }),
-        response: { 200: z.object({ ref: z.string(), sha: z.string() }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
-      const provider = getGitProvider(conn);
-      if (!provider.createBranch) {
-        throw app.httpErrors.notImplemented(`Branch creation not supported for provider: ${conn.provider}`);
-      }
-      return await provider.createBranch({
-        owner: request.body.owner,
-        repo: request.body.repo,
-        branchName: request.body.branchName,
-        baseBranch: request.body.baseBranch,
-      });
     },
   );
 

@@ -188,22 +188,3 @@ export async function updateConnection(params: UpdateConnectionParams) {
   };
 }
 
-/**
- * Parse a repo URL into owner/repo components.
- */
-export function parseRepoUrl(repoUrl: string): { owner: string; repo: string } | null {
-  const normalized = repoUrl.replace(/\.git$/, "");
-  const sshMatch = normalized.match(/^git@[^:]+:(.+)\/([^/]+)$/);
-  if (sshMatch) return { owner: sshMatch[1], repo: sshMatch[2] };
-  try {
-    const url = new URL(normalized);
-    // Last segment is the repo, the rest the owner: GitLab subgroups nest (group/sub/repo).
-    const parts = url.pathname.split("/-/")[0]!.split("/").filter(Boolean);
-    if (parts.length >= 2) return { owner: parts.slice(0, -1).join("/"), repo: parts[parts.length - 1]! };
-    return null;
-  } catch {
-    const parts = normalized.split("/");
-    if (parts.length >= 2) return { owner: parts[parts.length - 2], repo: parts[parts.length - 1] };
-    return null;
-  }
-}

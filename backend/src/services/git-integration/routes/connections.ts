@@ -15,7 +15,6 @@ import {
   listConnections,
   deleteConnection,
   updateConnection,
-  parseRepoUrl,
 } from "../domain/connections.js";
 import { listBranches, listRepos, SEARCH_MAX_PAGES } from "../domain/providers/provider-client.js";
 import { parseJsonField, writeRepoListCache } from "../domain/cache.js";
@@ -242,25 +241,4 @@ export async function registerConnectionRoutes(app: FastifyInstance) {
     },
   );
 
-  typed.get(
-    "/git/connections/:connectionId/branches",
-    {
-      preHandler: app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW),
-      schema: {
-        tags: ["git-integration"],
-        summary: "List branches for configured repo URL",
-        params: z.object({ connectionId: z.uuid() }),
-        response: { 200: z.object({ branches: z.array(z.string()) }) },
-      },
-    },
-    async (request) => {
-      const auth = getAuth(request);
-      const conn = await requireConnection(request.params.connectionId, auth.tenantId);
-      if (!conn.repo_url) throw app.httpErrors.preconditionFailed("No repo URL configured");
-      const parsed = parseRepoUrl(conn.repo_url);
-      if (!parsed) throw app.httpErrors.badRequest("Could not parse owner/repo from URL");
-      const branches = await listBranches(conn, { owner: parsed.owner, repo: parsed.repo, branch: "main" });
-      return { branches };
-    },
-  );
 }

@@ -9,6 +9,7 @@
  * (which handles cross-provider abstractions like listRepos, listBranches, etc.).
  */
 
+import { urlSeg } from "./provider-client.js";
 import type { ConnectionLike } from "./provider-client.js";
 import { authHeaders, baseUrl } from "./provider-client.js";
 import { DomainError } from "../../../../shared/supabase/errors.js";
@@ -159,7 +160,7 @@ async function getCommitStats(
   sha: string,
 ): Promise<{ additions: number; deletions: number }> {
   try {
-    const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/commits/${sha}`, { headers });
+    const res = await gitFetch(`${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}/commits/${sha}`, { headers });
     if (!res.ok) return { additions: 0, deletions: 0 };
     const data = (await res.json()) as { stats?: { additions?: number; deletions?: number } };
     return { additions: data.stats?.additions ?? 0, deletions: data.stats?.deletions ?? 0 };
@@ -181,7 +182,7 @@ export async function listCommits(
   const { owner, repo, branch, limit, includeStats } = params;
 
   const res = await gitFetch(
-    `${baseUrl}/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${limit}`,
+    `${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}/commits?sha=${encodeURIComponent(branch)}&per_page=${limit}`,
     { headers },
   );
   assertOk(res, `listCommits ${owner}/${repo}`);
@@ -241,7 +242,7 @@ export async function getRepoInfo(
   const headers = getHeaders(connection);
   const { owner, repo } = params;
 
-  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}`, { headers });
+  const res = await gitFetch(`${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}`, { headers });
   assertOk(res, `getRepoInfo ${owner}/${repo}`);
 
   const data = (await res.json()) as GitHubRepoInfoApiItem;
@@ -265,7 +266,7 @@ export async function getLanguages(
   const headers = getHeaders(connection);
   const { owner, repo } = params;
 
-  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/languages`, { headers });
+  const res = await gitFetch(`${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}/languages`, { headers });
   if (!res.ok) return {};
 
   const languageData = (await res.json()) as Record<string, number>;
@@ -291,7 +292,7 @@ async function getContributorStats(
   host: string,
 ): Promise<GitHubContributor[] | null> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/stats/contributors`, { headers });
+    const res = await gitFetch(`${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}/stats/contributors`, { headers });
     if (res.status === 202) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       continue;
@@ -342,7 +343,7 @@ export async function getContributors(
     return stats.sort((a, b) => b.commits - a.commits).slice(0, limit);
   }
 
-  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/contributors?per_page=${limit}`, { headers });
+  const res = await gitFetch(`${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}/contributors?per_page=${limit}`, { headers });
   if (!res.ok || res.status === 204) return [];
 
   const data = (await res.json()) as GitHubContributorApiItem[];
@@ -385,7 +386,7 @@ export async function listIssues(
   const { owner, repo, limit = 10 } = params;
 
   const res = await gitFetch(
-    `${baseUrl}/repos/${owner}/${repo}/issues?state=open&per_page=${limit}&sort=created&direction=desc`,
+    `${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}/issues?state=open&per_page=${limit}&sort=created&direction=desc`,
     { headers },
   );
   if (res.status === 410) return []; // issues disabled on the repo
@@ -422,7 +423,7 @@ export async function listPullRequests(
   const { owner, repo, limit = 10 } = params;
 
   const res = await gitFetch(
-    `${baseUrl}/repos/${owner}/${repo}/pulls?state=open&per_page=${limit}&sort=created&direction=desc`,
+    `${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}/pulls?state=open&per_page=${limit}&sort=created&direction=desc`,
     { headers },
   );
   assertOk(res, `listPullRequests ${owner}/${repo}`);
@@ -451,7 +452,7 @@ export async function getCollaborators(
   const headers = getHeaders(connection);
   const { owner, repo } = params;
 
-  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/collaborators?per_page=100`, { headers });
+  const res = await gitFetch(`${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}/collaborators?per_page=100`, { headers });
   if (res.status === 403) return []; // listing collaborators needs push access, which a read-only token lacks
   assertOk(res, `getCollaborators ${owner}/${repo}`);
 
@@ -475,7 +476,7 @@ export async function createIssue(
   const headers = getHeaders(connection);
   const { owner, repo, title, body, assignee } = params;
 
-  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/issues`, {
+  const res = await gitFetch(`${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}/issues`, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -505,7 +506,7 @@ export async function closeIssue(
   const headers = getHeaders(connection);
   const { owner, repo, issueNumber } = params;
 
-  const res = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/issues/${issueNumber}`, {
+  const res = await gitFetch(`${baseUrl}/repos/${urlSeg(owner)}/${urlSeg(repo)}/issues/${issueNumber}`, {
     method: "PATCH",
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ state: "closed" }),
@@ -513,36 +514,3 @@ export async function closeIssue(
   assertOk(res, `closeIssue ${owner}/${repo}#${issueNumber}`);
 }
 
-/**
- * Create a branch from a given base (defaults to the repo's default branch HEAD).
- */
-export async function createBranch(
-  connection: ConnectionLike,
-  params: { owner: string; repo: string; branchName: string; baseBranch?: string },
-): Promise<{ ref: string; sha: string }> {
-  const baseUrl = getBaseUrl(connection);
-  const headers = getHeaders(connection);
-  const { owner, repo, branchName, baseBranch } = params;
-
-  // Get the SHA of the base branch (default: main)
-  const base = baseBranch || "main";
-  const refRes = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/git/ref/heads/${base}`, {
-    headers,
-  });
-  assertOk(refRes, `getBranchRef ${owner}/${repo}:${base}`);
-  const refData = (await refRes.json()) as { object: { sha: string } };
-  const sha = refData.object.sha;
-
-  // Create the new branch
-  const createRes = await gitFetch(`${baseUrl}/repos/${owner}/${repo}/git/refs`, {
-    method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      ref: `refs/heads/${branchName}`,
-      sha,
-    }),
-  });
-  assertOk(createRes, `createBranch ${owner}/${repo}:${branchName}`);
-  const createData = (await createRes.json()) as { ref: string; object: { sha: string } };
-  return { ref: createData.ref, sha: createData.object.sha };
-}

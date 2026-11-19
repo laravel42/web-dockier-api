@@ -1,7 +1,9 @@
 import { fetchRepoFile, baseUrl as providerBaseUrl } from "../providers/provider-client.js";
+import { urlSeg } from "../providers/provider-client.js";
 import type { ConnectionLike } from "../providers/provider-client.js";
 import { generateCodeFix } from "./ai-fix.js";
 import { commitFixToBranch, deleteFixBranch } from "./fix-branch.js";
+import { isSecretFilePath } from "./secret-files.js";
 import { DomainError } from "../../../../shared/supabase/errors.js";
 import { env } from "../../../../shared/config.js";
 import { gitFetch } from "../providers/guarded-fetch.js";
@@ -120,7 +122,7 @@ async function createProviderMergeRequest(
       "Content-Type": "application/json",
     };
     const origin = baseUrl(connection);
-    const createRes = await gitFetch(`${origin}/repos/${input.owner}/${input.repo}/pulls`, {
+    const createRes = await gitFetch(`${origin}/repos/${urlSeg(input.owner)}/${urlSeg(input.repo)}/pulls`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -183,6 +185,12 @@ async function createAiFixMergeRequest(
 ): Promise<MergeRequestResult> {
   if (!options.openAiApiKey) {
     throw new DomainError("OpenAI API key is not configured", "precondition_failed");
+  }
+  if (isSecretFilePath(input.filePath)) {
+    throw new DomainError(
+      `${input.filePath} holds secrets, so it is not sent to the AI. Remove the secret from the repository and rotate it instead.`,
+      "bad_request",
+    );
   }
 
   const fileContent = await fetchRepoFile(connection, {

@@ -60,3 +60,17 @@ describe("cacheFreshSince", () => {
     expect(cacheFreshSince("stats_cache", now)).toBe(new Date(now - CACHE_TTL_MS.stats_cache).toISOString());
   });
 });
+
+describe("fetchRepoFile size cap", () => {
+  it("treats a file over the cap as missing, even without a content-length", async () => {
+    const { MAX_REPO_FILE_BYTES } = await import("../providers/provider-client.js");
+    const big = new Uint8Array(MAX_REPO_FILE_BYTES + 1);
+    const stream = new ReadableStream({ start(c) { c.enqueue(big); c.close(); } });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(stream, { status: 200 })));
+    await expect(fetchRepoFile(github, ref, "big.bin")).resolves.toBeNull();
+  });
+  it("reads a file under the cap", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("hello", { status: 200 })));
+    await expect(fetchRepoFile(github, ref, "a.txt")).resolves.toBe("hello");
+  });
+});
