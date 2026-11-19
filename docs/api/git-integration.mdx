@@ -6,19 +6,14 @@
 - `GET /git/connections`
 - `DELETE /git/connections/:connectionId`
 - `PUT /git/connections/:connectionId`
-- `GET /git/connections/:connectionId/scan-auth`
 - `GET /git/connections/:connectionId/repos`
 - `GET /git/connections/:connectionId/repo-branches`
-- `GET /git/connections/:connectionId/branches`
 - `POST /git/connections/:connectionId/issues`
-- `POST /git/connections/:connectionId/pull`
 - `GET /git/connections/:connectionId/recent-commits`
-- `GET /git/connections/:connectionId/repo-tree`
 - `GET /git/connections/:connectionId/file-content`
 - `GET /git/connections/:connectionId/repo-members`
 - `GET /git/connections/:connectionId/repo-stats`
 - `GET /git/connections/:connectionId/stack-analysis`
-- `GET /git/connections/:connectionId/sensitive-data`
 - `GET /git/repo-badges`
 - `GET /git/connections/:connectionId/repo-analyze`
 - `POST /git/analyze-sensitive-data`
@@ -56,6 +51,6 @@ Repo analysis also enriches `techStack` from dependency manifests (`package.json
   - provider adapters for repo/branch/tree/file operations
   - repo analysis heuristics (tech stack, deploy options, service detection)
   - stack cache generation from repository tree structure
-  - sensitive schema analysis (`GET /sensitive-data`, `POST /analyze-sensitive-data`)
+  - sensitive schema analysis (`POST /analyze-sensitive-data`)
   - tech badge resolution for list/detail UI (`GET /repo-badges`)
 - AI-heavy remediation endpoints (`create-mr`, AI summarize/fix) are still best-effort placeholders.

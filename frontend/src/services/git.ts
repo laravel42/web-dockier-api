@@ -70,10 +70,6 @@ export const gitApi = {
       `/git/connections/${connectionId}/repo-branches${buildQuery({ owner, repo })}`
     ),
 
-  getConnectionBranches: (connectionId: string) =>
-    request<{ branches: string[] }>(
-      `/git/connections/${connectionId}/branches`
-    ),
 
   getRepoStats: (connectionId: string, owner: string, repo: string, branch?: string, projectId?: string) =>
     request<RepoStats>(`/git/connections/${connectionId}/repo-stats${buildQuery({ owner, repo, branch, projectId })}`),
@@ -81,10 +77,6 @@ export const gitApi = {
   analyzeRepo: (connectionId: string, owner: string, repo: string, branch?: string, aiType?: string, projectId?: string) =>
     request<RepoAnalysisResponse>(`/git/connections/${connectionId}/repo-analyze${buildQuery({ owner, repo, branch, aiType, projectId })}`),
 
-  getRepoTree: (connectionId: string, owner: string, repo: string, branch?: string) =>
-    request<{
-      files: Array<{ path: string; type: string; size: number }>;
-    }>(`/git/connections/${connectionId}/repo-tree${buildQuery({ owner, repo, branch })}`),
 
   getRepoBadges: (repo: string, branch?: string, connectionId?: string) =>
     request<{
@@ -113,11 +105,6 @@ export const gitApi = {
   getPullRequests: (connectionId: string, owner: string, repo: string, limit?: number) =>
     request<{ pullRequests: RepoPullRequest[] }>(`/git/connections/${connectionId}/pull-requests${buildQuery({ owner, repo, limit })}`),
 
-  pullOrigin: (connectionId: string, owner: string, repo: string, branch: string, currentHash?: string) =>
-    request<{ log: string[] }>(`/git/connections/${connectionId}/pull`, {
-      method: "POST",
-      body: JSON.stringify({ connectionId, owner, repo, branch, currentHash }),
-    }),
 
   createFixMR: (connectionId: string, data: {
     owner: string; repo: string; branch: string;
@@ -171,11 +158,6 @@ export const gitApi = {
       body: JSON.stringify({ owner, repo }),
     }),
 
-  createBranch: (connectionId: string, owner: string, repo: string, branchName: string, baseBranch?: string) =>
-    request<{ ref: string; sha: string }>(`/git/connections/${connectionId}/branches`, {
-      method: "POST",
-      body: JSON.stringify({ owner, repo, branchName, ...(baseBranch ? { baseBranch } : {}) }),
-    }),
 
   /** Generates a fix and returns it for review. Writes nothing. */
   planFix: (connectionId: string, data: {
@@ -214,10 +196,6 @@ export const gitApi = {
       { method: "POST", body: JSON.stringify(data) },
     ),
 
-  getSensitiveData: (connectionId: string, owner: string, repo: string, branch?: string) =>
-    request<{ sensitiveData: Array<{ entity: string; field: string; sensitivity: "personal" | "sensitive" | "secret"; reason: string }> }>(
-      `/git/connections/${connectionId}/sensitive-data${buildQuery({ owner, repo, branch })}`
-    ),
 
   analyzeSensitiveData: (schema: string, projectId?: string) =>
     request<SensitiveDataAnalysis>("/git/analyze-sensitive-data", {
