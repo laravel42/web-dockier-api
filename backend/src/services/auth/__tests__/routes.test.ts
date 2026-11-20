@@ -6,7 +6,7 @@
  * schema validation, and permission enforcement without a real DB.
  */
 
-import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import {
   TEST_TENANT_ID,
@@ -25,8 +25,9 @@ import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 // ─── Mocks ─────────────────────────────────────────────────────────
 
 // Mock environment before anything else
+const mockEnv = createTestEnv() as Record<string, unknown>;
 vi.mock("../../../shared/config.js", () => ({
-  env: createTestEnv(),
+  env: mockEnv,
 }));
 
 // Mock Supabase client
@@ -107,8 +108,33 @@ beforeEach(async () => {
 
 // ─── Tests ─────────────────────────────────────────────────────────
 
+describe("dev logins need an explicit opt-in", () => {
+  const paths: Array<[string, Record<string, string> | undefined]> = [
+    ["/auth/demo-login", undefined],
+    ["/auth/password/login", { email: "a@example.com", password: "x" }],
+  ];
+
+  it.each(paths)("%s is refused unless ENABLE_DEV_LOGIN=true", async (url, payload) => {
+    mockEnv.ENABLE_DEV_LOGIN = undefined;
+    const res = await app.inject({ method: "POST", url, payload });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it.each(paths)("%s is refused in production even with the flag", async (url, payload) => {
+    mockEnv.ENABLE_DEV_LOGIN = "true";
+    mockEnv.NODE_ENV = "production";
+    const res = await app.inject({ method: "POST", url, payload });
+    mockEnv.NODE_ENV = "test";
+    mockEnv.ENABLE_DEV_LOGIN = undefined;
+    expect(res.statusCode).toBe(403);
+  });
+});
+
 describe("POST /auth/demo-login", () => {
-  it("returns session and memberships in non-production", async () => {
+  beforeEach(() => { mockEnv.ENABLE_DEV_LOGIN = "true"; });
+  afterEach(() => { mockEnv.ENABLE_DEV_LOGIN = undefined; });
+
+  it("returns session and memberships when the flag is on", async () => {
     const mockSession = {
       session: { token: "test-token", userId: TEST_USER_ID, tenantId: TEST_TENANT_ID },
       memberships: [{ id: TEST_USER_ID, tenantId: TEST_TENANT_ID, tenantName: "Test Org", tenantSlug: "test-org", roleName: "Admin", isOwner: true }],

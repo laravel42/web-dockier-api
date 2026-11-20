@@ -28,7 +28,7 @@ Domain logic lives under each service’s `domain/` folder (planner, processor, 
 - **Roles:** Per-tenant custom roles in `roles` / `role_permissions`; default Admin/Member seeded on org creation.
 - **Owner:** Organization owner flag for billing, org delete, and ownership transfer (separate from role permissions).
 - **2FA:** TOTP setup/enable on authenticated routes.
-- **Dev only:** `POST /auth/demo-login`, `POST /auth/password/login` (disabled in production).
+- **Dev only:** `POST /auth/demo-login`, `POST /auth/password/login` (off unless `ENABLE_DEV_LOGIN=true`, and never in production).
 
 Supabase Auth must have the Email provider enabled for OTP/magic-link flows.
 

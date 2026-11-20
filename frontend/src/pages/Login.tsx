@@ -207,17 +207,19 @@ export default function Login() {
         )}
       </form>
 
-      <div className="mt-4 flex items-center gap-3">
-        <Button
-          variant="link"
-          onClick={() => {
-            setLoginMode(loginMode === "otp" ? "password" : "otp");
-            resetFlow();
-          }}
-        >
-          {loginMode === "otp" ? "Sign in with password" : "Sign in with email code"}
-        </Button>
-      </div>
+      {demoLoginEnabled && (
+        <div className="mt-4 flex items-center gap-3">
+          <Button
+            variant="link"
+            onClick={() => {
+              setLoginMode(loginMode === "otp" ? "password" : "otp");
+              resetFlow();
+            }}
+          >
+            {loginMode === "otp" ? "Sign in with password" : "Sign in with email code"}
+          </Button>
+        </div>
+      )}
       {demoLoginEnabled && (
       <Button
         variant="outline"

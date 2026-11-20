@@ -30,6 +30,14 @@ import {
   throwAuthError,
 } from "../domain/registration.js";
 
+/**
+ * Both dev logins skip the email code and 2FA, so they need an explicit opt-in. `NODE_ENV !== "production"`
+ * was not enough: config.ts defaults NODE_ENV to "development", so a deploy that never set it was open.
+ */
+function devLoginEnabled(): boolean {
+  return env.ENABLE_DEV_LOGIN === "true" && env.NODE_ENV !== "production";
+}
+
 export async function registerAuthenticationRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
@@ -53,9 +61,7 @@ export async function registerAuthenticationRoutes(app: FastifyInstance) {
       },
     },
     async () => {
-      if (env.NODE_ENV === "production") {
-        throw app.httpErrors.forbidden("Demo login is disabled in production.");
-      }
+      if (!devLoginEnabled()) throw app.httpErrors.forbidden("Demo login is disabled.");
       return performDemoLogin();
     },
   );
@@ -79,9 +85,7 @@ export async function registerAuthenticationRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      if (env.NODE_ENV === "production") {
-        throw app.httpErrors.forbidden("Password login is disabled in production.");
-      }
+      if (!devLoginEnabled()) throw app.httpErrors.forbidden("Password login is disabled.");
       return await performPasswordLogin({
         email: request.body.email,
         password: request.body.password,

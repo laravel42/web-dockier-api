@@ -53,6 +53,8 @@ const envObjectSchema = z
     OPENAI_MODEL: z.preprocess(blankToUndefined, z.string().default("gpt-4o-mini")),
     /** Toggle the AI Dockerfile review layer. Review runs only when an OpenAI key is also set. */
     AI_DOCKERFILE_REVIEW: z.enum(["on", "off"]).default("on"),
+    /** Opens /auth/demo-login and /auth/password/login, which skip the email code and 2FA. Local development only. */
+    ENABLE_DEV_LOGIN: z.enum(["true", "false"]).default("false"),
     WEBHOOK_SECRET: optionalEnv(z.string()),
     DEPLOY_CALLBACK_URL: optionalEnv(z.string()),
     IMAGE_BUILDER_CODEBUILD_PROJECT: z.string().min(1).default("image-builder"),

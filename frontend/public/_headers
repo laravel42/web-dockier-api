@@ -1,0 +1,8 @@
+# Read by Cloudflare (Workers assets) from the root of dist/. No Content-Security-Policy yet:
+# index.html carries an inline theme script and the API origin comes from VITE_API_BASE, so a policy
+# has to be written against the deployed hosts and tried in a browser first.
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
