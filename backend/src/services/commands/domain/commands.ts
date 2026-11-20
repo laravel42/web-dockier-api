@@ -53,7 +53,8 @@ export async function runCommand(params: {
     await supabaseAdmin
       .from("commands")
       .update({ status: "failed", output: "Failed to dispatch command for execution.", finished_at: nowIso() })
-      .eq("id", row.id);
+      .eq("id", row.id)
+      .eq("organization_id", tenantId);
     throw new CommandsError("Failed to dispatch command for execution", "internal");
   }
 

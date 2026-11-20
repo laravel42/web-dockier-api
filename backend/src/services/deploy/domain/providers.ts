@@ -130,6 +130,7 @@ export async function updateProvider(params: UpdateProviderParams) {
     .from("server_providers")
     .update(updates)
     .eq("id", providerId)
+    .eq("organization_id", tenantId)
     .select("id,provider,label,region,created_at")
     .single();
   const provider = unwrapQuery(data, error, DeployError, {
@@ -142,10 +143,10 @@ export async function updateProvider(params: UpdateProviderParams) {
 export async function deleteProvider(providerId: string, tenantId: string) {
   await getProviderForTenant(providerId, tenantId);
 
-  const { error: deploymentsError } = await supabaseAdmin.from("deployments").delete().eq("provider_id", providerId);
+  const { error: deploymentsError } = await supabaseAdmin.from("deployments").delete().eq("provider_id", providerId).eq("organization_id", tenantId);
   throwOnError(deploymentsError, DeployError, { internalMsg: "Failed to delete associated deployments" });
 
-  const { error } = await supabaseAdmin.from("server_providers").delete().eq("id", providerId);
+  const { error } = await supabaseAdmin.from("server_providers").delete().eq("id", providerId).eq("organization_id", tenantId);
   throwOnError(error, DeployError, { internalMsg: "Failed to delete provider" });
 }
 

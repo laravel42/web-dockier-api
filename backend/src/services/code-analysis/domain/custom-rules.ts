@@ -170,7 +170,7 @@ export async function updateCustomRule(params: UpdateCustomRuleParams) {
     return;
   }
 
-  const { error } = await supabaseAdmin.from("custom_rules").update(updates).eq("id", ruleDbId);
+  const { error } = await supabaseAdmin.from("custom_rules").update(updates).eq("id", ruleDbId).eq("organization_id", tenantId);
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to update custom rule" });
 }
 
@@ -184,6 +184,6 @@ export async function deleteCustomRule(ruleDbId: string, tenantId: string) {
   if (rule.organization_id === "") throw new CodeAnalysisError("Cannot delete system rules", "forbidden");
   assertOwnership(rule, tenantId, CodeAnalysisError, "Not your rule");
 
-  const { error } = await supabaseAdmin.from("custom_rules").delete().eq("id", ruleDbId);
+  const { error } = await supabaseAdmin.from("custom_rules").delete().eq("id", ruleDbId).eq("organization_id", tenantId);
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to delete custom rule" });
 }

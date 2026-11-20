@@ -428,6 +428,7 @@ export async function cancelDeployment(deploymentId: string, tenantId: string) {
       updated_at: nowIso(),
     })
     .eq("id", deploymentId)
+    .eq("organization_id", tenantId)
     .in("status", CANCELLABLE_STATUSES)
     .select("*")
     .maybeSingle();

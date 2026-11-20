@@ -143,7 +143,7 @@ export async function createRole(params: CreateRoleParams): Promise<RoleResponse
     const { error: permError } = await supabaseAdmin.from("role_permissions").insert(permRows);
     if (permError) {
       // Clean up the orphaned role
-      const { error: cleanupError } = await supabaseAdmin.from("roles").delete().eq("id", id);
+      const { error: cleanupError } = await supabaseAdmin.from("roles").delete().eq("id", id).eq("organization_id", tenantId);
       if (cleanupError) {
         logger.error({ err: cleanupError }, `Failed to clean up orphaned role ${id}`);
       }

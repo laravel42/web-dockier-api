@@ -150,7 +150,7 @@ export async function listConnections(tenantId: string) {
 
 export async function deleteConnection(connectionId: string, tenantId: string) {
   const conn = await getConnectionRowForTenant(connectionId, tenantId);
-  const { error } = await supabaseAdmin.from("git_connections").delete().eq("id", conn.id);
+  const { error } = await supabaseAdmin.from("git_connections").delete().eq("id", conn.id).eq("organization_id", tenantId);
   throwOnError(error, GitIntegrationError, { internalMsg: "Failed to delete connection" });
 }
 
@@ -172,7 +172,7 @@ export async function updateConnection(params: UpdateConnectionParams) {
     updates.personal_token = "";
   }
 
-  const { error } = await supabaseAdmin.from("git_connections").update(updates).eq("id", connectionId);
+  const { error } = await supabaseAdmin.from("git_connections").update(updates).eq("id", connectionId).eq("organization_id", tenantId);
   throwOnError(error, GitIntegrationError, {
     internalMsg: "Failed to update connection",
     duplicateMsg: `A ${conn.provider} connection with label "${label}" already exists`,

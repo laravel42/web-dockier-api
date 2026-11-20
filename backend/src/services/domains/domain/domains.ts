@@ -204,7 +204,8 @@ export async function deleteDomain(params: {
       const { error: promoteError } = await supabaseAdmin
         .from("domains")
         .update({ is_primary: true, updated_at: nowIso() })
-        .eq("id", nextDomain.id);
+        .eq("id", nextDomain.id)
+        .eq("organization_id", tenantId);
       throwOnError(promoteError, DomainsError, { internalMsg: "Failed to update primary domain" });
     }
   }

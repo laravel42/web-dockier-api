@@ -264,10 +264,10 @@ export async function deleteScan(scanId: string, tenantId: string) {
     throw new CodeAnalysisError("This scan is still running. Cancel it first, then delete it.", "bad_request");
   }
 
-  const { error: findingsError } = await supabaseAdmin.from("findings").delete().eq("scan_id", scanId);
+  const { error: findingsError } = await supabaseAdmin.from("findings").delete().eq("scan_id", scanId).eq("organization_id", tenantId);
   throwOnError(findingsError, CodeAnalysisError, { internalMsg: "Failed to delete scan findings" });
 
-  const { error } = await supabaseAdmin.from("scans").delete().eq("id", scanId);
+  const { error } = await supabaseAdmin.from("scans").delete().eq("id", scanId).eq("organization_id", tenantId);
   throwOnError(error, CodeAnalysisError, { internalMsg: "Failed to delete scan" });
 }
 
@@ -324,6 +324,7 @@ export async function runScan(scanId: string, tenantId: string, options: RunScan
       updated_at: nowIso(),
     })
     .eq("id", scanId)
+    .eq("organization_id", tenantId)
     .neq("status", "running")
     .select()
     .maybeSingle();

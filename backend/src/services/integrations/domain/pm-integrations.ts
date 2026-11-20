@@ -159,6 +159,7 @@ export async function updatePMIntegration(params: UpdatePMIntegrationParams) {
     .from("pm_integrations")
     .update(updates)
     .eq("id", integrationId)
+    .eq("organization_id", tenantId)
     .select("id,provider,name,enabled,created_at")
     .single();
   const row = unwrapQuery(data, error, IntegrationsError, { internalMsg: "Failed to update integration" });
@@ -167,6 +168,6 @@ export async function updatePMIntegration(params: UpdatePMIntegrationParams) {
 
 export async function deletePMIntegration(integrationId: string, tenantId: string) {
   await getPMIntegrationForTenant(integrationId, tenantId);
-  const { error } = await supabaseAdmin.from("pm_integrations").delete().eq("id", integrationId);
+  const { error } = await supabaseAdmin.from("pm_integrations").delete().eq("id", integrationId).eq("organization_id", tenantId);
   throwOnError(error, IntegrationsError, { internalMsg: "Failed to delete integration" });
 }

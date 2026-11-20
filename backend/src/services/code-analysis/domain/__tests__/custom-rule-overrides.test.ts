@@ -30,7 +30,11 @@ vi.mock("../../../../shared/supabase/client.js", () => ({
       },
       update: (payload: unknown) => {
         updates.push({ table, payload });
-        return { eq: () => Promise.resolve({ error: null }) };
+        const chain: { eq: () => typeof chain; then: (r: (v: { error: null }) => void) => void } = {
+          eq: () => chain,
+          then: (resolve) => resolve({ error: null }),
+        };
+        return chain;
       },
     }),
   },

@@ -22,7 +22,12 @@ vi.mock("../../../shared/supabase/client.js", () => ({
       select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: sourceRow, error: null }) }) }),
       update: (payload: Record<string, unknown>) => {
         updateSpy(payload);
-        return { eq: () => Promise.resolve({ error: null }) };
+        // .eq() may be chained (id, then organization_id) before the result is awaited.
+        const chain: { eq: () => typeof chain; then: (r: (v: { error: null }) => void) => void } = {
+          eq: () => chain,
+          then: (resolve) => resolve({ error: null }),
+        };
+        return chain;
       },
     }),
   },

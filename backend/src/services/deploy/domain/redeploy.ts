@@ -93,7 +93,8 @@ export async function rollbackToDeployment(deploymentId: string, tenantId: strin
   await supabaseAdmin
     .from("deployments")
     .update({ commit_hash: source.commit_hash })
-    .eq("id", deployment.id);
+    .eq("id", deployment.id)
+    .eq("organization_id", tenantId);
 
   return { ...deployment, commitHash: source.commit_hash };
 }
