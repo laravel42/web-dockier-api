@@ -21,26 +21,10 @@ import PageError from "@/components/ui/PageError";
 import { PlusIcon, Grid2X2PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
 
-const PM_TYPES = new Set(["linear", "jira"]);
+// Older versions kept non-server integrations, secrets included, in localStorage; drop what is left.
+// shortcut: runs on every load of this tab, remove once old browsers have had time to visit it.
+try { localStorage.removeItem("integrations"); } catch { /* storage unavailable */ }
 
-function isPMType(type: string) {
-  return PM_TYPES.has(type);
-}
-
-function loadLocalIntegrations(): Integration[] {
-  try {
-    const stored = localStorage.getItem("integrations");
-    if (stored) {
-      const all: Integration[] = JSON.parse(stored);
-      return all.filter((i) => !isPMType(i.type));
-    }
-  } catch { /* ignore */ }
-  return [];
-}
-
-function persistLocalIntegrations(items: Integration[]) {
-  localStorage.setItem("integrations", JSON.stringify(items));
-}
 
 interface Integration {
   id: string;
@@ -58,7 +42,6 @@ export default function IntegrationsTab() {
     () => integrationsApi.listPMIntegrations().then((res) => res.integrations),
     [],
   );
-  const [localIntegrations, setLocalIntegrations] = useState<Integration[]>(loadLocalIntegrations);
   const pmIntegrations: Integration[] = (pmData ?? []).map((i) => ({
     id: i.id,
     type: i.type,
@@ -66,7 +49,7 @@ export default function IntegrationsTab() {
     config: i.config ?? {},
     enabled: i.enabled,
   }));
-  const integrations = [...pmIntegrations, ...localIntegrations];
+  const integrations = pmIntegrations;
   const [showAdd, setShowAdd] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [formConfig, setFormConfig] = useState<Record<string, string>>({});
@@ -86,26 +69,13 @@ export default function IntegrationsTab() {
     if (!catalog) return;
     setSaving(true);
     try {
-      if (isPMType(selectedType)) {
-        await integrationsApi.createPMIntegration({
-          provider: selectedType,
-          name: catalog.name,
-          config: { ...formConfig },
-          enabled: true,
-        });
-        await reload();
-      } else {
-        const newItem: Integration = {
-          id: crypto.randomUUID(),
-          type: selectedType,
-          name: catalog.name,
-          config: { ...formConfig },
-          enabled: true,
-        };
-        const next = [...localIntegrations, newItem];
-        setLocalIntegrations(next);
-        persistLocalIntegrations(next);
-      }
+      await integrationsApi.createPMIntegration({
+        provider: selectedType,
+        name: catalog.name,
+        config: { ...formConfig },
+        enabled: true,
+      });
+      await reload();
       setShowAdd(false);
       setSelectedType(null);
       setFormConfig({});
@@ -126,20 +96,12 @@ export default function IntegrationsTab() {
     e.preventDefault();
     if (!editingIntg) return;
     try {
-      if (isPMType(editingIntg.type)) {
-        const hasConfig = Object.values(editConfig).some((v) => v.trim() !== "");
-        await integrationsApi.updatePMIntegration(editingIntg.id, {
-          config: hasConfig ? { ...editConfig } : undefined,
-          enabled: editEnabled,
-        });
-        await reload();
-      } else {
-        const next = localIntegrations.map(i =>
-          i.id === editingIntg.id ? { ...i, config: { ...editConfig }, enabled: editEnabled } : i,
-        );
-        setLocalIntegrations(next);
-        persistLocalIntegrations(next);
-      }
+      const hasConfig = Object.values(editConfig).some((v) => v.trim() !== "");
+      await integrationsApi.updatePMIntegration(editingIntg.id, {
+        config: hasConfig ? { ...editConfig } : undefined,
+        enabled: editEnabled,
+      });
+      await reload();
       setEditingIntg(null);
       setEditConfig({});
     } catch (err) {
@@ -150,14 +112,8 @@ export default function IntegrationsTab() {
   const handleRemove = async () => {
     if (!editingIntg) return;
     try {
-      if (isPMType(editingIntg.type)) {
-        await integrationsApi.deletePMIntegration(editingIntg.id);
-        await reload();
-      } else {
-        const next = localIntegrations.filter(i => i.id !== editingIntg.id);
-        setLocalIntegrations(next);
-        persistLocalIntegrations(next);
-      }
+      await integrationsApi.deletePMIntegration(editingIntg.id);
+      await reload();
       setEditingIntg(null);
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to remove integration"));
@@ -385,8 +341,7 @@ export default function IntegrationsTab() {
                         type={f.secret ? "password" : "text"}
                         value={editConfig[f.key] || ""}
                         onChange={(e) => setEditConfig({ ...editConfig, [f.key]: e.target.value })}
-                        placeholder={isPMType(editingIntg.type) ? `${f.placeholder} (leave blank to keep)` : f.placeholder}
-                        required={!isPMType(editingIntg.type)}
+                        placeholder={`${f.placeholder} (leave blank to keep)`}
                       />
                     )}
                   </SettingsField>
