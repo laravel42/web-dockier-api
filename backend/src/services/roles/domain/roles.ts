@@ -4,14 +4,14 @@ import { logger } from "../../../shared/logger.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { selectAllRows, throwOnError, unwrapList, unwrapQuery, type PostgrestError } from "../../../shared/supabase/query.js";
 import { nowIso } from "../../../shared/utils/time.js";
-import { ALL_PERMISSIONS, withBaselinePermissions, type PermissionKey } from "../../../shared/permissions/constants.js";
+import { ASSIGNABLE_PERMISSIONS, withBaselinePermissions, type PermissionKey } from "../../../shared/permissions/constants.js";
 import { canManageRole, loadRolePermissions, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { SYSTEM_ROLE_KEYS } from "../../../shared/permissions/role-templates.js";
 import { rowToRole } from "./mappers.js";
 
-/** Type guard: is a raw string a known permission key? */
+/** Type guard: is a raw string a permission a role may hold? (owner-only keys are not) */
 function isPermissionKey(value: string): value is PermissionKey {
-  return (ALL_PERMISSIONS as readonly string[]).includes(value);
+  return (ASSIGNABLE_PERMISSIONS as readonly string[]).includes(value);
 }
 
 export const RolesError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "conflict" | "internal">("RolesError");

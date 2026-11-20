@@ -126,6 +126,26 @@ function buildChain(error: unknown, data: unknown) {
 
 // ─── Permission Resolution Tests ───────────────────────────────────
 
+describe("resolvePermissions — the owner", () => {
+  it("holds every permission even when the role was stripped of them", async () => {
+    // An Admin with role:manage can edit the Admin role the owner holds; the owner must still
+    // be able to get in and fix it.
+    setupPermissionDb({
+      membership: { role_id: TEST_ROLE_ID, is_owner: true, status: "active" },
+      permissions: [],
+    });
+    const res = await app.inject({ method: "GET", url: "/test-permission", headers: { authorization: authHeader() } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().permissions).toEqual(expect.arrayContaining([PERMISSIONS.ROLE_MANAGE, PERMISSIONS.BILLING_MANAGE]));
+  });
+
+  it("does not hand the same to a member who is not the owner", async () => {
+    setupPermissionDb({ permissions: [] });
+    const res = await app.inject({ method: "GET", url: "/test-permission", headers: { authorization: authHeader() } });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
 describe("resolvePermissions — basic flow", () => {
   it("resolves permissions and grants access when user has required permission", async () => {
     setupPermissionDb({ permissions: [PERMISSIONS.PROJECT_VIEW, PERMISSIONS.DEPLOY_VIEW] });

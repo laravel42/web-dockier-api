@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth, getResolvedAuth } from "../../shared/auth/auth.js";
-import { PERMISSIONS, PERMISSION_DEFINITIONS, ALL_PERMISSIONS } from "../../shared/permissions/constants.js";
+import { PERMISSIONS, PERMISSION_DEFINITIONS, ASSIGNABLE_PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema } from "../../shared/schemas/responses.js";
 import { roleResponseSchema } from "./schemas.js";
 import {
@@ -17,7 +17,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
   // Validated permission key schema — rejects invalid permission strings at request validation
-  const permissionKeySchema = z.enum(ALL_PERMISSIONS as unknown as [string, ...string[]]);
+  const permissionKeySchema = z.enum(ASSIGNABLE_PERMISSIONS as unknown as [string, ...string[]]);
 
   typed.get(
     "/roles",
@@ -144,7 +144,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       },
     },
     async () => ({
-      permissions: PERMISSION_DEFINITIONS.map((def) => ({
+      permissions: PERMISSION_DEFINITIONS.filter((def) => (ASSIGNABLE_PERMISSIONS as string[]).includes(def.key)).map((def) => ({
         key: def.key,
         resource: def.resource,
         action: def.action,

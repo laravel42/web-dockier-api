@@ -19,11 +19,10 @@ vi.mock("../supabase/client.js", () => ({
 
 import {
   hasPermissions,
-  canAssignPermissions,
   canManageRole,
   type ResolvedAuth,
 } from "../permissions/authorization.js";
-import { PERMISSIONS, CRITICAL_PERMISSIONS } from "../permissions/constants.js";
+import { PERMISSIONS, ASSIGNABLE_PERMISSIONS, OWNER_ONLY_PERMISSIONS, ALL_PERMISSIONS } from "../permissions/constants.js";
 
 // ─── Fixtures ──────────────────────────────────────────────────────
 
@@ -77,52 +76,12 @@ describe("hasPermissions", () => {
   });
 });
 
-// ─── canAssignPermissions ──────────────────────────────────────────
-
-describe("canAssignPermissions", () => {
-  it("allows assigning non-critical permissions regardless of actor permissions", () => {
-    const actor = makeResolved({ permissions: [PERMISSIONS.PROJECT_VIEW] });
-    expect(canAssignPermissions(actor, [PERMISSIONS.DEPLOY_VIEW, PERMISSIONS.SCAN_VIEW])).toBe(true);
-  });
-
-  it("allows assigning critical permissions when actor has them", () => {
-    const actor = makeResolved({
-      permissions: [PERMISSIONS.ROLE_MANAGE, PERMISSIONS.BILLING_MANAGE, PERMISSIONS.ORGANIZATION_DELETE],
-    });
-    expect(canAssignPermissions(actor, [PERMISSIONS.ROLE_MANAGE, PERMISSIONS.BILLING_MANAGE])).toBe(true);
-  });
-
-  it("blocks assigning critical permissions the actor does not possess", () => {
-    const actor = makeResolved({ permissions: [PERMISSIONS.PROJECT_VIEW] });
-    expect(canAssignPermissions(actor, [PERMISSIONS.ORGANIZATION_DELETE])).toBe(false);
-  });
-
-  it("blocks when actor is missing even one critical permission in the set", () => {
-    const actor = makeResolved({
-      permissions: [PERMISSIONS.ROLE_MANAGE], // has ROLE_MANAGE but not BILLING_MANAGE
-    });
-    expect(canAssignPermissions(actor, [PERMISSIONS.ROLE_MANAGE, PERMISSIONS.BILLING_MANAGE])).toBe(false);
-  });
-
-  it("allows empty permission set", () => {
-    const actor = makeResolved({ permissions: [] });
-    expect(canAssignPermissions(actor, [])).toBe(true);
-  });
-
-  it("allows mixed critical and non-critical when actor has the critical ones", () => {
-    const actor = makeResolved({
-      permissions: [PERMISSIONS.ROLE_MANAGE, PERMISSIONS.PROJECT_VIEW],
-    });
-    // ROLE_MANAGE is critical, PROJECT_CREATE is not
-    expect(canAssignPermissions(actor, [PERMISSIONS.ROLE_MANAGE, PERMISSIONS.PROJECT_CREATE])).toBe(true);
-  });
-
-  it("all CRITICAL_PERMISSIONS are checked", () => {
-    // Actor has no permissions — any critical permission should be blocked
-    const actor = makeResolved({ permissions: [] });
-    for (const perm of CRITICAL_PERMISSIONS) {
-      expect(canAssignPermissions(actor, [perm])).toBe(false);
-    }
+// ─── assignable permissions ────────────────────────────────────────
+describe("ASSIGNABLE_PERMISSIONS", () => {
+  it("leaves out the owner-only keys, which a role cannot grant", () => {
+    for (const key of OWNER_ONLY_PERMISSIONS) expect(ASSIGNABLE_PERMISSIONS).not.toContain(key);
+    expect(ASSIGNABLE_PERMISSIONS).toContain(PERMISSIONS.ROLE_MANAGE);
+    expect(ASSIGNABLE_PERMISSIONS.length).toBe(ALL_PERMISSIONS.length - OWNER_ONLY_PERMISSIONS.length);
   });
 });
 

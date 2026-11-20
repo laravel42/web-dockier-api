@@ -9,8 +9,7 @@ import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { supabaseAdmin } from "../supabase/client.js";
 import { getAuth } from "../auth/auth.js";
-import type { PermissionKey } from "./constants.js";
-import { CRITICAL_PERMISSIONS } from "./constants.js";
+import { ALL_PERMISSIONS, type PermissionKey } from "./constants.js";
 import { getHierarchyLevel } from "./role-templates.js";
 import { MemoryCache } from "../cache/memory-cache.js";
 
@@ -199,7 +198,10 @@ async function resolvePermissionsFromDb(userId: string, tenantId: string, email:
     tenantId,
     roleId: role.id,
     systemKey: role.system_key ?? null,
-    permissions,
+    // The owner holds every permission whatever the role says. The role is editable (an
+    // Admin with role:manage can strip it), and an owner who could be locked out of their
+    // own organization could not repair it: role editing itself needs role:manage.
+    permissions: membership.is_owner ? [...ALL_PERMISSIONS] : permissions,
     isOwner: membership.is_owner ?? false,
     hierarchyLevel: getHierarchyLevel(role.system_key ?? null),
   };
@@ -228,16 +230,6 @@ export async function authHasPermissions(
   const resolved = await resolvePermissions(auth.userId, auth.tenantId, auth.email);
   return resolved !== null && hasPermissions(resolved, required);
 }
-
-export function canAssignPermissions(actor: ResolvedAuth, permissionsToAssign: PermissionKey[]): boolean {
-  for (const perm of permissionsToAssign) {
-    if (CRITICAL_PERMISSIONS.includes(perm) && !actor.permissions.includes(perm)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 /** A role as the escalation check sees it: its system key and its permission ids. */
 export interface ManagedRole {
   systemKey: string | null;

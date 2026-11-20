@@ -156,12 +156,14 @@ export function withBaselinePermissions(permissions: string[]): string[] {
 }
 
 /**
- * Critical permissions that require special handling.
- * These cannot be assigned by users who don't already possess them.
+ * Held by the organization owner alone, enforced through `requireOwner` / `is_owner`,
+ * never through a role. A role listing one would grant nothing while reading as if it did,
+ * so roles cannot carry them (the role editor already omits them).
  */
-export const CRITICAL_PERMISSIONS: PermissionKey[] = [
+export const OWNER_ONLY_PERMISSIONS: PermissionKey[] = [
+  PERMISSIONS.ORGANIZATION_MANAGE,
   PERMISSIONS.ORGANIZATION_DELETE,
   PERMISSIONS.OWNERSHIP_TRANSFER,
-  PERMISSIONS.BILLING_MANAGE,
-  PERMISSIONS.ROLE_MANAGE,
 ];
+/** What a role may hold: every permission except the owner-only ones. */
+export const ASSIGNABLE_PERMISSIONS: PermissionKey[] = ALL_PERMISSIONS.filter((p) => !OWNER_ONLY_PERMISSIONS.includes(p));

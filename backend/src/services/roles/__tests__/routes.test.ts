@@ -163,6 +163,20 @@ describe("POST /roles", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it.each(["organization:manage", "organization:delete", "ownership:transfer"])(
+    "refuses the owner-only permission %s on a role",
+    async (permission) => {
+      setupPermissionMocks(mockFrom, { permissions: [PERMISSIONS.ROLE_MANAGE] });
+      const res = await app.inject({
+        method: "POST",
+        url: "/roles",
+        headers: { authorization: authHeader() },
+        payload: { name: "Sneaky", permissions: [permission] },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(mockCreateRole).not.toHaveBeenCalled();
+    },
+  );
   it("creates role with ROLE_MANAGE permission", async () => {
     setupPermissionMocks(mockFrom, { permissions: [PERMISSIONS.ROLE_MANAGE] });
     mockCreateRole.mockResolvedValue(MOCK_ROLE);
