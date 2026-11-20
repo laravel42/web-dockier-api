@@ -15,13 +15,14 @@ vi.mock("../../../shared/config.js", () => ({ env: createTestEnv() }));
 
 // Capture project infra_state writes. `.eq()` is chainable AND awaitable.
 const infraStateUpdates: Array<{ table: string; payload: Record<string, unknown> }> = [];
+const infraStateFilters: Array<[string, unknown]> = [];
 vi.mock("../../../shared/supabase/client.js", () => ({
   supabaseAdmin: {
     from: (table: string) => ({
       update: (payload: Record<string, unknown>) => {
         infraStateUpdates.push({ table, payload });
         const thenable = {
-          eq: () => thenable,
+          eq: (col: string, value: unknown) => { infraStateFilters.push([col, value]); return thenable; },
           then: (resolve: (v: { error: null }) => void) => resolve({ error: null }),
         };
         return thenable;
@@ -50,14 +51,27 @@ function stack(name: string, provider = "aws"): ResolvedStack {
 
 beforeEach(() => {
   infraStateUpdates.length = 0;
+  infraStateFilters.length = 0;
 });
 
 // ─── Property 3: empty resolution is safe ──────────────────────────
 
+describe("teardownProjectInfrastructure — tenant ownership", () => {
+  it("refuses a project of another tenant before resolving or destroying anything", async () => {
+    const resolve = vi.fn(async () => [stack("s1")]);
+    const destroy = vi.fn();
+    await expect(
+      teardownProjectInfrastructure(PROJECT, TENANT, { ownsProject: async () => false, resolve, destroy }),
+    ).rejects.toMatchObject({ code: "not_found" });
+    expect(resolve).not.toHaveBeenCalled();
+    expect(destroy).not.toHaveBeenCalled();
+  });
+});
 describe("teardownProjectInfrastructure — Property 3: empty is safe", () => {
   it("returns nothing_to_tear_down and never invokes destroy", async () => {
     const destroy = vi.fn();
     const result = await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
       resolve: async () => [],
       destroy,
     });
@@ -73,6 +87,7 @@ describe("teardownProjectInfrastructure — Property 3: empty is safe", () => {
 describe("teardownProjectInfrastructure — Property 6: full success", () => {
   it("sets infra_state=torn_down when every stack destroy succeeds", async () => {
     const result = await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
       resolve: async () => [stack("s1"), stack("s2", "gcp")],
       destroy: async () => ({ success: true, message: "ok", errors: [] }),
     });
@@ -89,6 +104,7 @@ describe("teardownProjectInfrastructure — Property 5: partial preserves live",
   it("does NOT set torn_down when any stack destroy fails", async () => {
     let call = 0;
     const result = await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
       resolve: async () => [stack("s1"), stack("s2")],
       destroy: async () => {
         call++;
@@ -115,6 +131,7 @@ describe("teardownProjectInfrastructure — Property 8: N stacks → N destroy c
       const destroy = vi.fn().mockResolvedValue({ success: true, message: "ok", errors: [] });
 
       await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
         resolve: async () => stacks,
         destroy,
       });
@@ -127,15 +144,19 @@ describe("teardownProjectInfrastructure — Property 8: N stacks → N destroy c
 
 describe("markProjectInfraLive — Property 4: deploy success → live", () => {
   it("writes infra_state=live when a projectId is present", async () => {
-    await markProjectInfraLive(PROJECT);
+    await markProjectInfraLive(PROJECT, TENANT);
     const write = infraStateUpdates.find((u) => u.table === "projects");
     expect(write?.payload).toEqual({ infra_state: "live" });
   });
-
-  it("is a no-op when projectId is absent", async () => {
-    await markProjectInfraLive(undefined);
-    await markProjectInfraLive(null);
-    await markProjectInfraLive("");
+  it("only touches the project within the given tenant", async () => {
+    await markProjectInfraLive(PROJECT, TENANT);
+    expect(infraStateFilters).toEqual([["id", PROJECT], ["organization_id", TENANT]]);
+  });
+  it("is a no-op when projectId or tenant is absent", async () => {
+    await markProjectInfraLive(undefined, TENANT);
+    await markProjectInfraLive(null, TENANT);
+    await markProjectInfraLive("", TENANT);
+    await markProjectInfraLive(PROJECT, "");
     expect(infraStateUpdates).toHaveLength(0);
   });
 });

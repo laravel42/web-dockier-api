@@ -60,7 +60,7 @@ export interface DokployTeardownResult {
  */
 export async function teardownDokployProject(
   projectId: string,
-  _tenantId: string,
+  _tenantId: string, // checked by teardownProjectInfrastructure, the only caller
 ): Promise<DokployTeardownResult> {
   // A project is deployed as EITHER an application or a compose stack, never
   // both — but both are fetched unconditionally, because a project that

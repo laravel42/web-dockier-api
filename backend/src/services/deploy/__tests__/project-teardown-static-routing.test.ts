@@ -69,6 +69,7 @@ describe("teardownProjectInfrastructure — static stacks under DEPLOY_PROVIDER=
     const destroy = vi.fn().mockResolvedValue({ success: true, message: "Destroyed stack, S3 bucket", errors: [] });
 
     const result = await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
       resolve: async () => [stack("static")],
       destroy,
     });
@@ -81,6 +82,7 @@ describe("teardownProjectInfrastructure — static stacks under DEPLOY_PROVIDER=
 
   it("reports partial (not torn_down) when the static bucket cannot be deleted", async () => {
     const result = await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
       resolve: async () => [stack("static")],
       destroy: async () => ({ success: false, message: "Bucket delete: AccessDenied", errors: ["Bucket delete: AccessDenied"] }),
     });
@@ -95,6 +97,7 @@ describe("teardownProjectInfrastructure — static stacks under DEPLOY_PROVIDER=
     const destroy = vi.fn();
 
     await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
       resolve: async () => [stack("vps"), stack("managed")],
       destroy,
     });
@@ -115,6 +118,7 @@ describe("teardownProjectInfrastructure — static stacks under DEPLOY_PROVIDER=
     const destroy = vi.fn().mockResolvedValue({ success: true, message: "ok", errors: [] });
 
     const result = await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
       resolve: async () => [stack("static"), stack("vps")],
       destroy,
     });
@@ -137,6 +141,7 @@ describe("teardownProjectInfrastructure — static stacks under DEPLOY_PROVIDER=
     });
 
     const result = await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
       resolve: async () => [stack("static")],
       destroy: async () => ({ success: true, message: "ok", errors: [] }),
     });
@@ -156,6 +161,7 @@ describe("teardownProjectInfrastructure — static stacks under DEPLOY_PROVIDER=
     });
 
     const result = await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
       resolve: async () => [],
       destroy: vi.fn(),
     });
@@ -165,6 +171,7 @@ describe("teardownProjectInfrastructure — static stacks under DEPLOY_PROVIDER=
 
   it("still reports nothing_to_tear_down when neither world has anything", async () => {
     const result = await teardownProjectInfrastructure(PROJECT, TENANT, {
+      ownsProject: async () => true,
       resolve: async () => [],
       destroy: vi.fn(),
     });

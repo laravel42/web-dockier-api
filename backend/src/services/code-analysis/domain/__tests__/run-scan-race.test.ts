@@ -63,6 +63,13 @@ vi.mock("../scan-progress.js", () => ({
   updateScanProgress: vi.fn(async () => {}),
 }));
 
+// Ownership of the body-supplied ids has its own cases below; everything else assumes they are the tenant's.
+const ownedIds = new Set(["proj-1", "conn-1"]);
+vi.mock("../../../../shared/service-clients/tenant-ownership.js", () => ({
+  projectBelongsToTenant: async (id: string) => ownedIds.has(id),
+  gitConnectionBelongsToTenant: async (id: string) => ownedIds.has(id),
+}));
+
 // The reconciler would itself read Supabase; it is not what this test is about.
 vi.mock("../scan-reconcile.js", () => ({ reconcileStaleScanById: vi.fn(async () => false) }));
 
@@ -172,6 +179,15 @@ describe("createScan", () => {
     await expect(
       createScan({ tenantId: "org-1", projectId: "proj-1", connectionId: "conn-1", repo: "acme/api", branch: "main" }),
     ).rejects.toThrow(/already running/);
+  });
+
+  it("refuses another tenant's project or git connection before creating a row", async () => {
+    await expect(
+      createScan({ tenantId: "org-1", projectId: "proj-theirs", connectionId: "conn-1", repo: "acme/api", branch: "main" }),
+    ).rejects.toMatchObject({ code: "not_found", message: "Project not found" });
+    await expect(
+      createScan({ tenantId: "org-1", projectId: "proj-1", connectionId: "conn-theirs", repo: "acme/api", branch: "main" }),
+    ).rejects.toMatchObject({ code: "not_found", message: "Git connection not found" });
   });
 
   it("creates it when nothing is running", async () => {

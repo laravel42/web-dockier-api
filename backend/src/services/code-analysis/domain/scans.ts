@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { gitConnectionBelongsToTenant, projectBelongsToTenant } from "../../../shared/service-clients/tenant-ownership.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { throwOnError, unwrapQuery, unwrapList, assertOwnership } from "../../../shared/supabase/query.js";
@@ -53,6 +54,16 @@ async function hasLiveRunningScan(tenantId: string, projectId: string, exceptSca
 
 export async function createScan(params: CreateScanParams) {
   const { tenantId, projectId, connectionId, repo, branch } = params;
+  // Both ids come from the body. A foreign projectId would hold THAT project's
+  // one-running-scan slot (idx_scans_one_running_per_project is global on
+  // project_id) and block its owner's scans; a foreign connectionId is refused
+  // later by the worker, but only after the scan row exists.
+  const [projectOwned, connectionOwned] = await Promise.all([
+    projectBelongsToTenant(projectId, tenantId),
+    gitConnectionBelongsToTenant(connectionId, tenantId),
+  ]);
+  if (!projectOwned) throw new CodeAnalysisError("Project not found", "not_found");
+  if (!connectionOwned) throw new CodeAnalysisError("Git connection not found", "not_found");
   if (await hasLiveRunningScan(tenantId, projectId)) throw projectScanRunningError();
   const id = randomUUID();
   const now = nowIso();

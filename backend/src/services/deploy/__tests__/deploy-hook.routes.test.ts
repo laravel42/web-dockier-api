@@ -28,8 +28,12 @@ vi.mock("../../../shared/supabase/client.js", () => ({
   },
 }));
 
+// The hook deploys only its own project (triggerDeployForProject), never every
+// project sharing its repository and branch (handleGitPushEvent).
+const mockTriggerDeployForProject = vi.fn();
 const mockHandleGitPushEvent = vi.fn();
 vi.mock("../domain/push-to-deploy.js", () => ({
+  triggerDeployForProject: (...args: unknown[]) => mockTriggerDeployForProject(...args),
   handleGitPushEvent: (...args: unknown[]) => mockHandleGitPushEvent(...args),
 }));
 
@@ -79,7 +83,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Each case gets a fresh window so earlier requests don't trip the limiter.
   clearRateLimitStore();
-  mockHandleGitPushEvent.mockResolvedValue({ triggered: 1 });
+  mockTriggerDeployForProject.mockResolvedValue(true);
 });
 
 describe("POST /projects/:projectId/deploy/hook", () => {
@@ -90,7 +94,11 @@ describe("POST /projects/:projectId/deploy/hook", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ success: true, message: "Deploy triggered" });
-    expect(mockHandleGitPushEvent).toHaveBeenCalledWith({ repository: "acme/my-app", branch: "main" });
+    expect(mockTriggerDeployForProject).toHaveBeenCalledWith(
+      expect.objectContaining({ id: PROJECT_ID, organization_id: "a1b2c3d4-1234-4abc-8def-111111111111" }),
+      { repository: "acme/my-app", branch: "main" },
+    );
+    expect(mockHandleGitPushEvent).not.toHaveBeenCalled();
   });
 
   it("accepts a newly issued random token", async () => {
@@ -109,7 +117,7 @@ describe("POST /projects/:projectId/deploy/hook", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ success: false, message: "Invalid deploy token" });
-    expect(mockHandleGitPushEvent).not.toHaveBeenCalled();
+    expect(mockTriggerDeployForProject).not.toHaveBeenCalled();
   });
 
   it("keeps the push-to-deploy-disabled message unchanged", async () => {

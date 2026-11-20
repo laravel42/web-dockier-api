@@ -14,7 +14,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requireWebhookSignature } from "../../../shared/http/security.js";
 import { rateLimit } from "../../../shared/http/rate-limit.js";
-import { handleGitPushEvent, type GitPushEvent } from "../domain/push-to-deploy.js";
+import { handleGitPushEvent, triggerDeployForProject, type GitPushEvent } from "../domain/push-to-deploy.js";
 import {
   getProjectForDeployHook,
   readStoredDeployHookToken,
@@ -104,14 +104,14 @@ export async function registerGitPushWebhookRoutes(app: FastifyInstance) {
         return { success: false, message: "Push to deploy is not enabled for this project" };
       }
 
-      const result = await handleGitPushEvent({
-        repository: project.repository,
-        branch: project.branch,
-      });
-
+      // Only THIS project. This used to run handleGitPushEvent on repository + branch,
+      // which deploys every project with that pair in every tenant: a tenant could
+      // create a project naming a victim's repository, enable push-to-deploy, and
+      // trigger the victim's deploys with its own token.
+      const triggered = await triggerDeployForProject(project, { repository: project.repository, branch: project.branch });
       return {
-        success: result.triggered > 0,
-        message: result.triggered > 0 ? "Deploy triggered" : "No deployment configuration found",
+        success: triggered,
+        message: triggered ? "Deploy triggered" : "No deployment configuration found",
       };
     },
   );

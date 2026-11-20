@@ -160,7 +160,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   typed.post(
     "/projects/:projectId/infrastructure/teardown",
     {
-      preHandler: app.requirePermission(PERMISSIONS.DEPLOY_MANAGE),
+      preHandler: app.requireProjectPermission(PERMISSIONS.DEPLOY_MANAGE),
       // Teardown calls cloud provider APIs to delete stacks — allow extra time.
       handlerTimeout: 60_000,
       schema: {

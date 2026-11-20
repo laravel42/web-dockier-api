@@ -67,8 +67,7 @@ export async function handleGitPushEvent(event: GitPushEvent): Promise<{ trigger
 
   for (const project of eligibleProjects) {
     try {
-      await triggerDeployForProject(project, event);
-      triggered++;
+      if (await triggerDeployForProject(project, event)) triggered++;
     } catch (err) {
       logger.error(
         { err, projectId: project.id, repository, branch },
@@ -85,13 +84,13 @@ export async function handleGitPushEvent(event: GitPushEvent): Promise<{ trigger
  * Trigger a new deployment for a project by re-using its most recent
  * successful deployment configuration.
  */
-async function triggerDeployForProject(
+export async function triggerDeployForProject(
   project: { id: string; organization_id: string | null; connection_id: string; repository: string; branch: string },
   event: GitPushEvent,
-): Promise<void> {
+): Promise<boolean> {
   if (!project.organization_id) {
     logger.warn({ projectId: project.id }, "[push-to-deploy] Project has no organization — skipping");
-    return;
+    return false;
   }
 
   const tenantId = project.organization_id;
@@ -114,7 +113,7 @@ async function triggerDeployForProject(
 
   if (!lastDeploy) {
     logger.warn({ projectId: project.id }, "[push-to-deploy] No previous deployment found — skipping");
-    return;
+    return false;
   }
 
   await createAndEnqueueDeployment({
@@ -134,4 +133,5 @@ async function triggerDeployForProject(
     { projectId: project.id, repo: project.repository, branch: project.branch },
     "[push-to-deploy] Deploy enqueued",
   );
+  return true;
 }

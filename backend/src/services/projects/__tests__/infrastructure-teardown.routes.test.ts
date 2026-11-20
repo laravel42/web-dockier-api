@@ -46,7 +46,36 @@ beforeEach(async () => {
   clearPermissionCache();
 });
 
+const OTHER_TENANT_PROJECT = "d0e1f2a3-0123-4345-bcde-000000000000";
+/** Permission mocks plus a `projects` lookup that only finds PROJECT_ID within the caller's tenant. */
+function setupWithProjects(permissions: string[]) {
+  setupPerms(mockFrom, { permissions });
+  const permissionChain = mockFrom.getMockImplementation()!;
+  mockFrom.mockImplementation((table: string) => {
+    if (table !== "projects") return permissionChain(table);
+    const filters: Record<string, unknown> = {};
+    const chain: Record<string, unknown> = {
+      select: () => chain,
+      eq: (col: string, value: unknown) => { filters[col] = value; return chain; },
+      maybeSingle: async () => ({
+        data: filters.id === PROJECT_ID && filters.organization_id === TEST_TENANT_ID ? { id: PROJECT_ID, name: "p" } : null,
+        error: null,
+      }),
+    };
+    return chain;
+  });
+}
 describe("POST /projects/:projectId/infrastructure/teardown", () => {
+  it("answers 404 for another tenant's project without tearing anything down", async () => {
+    setupWithProjects(Object.values(PERMISSIONS));
+    const res = await app.inject({
+      method: "POST",
+      url: `/projects/${OTHER_TENANT_PROJECT}/infrastructure/teardown`,
+      headers: { authorization: authHeader() },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(mockTeardown).not.toHaveBeenCalled();
+  });
   it("returns 401 without auth", async () => {
     const res = await app.inject({
       method: "POST",
@@ -69,7 +98,7 @@ describe("POST /projects/:projectId/infrastructure/teardown", () => {
   });
 
   it("tears down and returns torn_down with deploy:manage", async () => {
-    setupPerms(mockFrom, { permissions: Object.values(PERMISSIONS) });
+    setupWithProjects(Object.values(PERMISSIONS));
     mockTeardown.mockResolvedValue({
       status: "torn_down",
       message: "Tore down 1 stack(s).",
@@ -88,7 +117,7 @@ describe("POST /projects/:projectId/infrastructure/teardown", () => {
   });
 
   it("relays nothing_to_tear_down", async () => {
-    setupPerms(mockFrom, { permissions: Object.values(PERMISSIONS) });
+    setupWithProjects(Object.values(PERMISSIONS));
     mockTeardown.mockResolvedValue({ status: "nothing_to_tear_down", message: "No provisioned infrastructure found for this project.", perStack: [] });
 
     const res = await app.inject({
@@ -102,7 +131,7 @@ describe("POST /projects/:projectId/infrastructure/teardown", () => {
   });
 
   it("relays partial failure", async () => {
-    setupPerms(mockFrom, { permissions: Object.values(PERMISSIONS) });
+    setupWithProjects(Object.values(PERMISSIONS));
     mockTeardown.mockResolvedValue({
       status: "partial",
       message: "Some resources could not be removed: image-builder-app-my-app.",
@@ -121,7 +150,7 @@ describe("POST /projects/:projectId/infrastructure/teardown", () => {
   });
 
   it("rejects a non-UUID projectId", async () => {
-    setupPerms(mockFrom, { permissions: Object.values(PERMISSIONS) });
+    setupWithProjects(Object.values(PERMISSIONS));
     const res = await app.inject({
       method: "POST",
       url: `/projects/not-a-uuid/infrastructure/teardown`,

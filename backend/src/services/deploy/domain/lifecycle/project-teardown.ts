@@ -19,6 +19,8 @@ import { parseInfra } from "../../types.js";
 import { getAdapter } from "../adapters/index.js";
 import type { DestroyContext, DestroyResult } from "../adapters/types.js";
 import { teardownDokployProject, type DokployTeardownResult } from "./dokploy-teardown.js";
+import { projectBelongsToTenant } from "../../../../shared/service-clients/tenant-ownership.js";
+import { DeployError } from "../providers.js";
 
 /**
  * A distinct live stack belonging to a project, with everything needed to
@@ -230,12 +232,13 @@ async function setProjectInfraState(projectId: string, tenantId: string, state: 
  * finalized as `success`. No-op when the deployment has no associated project
  * (e.g. ad-hoc deploys).
  */
-export async function markProjectInfraLive(projectId?: string | null): Promise<void> {
-  if (!projectId) return;
+export async function markProjectInfraLive(projectId: string | null | undefined, tenantId: string): Promise<void> {
+  if (!projectId || !tenantId) return;
   const { error } = await supabaseAdmin
     .from("projects")
     .update({ infra_state: "live" })
-    .eq("id", projectId);
+    .eq("id", projectId)
+    .eq("organization_id", tenantId);
   if (error) {
     logger.warn({ err: error, projectId }, "[teardown] Failed to mark project infra live");
   }
@@ -272,6 +275,8 @@ export interface TeardownDeps {
   resolve?: (projectId: string, tenantId: string) => Promise<ResolvedStack[]>;
   /** Override single-stack destroy (testing). Defaults to `destroyStack`. */
   destroy?: (stack: ResolvedStack) => Promise<DestroyResult>;
+  /** Override the tenant ownership check (testing). Defaults to `projectBelongsToTenant`. */
+  ownsProject?: (projectId: string, tenantId: string) => Promise<boolean>;
 }
 
 /** Map Dokploy teardown steps into the shared per-stack result shape. */
@@ -306,6 +311,11 @@ export async function teardownProjectInfrastructure(
   tenantId: string,
   deps: TeardownDeps = {},
 ): Promise<TeardownResult> {
+  // The Dokploy teardown below is keyed on projectId alone (server, application,
+  // domains, databases), so without this any caller who knew another tenant's
+  // project id could delete its servers and databases.
+  const ownsProject = deps.ownsProject ?? projectBelongsToTenant;
+  if (!(await ownsProject(projectId, tenantId))) throw new DeployError("Project not found", "not_found");
   const resolve = deps.resolve ?? resolveProjectStacks;
   const destroy = deps.destroy ?? destroyStack;
   const dokployActive = env.DEPLOY_PROVIDER === "dokploy";
