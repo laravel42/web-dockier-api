@@ -99,7 +99,7 @@ export async function executeComposePipeline(event: PipelineInput): Promise<void
 
     // ─── Stage 2 & 3: Sync Git + Provision Server (parallel) ─────
     const [gitResult, serverResult] = await Promise.all([
-      stageSyncGit({ gitConnectionId, repo, branch, log }),
+      stageSyncGit({ tenantId, gitConnectionId, repo, branch, log }),
       stageProvisionServer({
         projectId: projectId || deploymentId,
         providerId: event.providerId,
@@ -118,6 +118,7 @@ export async function executeComposePipeline(event: PipelineInput): Promise<void
     // needs, and re-derives the entry port, which a changed Dockerfile EXPOSE
     // can invalidate between deploys.
     const resolved = await resolveComposeFile({
+      tenantId,
       gitConnectionId,
       repo,
       branch,

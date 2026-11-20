@@ -36,12 +36,17 @@ export interface GitConnectionCredentials {
  *
  * @example
  * ```ts
- * const creds = await getGitConnectionCredentials(connectionId);
+ * const creds = await getGitConnectionCredentials(connectionId, tenantId);
  * if (!creds) throw new Error("Git connection not found");
  * ```
  */
-export async function getGitConnectionCredentials(connectionId: string): Promise<GitConnectionCredentials | null> {
-  if (!connectionId) return null;
+/**
+ * `tenantId` is required: the connection id comes from a deployment or project
+ * row whose fields a caller supplied, and an id from another tenant must never
+ * yield that tenant's clone token.
+ */
+export async function getGitConnectionCredentials(connectionId: string, tenantId: string): Promise<GitConnectionCredentials | null> {
+  if (!connectionId || !tenantId) return null;
 
   try {
     const data = await withRetry(
@@ -50,6 +55,7 @@ export async function getGitConnectionCredentials(connectionId: string): Promise
           .from("git_connections")
           .select("provider, personal_token, personal_token_encrypted, endpoint")
           .eq("id", connectionId)
+          .eq("organization_id", tenantId)
           .maybeSingle();
 
         // No error + no data = legitimate "not found" — don't retry

@@ -18,7 +18,7 @@ export async function registerEnvRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/env",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["projects"],
         summary: "Get masked environment file",
@@ -38,7 +38,7 @@ export async function registerEnvRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/env/reveal",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["projects"],
         summary: "Reveal full environment file (decrypted)",
@@ -58,7 +58,7 @@ export async function registerEnvRoutes(app: FastifyInstance) {
   typed.put(
     "/projects/:projectId/env",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["projects"],
         summary: "Save environment file",

@@ -107,7 +107,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
 
     // ─── Stage 2 & 3: Parallel — Sync Git + Provision Server ─────
     const [gitResult, serverResult] = await Promise.all([
-      stageSyncGit({ gitConnectionId, repo, branch, log }),
+      stageSyncGit({ tenantId, gitConnectionId, repo, branch, log }),
       stageProvisionServer({ projectId: projectId || deploymentId, providerId: event.providerId, tenantId, instanceType: event.instanceType, client, log }),
     ]);
     await checkpoint();
@@ -146,6 +146,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     // otherwise re-derive it from the repo's config files (no clone). Non-fatal
     // — undefined just lets Railpack infer as before.
     const resolvedRuntime = await resolveRuntimeStartCommand({
+      tenantId,
       gitConnectionId,
       repo,
       branch,

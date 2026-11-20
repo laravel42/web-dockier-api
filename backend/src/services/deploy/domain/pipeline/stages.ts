@@ -62,7 +62,7 @@ export async function stageProviderCredentials(ctx: PipelineContext): Promise<vo
 // ─── Stage 2: Clone Repository ──────────────────────────────────────
 
 export async function stageClone(ctx: PipelineContext): Promise<void> {
-  const creds = await getGitConnectionCredentials(ctx.event.gitConnectionId);
+  const creds = await getGitConnectionCredentials(ctx.event.gitConnectionId, ctx.event.tenantId);
   if (!creds) throw new Error("Git connection not found");
 
   const result = await cloneRepo({

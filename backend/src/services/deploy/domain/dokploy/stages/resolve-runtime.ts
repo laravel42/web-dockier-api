@@ -68,6 +68,7 @@ export interface ResolvedRuntime {
  *   not depend on whether a start command happened to be supplied.
  */
 export async function resolveRuntimeStartCommand(params: {
+  tenantId: string;
   gitConnectionId: string;
   repo: string;
   branch: string;
@@ -78,7 +79,7 @@ export async function resolveRuntimeStartCommand(params: {
   const explicitStart = explicit?.trim() || undefined;
 
   try {
-    const creds = await getGitConnectionCredentials(gitConnectionId);
+    const creds = await getGitConnectionCredentials(gitConnectionId, params.tenantId);
     if (!creds) return explicitStart ? { startCommand: explicitStart } : {};
 
     const connection: ConnectionLike = {

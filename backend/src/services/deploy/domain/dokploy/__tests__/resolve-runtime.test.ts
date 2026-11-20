@@ -53,6 +53,7 @@ describe("resolveRuntimeStartCommand", () => {
     serveRepo(["package.json", "Dockerfile"], { Dockerfile: "FROM node:22\nEXPOSE 8080\n" });
 
     const result = await resolveRuntimeStartCommand({
+      tenantId: "t1",
       gitConnectionId: "g1",
       repo: "acme/app",
       branch: "main",
@@ -73,7 +74,7 @@ describe("resolveRuntimeStartCommand", () => {
       },
     );
 
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.hasDockerfile).toBe(true);
     expect(result.dockerfilePort).toBe(4321);
   });
@@ -81,7 +82,7 @@ describe("resolveRuntimeStartCommand", () => {
   it("reports a Dockerfile with no EXPOSE as having no port", async () => {
     serveRepo(["Dockerfile"], { Dockerfile: "FROM nginx:alpine\nCOPY dist /usr/share/nginx/html\n" });
 
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.hasDockerfile).toBe(true);
     expect(result.dockerfilePort).toBeUndefined();
   });
@@ -91,7 +92,7 @@ describe("resolveRuntimeStartCommand", () => {
     // Dockerfile would fail the build rather than be used.
     serveRepo(["package.json", "docker/Dockerfile.prod"], { "package.json": pkg({ scripts: { start: "node ." } }) });
 
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.hasDockerfile).toBe(false);
   });
 
@@ -101,7 +102,7 @@ describe("resolveRuntimeStartCommand", () => {
       { "package.json": pkg({ deps: { astro: "^5.0.0", "@astrojs/node": "^9.0.0" }, scripts: { build: "astro build" } }) },
     );
 
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.startCommand).toBe("node ./dist/server/entry.mjs");
     expect(result.framework).toBe("astro");
     expect(result.kind).toBe("server");
@@ -119,7 +120,7 @@ describe("resolveRuntimeStartCommand", () => {
       },
     );
 
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.startCommand).toBeUndefined();
     expect(result.kind).toBe("server");
     expect(result.hasStartScript).toBe(true);
@@ -134,7 +135,7 @@ describe("resolveRuntimeStartCommand", () => {
       },
     );
 
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.startCommand).toBe("node ./dist/server/entry.mjs");
     expect(result.kind).toBe("server");
   });
@@ -148,7 +149,7 @@ describe("resolveRuntimeStartCommand", () => {
       },
     );
 
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.startCommand).toBeUndefined();
     expect(result.platformAdapter).toBe(true);
   });
@@ -165,7 +166,7 @@ describe("resolveRuntimeStartCommand", () => {
       },
     );
 
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.startCommand).toBeUndefined();
     // And a Laravel app is a server, never "static" — even though its
     // package.json makes the Node analyzer flag static assets.
@@ -180,7 +181,7 @@ describe("resolveRuntimeStartCommand", () => {
       { "package.json": pkg({ deps: { astro: "^5.0.0" }, scripts: { build: "astro build" } }) },
     );
 
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.startCommand).toBeUndefined();
     expect(result.kind).toBe("static");
   });
@@ -199,20 +200,20 @@ describe("resolveRuntimeStartCommand", () => {
       },
     );
 
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.framework).toBe("nextjs");
     expect(result.kind).toBe("server");
   });
 
   it("returns empty (no throw) when credentials are missing", async () => {
     mockGetCreds.mockResolvedValue(null);
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result).toEqual({});
   });
 
   it("returns empty (no throw) when the tree fetch throws", async () => {
     mockGetRepoFileTree.mockRejectedValue(new Error("network"));
-    const result = await resolveRuntimeStartCommand({ gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });
     expect(result.startCommand).toBeUndefined();
   });
 });

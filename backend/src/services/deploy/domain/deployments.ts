@@ -10,6 +10,7 @@ import { logger } from "../../../shared/logger.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { env } from "../../../shared/config.js";
 import { getProviderCredentialsSafe, hasUsableCredential } from "../../../lib/provider-credentials.js";
+import { gitConnectionBelongsToTenant, projectBelongsToTenant } from "../../../shared/service-clients/tenant-ownership.js";
 
 export interface ListDeploymentsFilters {
   providerId?: string;
@@ -279,8 +280,16 @@ export async function createAndEnqueueDeployment(params: CreateDeploymentParams)
     correlationId,
   } = params;
 
-  // Validate provider ownership
+  // Validate ownership of every id in the body. Provider was the only one checked:
+  // another tenant's projectId made the pipeline reconfigure THEIR Dokploy app with
+  // this repo, and their gitConnectionId cloned with their token.
   const full = await getProviderForTenant(providerId, tenantId);
+  const [projectOwned, connectionOwned] = await Promise.all([
+    projectBelongsToTenant(projectId, tenantId),
+    gitConnectionBelongsToTenant(gitConnectionId, tenantId),
+  ]);
+  if (!projectOwned) throw new DeployError("Project not found", "not_found");
+  if (!connectionOwned) throw new DeployError("Git connection not found", "not_found");
   const providerRow = { provider: full.provider, region: full.region ?? null };
 
   // Fail fast on missing cloud credentials.

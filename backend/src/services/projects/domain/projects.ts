@@ -9,9 +9,16 @@ import { postgrestIlikeContains } from "../../../shared/http/security.js";
 import { generateDeployHookToken } from "../../deploy/domain/deploy-hook.js";
 import { rowToProject } from "./mappers.js";
 import { saveWpConfig, generateWpConfig } from "./wp-config.js";
+import { gitConnectionBelongsToTenant } from "../../../shared/service-clients/tenant-ownership.js";
 
 export const ProjectsError = createDomainErrorClass<"not_found" | "forbidden" | "bad_request" | "internal" | "service_unavailable">("ProjectsError");
 export type ProjectsError = InstanceType<typeof ProjectsError>;
+/** A project must not point at another tenant's git connection: push-to-deploy clones with it. */
+async function assertConnectionOwned(connectionId: string | undefined, tenantId: string): Promise<void> {
+  if (!(await gitConnectionBelongsToTenant(connectionId, tenantId))) {
+    throw new ProjectsError("Git connection not found", "bad_request");
+  }
+}
 
 /** A commit candidate sourced from a deployment or scan row. */
 interface CommitCandidate {
@@ -135,6 +142,7 @@ export interface CreateProjectParams {
 export async function createProject(params: CreateProjectParams) {
   const { tenantId, name, repository, branch } = params;
   if (!name.trim()) throw new ProjectsError("Project name is required", "bad_request");
+  await assertConnectionOwned(params.connectionId, tenantId);
 
   const id = randomUUID();
   const now = nowIso();
@@ -280,7 +288,10 @@ export async function updateProject(params: UpdateProjectParams) {
   if (params.name !== undefined) updates.name = params.name;
   if (params.repository !== undefined) updates.repository = params.repository;
   if (params.branch !== undefined) updates.branch = params.branch;
-  if (params.connectionId !== undefined) updates.connection_id = params.connectionId;
+  if (params.connectionId !== undefined) {
+    await assertConnectionOwned(params.connectionId, tenantId);
+    updates.connection_id = params.connectionId;
+  }
   if (params.platform !== undefined) updates.platform = params.platform;
   if (params.sourceType !== undefined) updates.source_type = params.sourceType;
   if (params.template !== undefined) updates.template = params.template;

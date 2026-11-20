@@ -29,6 +29,7 @@ export interface SyncGitResult {
  * Load git credentials and prepare provider configuration for Dokploy.
  */
 export async function stageSyncGit(params: {
+  tenantId: string;
   gitConnectionId: string;
   repo: string;
   branch: string;
@@ -38,7 +39,7 @@ export async function stageSyncGit(params: {
 
   await log("[stage:sync-git] Loading git connection credentials...");
 
-  const creds = await getGitConnectionCredentials(gitConnectionId);
+  const creds = await getGitConnectionCredentials(gitConnectionId, params.tenantId);
   if (!creds) {
     throw new Error(`Git connection not found: ${gitConnectionId}`);
   }

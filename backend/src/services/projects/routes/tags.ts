@@ -133,7 +133,7 @@ export async function registerTagRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/tags",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["projects"],
         summary: "Get tags assigned to a project",
@@ -154,7 +154,7 @@ export async function registerTagRoutes(app: FastifyInstance) {
   typed.put(
     "/projects/:projectId/tags",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["projects"],
         summary: "Set tags for a project (replaces all)",

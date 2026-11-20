@@ -18,7 +18,7 @@ export async function registerWpConfigRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/wp-config",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_VIEW),
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_VIEW),
       schema: {
         tags: ["projects"],
         summary: "Get masked WordPress configuration",
@@ -38,7 +38,7 @@ export async function registerWpConfigRoutes(app: FastifyInstance) {
   typed.get(
     "/projects/:projectId/wp-config/reveal",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["projects"],
         summary: "Reveal full WordPress configuration (decrypted)",
@@ -58,7 +58,7 @@ export async function registerWpConfigRoutes(app: FastifyInstance) {
   typed.put(
     "/projects/:projectId/wp-config",
     {
-      preHandler: app.requirePermission(PERMISSIONS.PROJECT_MANAGE),
+      preHandler: app.requireProjectPermission(PERMISSIONS.PROJECT_MANAGE),
       schema: {
         tags: ["projects"],
         summary: "Save WordPress configuration",

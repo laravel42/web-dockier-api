@@ -43,6 +43,7 @@ export interface ResolvedCompose {
 const EMPTY: ResolvedCompose = { requiredVars: [], problems: [], warnings: [] };
 
 export async function resolveComposeFile(params: {
+  tenantId: string;
   gitConnectionId: string;
   repo: string;
   branch: string;
@@ -53,7 +54,7 @@ export async function resolveComposeFile(params: {
   const { gitConnectionId, repo, branch, composePath, log } = params;
 
   try {
-    const creds = await getGitConnectionCredentials(gitConnectionId);
+    const creds = await getGitConnectionCredentials(gitConnectionId, params.tenantId);
     if (!creds) return EMPTY;
 
     const connection: ConnectionLike = {
