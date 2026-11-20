@@ -29,9 +29,18 @@ export const rawBodyPlugin = fp(async (app: FastifyInstance) => {
       return payload;
     }
 
+    // preParsing runs before Fastify's bodyLimit check, and this header is client-supplied on
+    // any route: without a cap here an unauthenticated caller buffers an unbounded body.
+    const limit = request.server.initialConfig.bodyLimit ?? 1_048_576;
     const chunks: Buffer[] = [];
+    let received = 0;
     for await (const chunk of payload) {
-      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+      const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      received += buf.length;
+      if (received > limit) {
+        throw Object.assign(new Error("Request body is too large"), { statusCode: 413 });
+      }
+      chunks.push(buf);
     }
     const raw = Buffer.concat(chunks);
     request.rawBody = raw.toString("utf-8");

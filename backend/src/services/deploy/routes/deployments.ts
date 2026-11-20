@@ -5,14 +5,13 @@ import { getAuth } from "../../../shared/auth/auth.js";
 import { deploymentSchema, deploymentStatusSchema, serviceEntrySchema } from "../schemas.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import { paginationQuerySchema, paginationMetaSchema, paginatedResponse } from "../../../shared/schemas/responses.js";
-import { requireWebhookSignature, requireInternalToken } from "../../../shared/http/security.js";
+import { requireWebhookSignature } from "../../../shared/http/security.js";
 import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { applyDeploymentWebhookUpdate } from "../domain/processor.js";
 import {
   listDeployments,
   getDeployment,
   getDeploymentForWebhook,
-  updateDeploymentStatus,
   createAndEnqueueDeployment,
   cancelDeployment,
 } from "../domain/deployments.js";
@@ -140,32 +139,6 @@ export async function registerDeploymentRoutes(app: FastifyInstance) {
     async (request) => {
       const auth = getAuth(request);
       return await getDeployment(request.params.deploymentId, auth.tenantId);
-    },
-  );
-
-  typed.put(
-    "/deploy/deployments/:deploymentId",
-    {
-      preHandler: requireInternalToken,
-      schema: {
-        tags: ["deploy"],
-        summary: "Update deployment status/logs/url (internal)",
-        params: z.object({ deploymentId: z.uuid() }),
-        body: z.object({
-          status: deploymentStatusSchema.optional(),
-          logs: z.string().max(500_000).optional(),
-          appUrl: z.string().max(500).optional(),
-        }),
-        response: { 200: z.object({ success: z.literal(true) }) },
-      },
-    },
-    async (request) => {
-      await updateDeploymentStatus(request.params.deploymentId, {
-        status: request.body.status,
-        logs: request.body.logs,
-        appUrl: request.body.appUrl,
-      });
-      return { success: true as const };
     },
   );
 

@@ -59,15 +59,13 @@ vi.mock("../domain/providers.js", async (importOriginal) => {
 const mockListDeployments = vi.fn();
 const mockGetDeployment = vi.fn();
 const mockGetDeploymentForWebhook = vi.fn();
-const mockUpdateDeploymentStatus = vi.fn();
 const mockCreateAndEnqueueDeployment = vi.fn();
 
 vi.mock("../domain/deployments.js", () => ({
   listDeployments: (...args: unknown[]) => mockListDeployments(...args),
   getDeployment: (...args: unknown[]) => mockGetDeployment(...args),
   getDeploymentForWebhook: (...args: unknown[]) => mockGetDeploymentForWebhook(...args),
-  updateDeploymentStatus: (...args: unknown[]) => mockUpdateDeploymentStatus(...args),
-  createAndEnqueueDeployment: (...args: unknown[]) => mockCreateAndEnqueueDeployment(...args),
+createAndEnqueueDeployment: (...args: unknown[]) => mockCreateAndEnqueueDeployment(...args),
 }));
 
 const mockCreateDeploymentRecord = vi.fn();

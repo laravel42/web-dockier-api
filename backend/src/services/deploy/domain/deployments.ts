@@ -89,15 +89,6 @@ export async function getDeployment(deploymentId: string, tenantId: string) {
   return rowToDeployment(deployment);
 }
 
-export async function updateDeploymentStatus(deploymentId: string, updates: { status?: DeploymentStatus; logs?: string; appUrl?: string }) {
-  const payload: Partial<DeploymentRow> = { updated_at: nowIso() };
-  if (updates.status !== undefined) payload.status = updates.status;
-  if (updates.logs !== undefined) payload.logs = updates.logs;
-  if (updates.appUrl !== undefined) payload.app_url = updates.appUrl;
-  const { error } = await supabaseAdmin.from("deployments").update(payload).eq("id", deploymentId);
-  throwOnError(error, DeployError, { internalMsg: "Failed to update deployment" });
-}
-
 // ─── Pipeline Domain Functions ─────────────────────────────────────
 
 /**

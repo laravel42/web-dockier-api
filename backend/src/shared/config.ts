@@ -54,7 +54,6 @@ const envObjectSchema = z
     /** Toggle the AI Dockerfile review layer. Review runs only when an OpenAI key is also set. */
     AI_DOCKERFILE_REVIEW: z.enum(["on", "off"]).default("on"),
     WEBHOOK_SECRET: optionalEnv(z.string()),
-    INTERNAL_SERVICE_TOKEN: optionalEnv(z.string().min(16)),
     DEPLOY_CALLBACK_URL: optionalEnv(z.string()),
     IMAGE_BUILDER_CODEBUILD_PROJECT: z.string().min(1).default("image-builder"),
     PGBOSS_MAX_CONNECTIONS: z.coerce.number().int().positive().default(5),
@@ -179,15 +178,7 @@ function parseEnv(): AppEnv {
         "Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
       );
     }
-    if (!parsed.INTERNAL_SERVICE_TOKEN) {
-      // Fall back to WEBHOOK_SECRET but warn — this preserves backward compat
-      // while encouraging migration to a separate token.
-      logger.warn(
-        "[config] INTERNAL_SERVICE_TOKEN not set — falling back to WEBHOOK_SECRET. " +
-        "Set a separate INTERNAL_SERVICE_TOKEN for defense-in-depth.",
-      );
-    }
-  }
+}
 
   // Warn when the deprecated legacy key is in use
   if (parsed.SUPABASE_SERVICE_ROLE_KEY && !parsed.SUPABASE_SECRET_KEY) {
