@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth, getResolvedAuth } from "../../shared/auth/auth.js";
 import { listUsersResponseSchema, userSchema } from "./schemas.js";
+import { tenantRateLimit } from "../../shared/http/rate-limit.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema, paginationQuerySchema, paginatedResponse } from "../../shared/schemas/responses.js";
 import {
@@ -19,7 +20,10 @@ export async function registerUsersRoutes(app: FastifyInstance) {
   typed.post(
     "/users",
     {
-      preHandler: app.requirePermission(PERMISSIONS.USER_MANAGE),
+      preHandler: [
+        app.requirePermission(PERMISSIONS.USER_MANAGE),
+        tenantRateLimit({ max: 20, windowMs: 60_000, prefix: "users-create" }),
+      ],
       schema: {
         tags: ["users"],
         summary: "Create user",

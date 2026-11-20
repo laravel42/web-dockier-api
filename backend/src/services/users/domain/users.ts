@@ -1,9 +1,8 @@
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
-import { throwOnError, unwrapQuery, normalizePagination, paginatedRows, type PostgrestError } from "../../../shared/supabase/query.js";
+import { throwOnError, unwrapQuery, normalizePagination, type PostgrestError } from "../../../shared/supabase/query.js";
 import type { Database } from "../../../shared/supabase/types.js";
 import { canManageRole, invalidatePermissionCache, loadRolePermissions, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
-import { postgrestIlikeContains } from "../../../shared/http/security.js";
 import { logger } from "../../../shared/logger.js";
 import { nowIso } from "../../../shared/utils/time.js";
 import { rowToUser } from "./mappers.js";
@@ -94,18 +93,40 @@ export async function createUser(params: CreateUserParams) {
   return rowToUser(created);
 }
 
+/**
+ * Whether a person belongs to a tenant: an active membership, or the roleless account
+ * this tenant created (users.organization_id). users.organization_id alone is ONE value
+ * per person (the organization they last signed in to), so it cannot be the test for
+ * someone who belongs to two.
+ */
+async function isTenantMember(userId: string, tenantId: string): Promise<boolean> {
+  const [membership, user] = await Promise.all([
+    supabaseAdmin
+      .from("organization_memberships")
+      .select("id")
+      .eq("organization_id", tenantId)
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabaseAdmin.from("users").select("id").eq("id", userId).eq("organization_id", tenantId).maybeSingle(),
+  ]);
+  throwOnError(membership.error, UsersError, { internalMsg: "Failed to check membership" });
+  throwOnError(user.error, UsersError, { internalMsg: "Failed to look up user" });
+  return membership.data !== null || user.data !== null;
+}
+
 export async function getUser(userId: string, tenantId: string) {
+  if (!(await isTenantMember(userId, tenantId))) throw new UsersError("User not found", "not_found");
   const { data, error } = await supabaseAdmin
     .from("users")
     .select("id,email,name,avatar_url,country,language,timezone,organization_id,created_at")
     .eq("id", userId)
-    .eq("organization_id", tenantId)
     .single();
   const user = unwrapQuery(data, error, UsersError, {
     notFoundMsg: "User not found",
     internalMsg: "Failed to fetch user",
   });
-  return rowToUser(user);
+  return { ...rowToUser(user), tenantId };
 }
 
 export interface ListUsersParams {
@@ -115,28 +136,40 @@ export interface ListUsersParams {
   search?: string;
 }
 
+interface TenantUserRow {
+  id: string;
+  email: string;
+  name: string;
+  avatar_url: string | null;
+  country: string;
+  language: string;
+  timezone: string;
+  organization_id: string | null;
+  created_at: string;
+  total_count: number;
+}
+
 export async function listUsers(params: ListUsersParams) {
   const { tenantId, search } = params;
   const { limit, offset } = normalizePagination(params);
-
-  let query = supabaseAdmin
-    .from("users")
-    .select("id,email,name,avatar_url,country,language,timezone,organization_id,created_at", { count: "exact" })
-    .eq("organization_id", tenantId)
-    .order("created_at", { ascending: false });
-
-  if (search) {
-    const pattern = postgrestIlikeContains(search);
-    query = query.or(`name.ilike.${pattern},email.ilike.${pattern}`);
-  }
-
-  const { rows: data, count } = await paginatedRows(query, { limit, offset }, UsersError, {
-    internalMsg: "Failed to list users",
+  // By membership (migration 0094), not users.organization_id: see isTenantMember.
+  const listTenantUsers = supabaseAdmin.rpc as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: TenantUserRow[] | null; error: PostgrestError | null }>;
+  const { data: rpcRows, error: listError } = await listTenantUsers.call(supabaseAdmin, "list_tenant_users", {
+    p_tenant: tenantId,
+    p_search: search ?? "",
+    p_limit: limit,
+    p_offset: offset,
   });
+  throwOnError(listError, UsersError, { internalMsg: "Failed to list users" });
+  const data = rpcRows ?? [];
+  const count = data[0] ? Number(data[0].total_count) : 0;
 
   // Fetch membership + role info
   const userIds = data.map((u) => u.id);
-  if (userIds.length === 0) return { users: [], total: 0 };
+  if (userIds.length === 0) return { users: [], total: count };
 
   const { data: memberships, error: membershipsError } = await supabaseAdmin
     .from("organization_memberships")
@@ -157,12 +190,13 @@ export async function listUsers(params: ListUsersParams) {
       const membership = membershipByUser.get(row.id);
       return {
         ...rowToUser(row),
+        tenantId,
         roleId: membership?.role_id ?? "",
         roleName: membership?.roles?.name ?? "",
         isOwner: membership?.is_owner ?? false,
       };
     }),
-    total: count ?? 0,
+    total: count,
   };
 }
 
@@ -180,6 +214,7 @@ export interface UpdateUserParams {
 
 export async function updateUser(params: UpdateUserParams) {
   const { userId, tenantId, roleId, resolvedAuth } = params;
+  if (!(await isTenantMember(userId, tenantId))) throw new UsersError("User not found", "not_found");
 
   const updates: Database["public"]["Tables"]["users"]["Update"] = {};
   if (params.name !== undefined) updates.name = params.name;
@@ -192,8 +227,7 @@ export async function updateUser(params: UpdateUserParams) {
   const { error } = await supabaseAdmin
     .from("users")
     .update(updates)
-    .eq("id", userId)
-    .eq("organization_id", tenantId);
+    .eq("id", userId);
   throwOnError(error, UsersError, { internalMsg: "Failed to update user" });
 
   // Update role assignment if provided
@@ -205,13 +239,12 @@ export async function updateUser(params: UpdateUserParams) {
     .from("users")
     .select("id,email,name,avatar_url,country,language,timezone,organization_id,created_at")
     .eq("id", userId)
-    .eq("organization_id", tenantId)
     .single();
   const updated = unwrapQuery(data, fetchError, UsersError, {
     notFoundMsg: "User not found",
     internalMsg: "Failed to fetch user",
   });
-  return rowToUser(updated);
+  return { ...rowToUser(updated), tenantId };
 }
 
 export interface RemoveUserParams {
