@@ -42,7 +42,11 @@ export default function DeploymentsSection({ project, canManage, onProjectUpdate
   );
 
   const apiBase = import.meta.env.VITE_API_BASE || window.location.origin;
-  const deployHookUrl = `${apiBase}/projects/${project.id}/deploy/hook?token=${project.id.slice(0, 8)}`;
+  // The stored random token when the project has one. The id prefix is only what the backend still
+  // accepts for hook URLs handed out before tokens existed, and anyone can derive it from the id.
+  const storedHookToken = project.settings?.deployHookToken;
+  const hookToken = typeof storedHookToken === "string" && storedHookToken ? storedHookToken : project.id.slice(0, 8);
+  const deployHookUrl = `${apiBase}/projects/${project.id}/deploy/hook?token=${encodeURIComponent(hookToken)}`;
 
   // Health checks
   const [healthCheckEnabled, toggleHealthCheck] = useOptimisticToggle(

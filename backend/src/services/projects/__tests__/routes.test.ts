@@ -176,6 +176,32 @@ describe("GET /projects/:projectId", () => {
   });
 });
 
+describe("deploy hook token visibility", () => {
+  const withToken = { ...MOCK_PROJECT, settings: { pushToDeploy: true, deployHookToken: "secret-token" } };
+
+  it.each([
+    [`/projects/${TEST_PROJECT_ID}`, (b: { settings: unknown }) => b.settings],
+    ["/projects", (b: { projects: { settings: unknown }[] }) => b.projects[0]!.settings],
+  ])("%s hides the token from a viewer", async (url, pick) => {
+    setupPermissionMocks(mockFrom, { permissions: [PERMISSIONS.PROJECT_VIEW] });
+    mockGetProject.mockResolvedValue(withToken);
+    mockListProjects.mockResolvedValue({ projects: [withToken], total: 1 });
+    const res = await app.inject({ method: "GET", url, headers: { authorization: authHeader() } });
+    expect(pick(res.json())).toEqual({ pushToDeploy: true });
+  });
+
+  it("shows it to someone who can manage the project", async () => {
+    setupPermissionMocks(mockFrom, { permissions: [PERMISSIONS.PROJECT_VIEW, PERMISSIONS.PROJECT_MANAGE] });
+    mockGetProject.mockResolvedValue(withToken);
+    const res = await app.inject({
+      method: "GET",
+      url: `/projects/${TEST_PROJECT_ID}`,
+      headers: { authorization: authHeader() },
+    });
+    expect(res.json().settings.deployHookToken).toBe("secret-token");
+  });
+});
+
 describe("GET /projects", () => {
   it("returns paginated project list", async () => {
     setupPermissionMocks(mockFrom, { permissions: [PERMISSIONS.PROJECT_VIEW] });

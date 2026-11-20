@@ -11,7 +11,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAuth } from "../../shared/auth/auth.js";
+import { getAuth, getResolvedAuth } from "../../shared/auth/auth.js";
 import { projectConfigSchema, projectSchema, projectSettingsSchema } from "./schemas.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema, paginatedResponse } from "../../shared/schemas/responses.js";
@@ -26,6 +26,19 @@ import { teardownProjectInfrastructure } from "../deploy/domain/lifecycle/projec
 import { registerTagRoutes } from "./routes/tags.js";
 import { registerEnvRoutes } from "./routes/env.js";
 import { registerWpConfigRoutes } from "./routes/wp-config.js";
+
+/**
+ * `settings.deployHookToken` is the credential of the deploy hook URL, and `project:view` is
+ * the weakest permission that reads a project. Only whoever can edit the project sees it.
+ */
+function hideHookTokenFromViewers<T extends { settings: Record<string, unknown> }>(
+  project: T,
+  canManage: boolean,
+): T {
+  if (canManage || !("deployHookToken" in project.settings)) return project;
+  const { deployHookToken: _hidden, ...settings } = project.settings;
+  return { ...project, settings };
+}
 
 export async function registerProjectsRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -53,11 +66,12 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = getAuth(request);
-      return await createProject({
+      const auth = getResolvedAuth(request);
+      const project = await createProject({
         tenantId: auth.tenantId,
         ...request.body,
       });
+      return hideHookTokenFromViewers(project, auth.permissions.includes(PERMISSIONS.PROJECT_MANAGE));
     },
   );
 
@@ -73,8 +87,9 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = getAuth(request);
-      return await getProject(request.params.projectId, auth.tenantId);
+      const auth = getResolvedAuth(request);
+      const project = await getProject(request.params.projectId, auth.tenantId);
+      return hideHookTokenFromViewers(project, auth.permissions.includes(PERMISSIONS.PROJECT_MANAGE));
     },
   );
 
@@ -98,10 +113,12 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const auth = getAuth(request);
+      const auth = getResolvedAuth(request);
       const { limit, offset, search } = request.query;
       const result = await listProjects(auth.tenantId, { limit, offset, search });
-      return paginatedResponse("projects", result.projects, result.total, limit, offset);
+      const canManage = auth.permissions.includes(PERMISSIONS.PROJECT_MANAGE);
+      const projects = result.projects.map((p) => hideHookTokenFromViewers(p, canManage));
+      return paginatedResponse("projects", projects, result.total, limit, offset);
     },
   );
 
