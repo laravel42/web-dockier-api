@@ -21,7 +21,6 @@ export async function validateRoleAssignment(roleId: string, tenantId: string, a
     .select("id,system_key")
     .eq("id", roleId)
     .eq("organization_id", tenantId)
-    .is("deleted_at", null)
     .maybeSingle();
   if (error) throw new UsersError("Failed to look up role", "internal");
   if (!role) throw new UsersError("Role not found", "bad_request");

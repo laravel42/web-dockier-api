@@ -3,7 +3,6 @@ import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import { logger } from "../../../shared/logger.js";
 import { createDomainErrorClass } from "../../../shared/supabase/errors.js";
 import { selectAllRows, throwOnError, unwrapList, unwrapQuery, type PostgrestError } from "../../../shared/supabase/query.js";
-import { nowIso } from "../../../shared/utils/time.js";
 import { ASSIGNABLE_PERMISSIONS, withBaselinePermissions, type PermissionKey } from "../../../shared/permissions/constants.js";
 import { canManageRole, loadRolePermissions, type ResolvedAuth } from "../../../shared/permissions/authorization.js";
 import { SYSTEM_ROLE_KEYS } from "../../../shared/permissions/role-templates.js";
@@ -34,7 +33,6 @@ export async function listRoles(tenantId: string): Promise<{ roles: RoleResponse
     .from("roles")
     .select("id,name,description,system_key,is_system,is_editable,is_deletable")
     .eq("organization_id", tenantId)
-    .is("deleted_at", null)
     .order("created_at", { ascending: true });
   const roleRows = unwrapList(roles, error, RolesError, { internalMsg: "Failed to list roles" });
 
@@ -71,7 +69,6 @@ export async function getRole(roleId: string, tenantId: string): Promise<RoleRes
     .select("id,name,description,system_key,is_system,is_editable,is_deletable")
     .eq("id", roleId)
     .eq("organization_id", tenantId)
-    .is("deleted_at", null)
     .maybeSingle();
   const found = unwrapQuery(role, error, RolesError, {
     notFoundMsg: "Role not found",
@@ -182,7 +179,6 @@ export async function updateRole(params: UpdateRoleParams): Promise<RoleResponse
     .select("id,organization_id,name,description,system_key,is_system,is_editable,is_deletable")
     .eq("id", roleId)
     .eq("organization_id", tenantId)
-    .is("deleted_at", null)
     .maybeSingle();
   const role = unwrapQuery(existing, fetchError, RolesError, {
     notFoundMsg: "Role not found",
@@ -282,7 +278,6 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
     .select("id,organization_id,system_key,is_deletable")
     .eq("id", roleId)
     .eq("organization_id", tenantId)
-    .is("deleted_at", null)
     .maybeSingle();
   const role = unwrapQuery(existing, fetchError, RolesError, {
     notFoundMsg: "Role not found",
@@ -309,10 +304,10 @@ export async function deleteRole(roleId: string, tenantId: string, resolvedAuth:
     throw new RolesError(`Cannot delete role — it is still assigned to ${count} member(s). Reassign them first.`, "conflict");
   }
 
-  // Soft delete
+  // role_permissions rows cascade; no membership points at it (checked above)
   const { error } = await supabaseAdmin
     .from("roles")
-    .update({ deleted_at: nowIso() })
+    .delete()
     .eq("id", roleId)
     .eq("organization_id", tenantId);
   throwOnError(error, RolesError, { internalMsg: "Failed to delete role" });

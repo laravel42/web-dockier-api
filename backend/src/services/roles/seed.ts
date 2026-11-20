@@ -57,7 +57,6 @@ export async function seedDefaultRoles(organizationId: string): Promise<SeededRo
       .select("id")
       .eq("organization_id", organizationId)
       .eq("system_key", template.systemKey)
-      .is("deleted_at", null)
       .maybeSingle();
 
     let finalRoleId: string;
@@ -82,7 +81,6 @@ export async function seedDefaultRoles(organizationId: string): Promise<SeededRo
           .select("id")
           .eq("organization_id", organizationId)
           .eq("system_key", template.systemKey)
-          .is("deleted_at", null)
           .maybeSingle();
         finalRoleId = raceExisting?.id ?? roleId;
       } else {

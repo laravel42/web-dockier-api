@@ -146,8 +146,6 @@ async function resolvePermissions(userId: string, tenantId: string, email: strin
  *     Used by Query 2a — role lookup by ID.
  *   - idx_roles_org ON (organization_id)
  *     Supports the .eq("organization_id", tenantId) filter.
- *   - idx_roles_deleted ON (deleted_at) WHERE deleted_at IS NULL
- *     Supports the .is("deleted_at", null) filter without scanning soft-deleted rows.
  *
  * role_permissions (migration 0035):
  *   - idx_role_permissions_role ON (role_id)
@@ -178,7 +176,6 @@ async function resolvePermissionsFromDb(userId: string, tenantId: string, email:
       .select("id, system_key")
       .eq("id", roleId)
       .eq("organization_id", tenantId)
-      .is("deleted_at", null)
       .maybeSingle(),
     supabaseAdmin
       .from("role_permissions")

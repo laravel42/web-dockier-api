@@ -106,7 +106,6 @@ export type Database = {
           is_system: boolean;
           is_editable: boolean;
           is_deletable: boolean;
-          deleted_at: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["roles"]["Row"]> &

@@ -112,7 +112,7 @@ export async function registerRolesRoutes(app: FastifyInstance) {
       preHandler: app.requirePermission(PERMISSIONS.ROLE_MANAGE),
       schema: {
         tags: ["roles"],
-        summary: "Delete role (soft delete)",
+        summary: "Delete role",
         params: z.object({ roleId: z.uuid() }),
         response: { 200: successResponseSchema },
       },

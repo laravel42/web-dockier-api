@@ -77,7 +77,6 @@ export async function resolveUserPermissions(userId: string, tenantId: string): 
     .from("roles")
     .select("id, name, system_key")
     .eq("id", membership.role_id)
-    .is("deleted_at", null)
     .maybeSingle();
 
   throwOnError(roleError, MembershipError, { internalMsg: "Failed to resolve role" });
