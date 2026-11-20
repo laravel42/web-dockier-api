@@ -188,7 +188,7 @@ export async function executeComposePipeline(event: PipelineInput): Promise<void
     // ─── Success ─────────────────────────────────────────────────
     if (await isCancelled()) throw new DeployCancelledError();
 
-    await markProjectInfraLive(projectId);
+    await markProjectInfraLive(projectId, tenantId);
     await updateStatus(
       deploymentId,
       "success",
@@ -227,7 +227,7 @@ export async function executeComposePipeline(event: PipelineInput): Promise<void
     // lights up and the user can remove them.
     if (projectId) {
       try {
-        await markProjectInfraLive(projectId);
+        await markProjectInfraLive(projectId, tenantId);
       } catch {
         // never mask the original failure
       }

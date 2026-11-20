@@ -269,8 +269,8 @@ export async function applyDeploymentWebhookUpdate(
   // non-fatal (no-op on missing projectId, warns on error, never throws), so it
   // cannot block the shared deployments update below. Only the success case is
   // reordered; the update itself still runs for every status.
-  if (payload.status === "success" && current?.project_id) {
-    await markProjectInfraLive(current.project_id);
+  if (payload.status === "success" && current?.project_id && current.organization_id) {
+    await markProjectInfraLive(current.project_id, current.organization_id);
   }
 
   await supabaseAdmin.from("deployments").update(updates).eq("id", buildId);

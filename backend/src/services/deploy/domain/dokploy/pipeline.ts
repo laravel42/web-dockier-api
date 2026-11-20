@@ -276,6 +276,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     // and can bake a broken config, causing Bad Gateway — so we don't.
     if (projectId) {
       await stageRunPostDeploy({
+        tenantId,
         projectId,
         buildType,
         primaryLanguage: event.primaryLanguage,
@@ -359,7 +360,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     // instead of a stale "torn_down"/"none". markProjectInfraLive is non-fatal
     // (no-op on missing projectId, warns on error, never throws), so it cannot
     // block the success flip.
-    await markProjectInfraLive(projectId);
+    await markProjectInfraLive(projectId, tenantId);
 
     // Write the app URL ATOMICALLY with the success status. Writing it after
     // flipping to "success" is a race: clients that poll for a terminal status
@@ -410,7 +411,7 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     // Best-effort: wrapped so it can never mask the original failure.
     if (projectId) {
       try {
-        await markProjectInfraLive(projectId);
+        await markProjectInfraLive(projectId, tenantId);
       } catch {
         // never mask the original failure
       }

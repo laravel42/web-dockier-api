@@ -59,6 +59,7 @@ const STARTUP_COVERED_ARTISAN = new Set([
 ]);
 
 export async function stageRunPostDeploy(params: {
+  tenantId: string;
   projectId: string;
   /**
    * Dokploy build type for this app. When "railpack" and the app is PHP, the
@@ -78,14 +79,14 @@ export async function stageRunPostDeploy(params: {
   /** Optional sink for user-facing advisories (see advisories.ts). */
   advise?: (advisory: Advisory) => void;
 }): Promise<void> {
-  const { projectId, buildType, primaryLanguage, techStack = [], log, advise } = params;
+  const { tenantId, projectId, buildType, primaryLanguage, techStack = [], log, advise } = params;
   const sleep = params.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const readinessTimeoutMs = params.readinessTimeoutMs ?? 120_000;
 
   // Load the user's post-deploy commands from project settings.
   let script: string;
   try {
-    const config = await getProjectDeployConfig(projectId);
+    const config = await getProjectDeployConfig(projectId, tenantId);
     script = (config?.deployScript ?? "").trim();
   } catch (err) {
     await log(`${MARKER} Skipped loading post-deploy commands: ${getErrMsg(err)}`);

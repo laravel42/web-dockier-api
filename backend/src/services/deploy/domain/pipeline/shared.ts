@@ -118,7 +118,7 @@ export async function loadProjectContext(
 
   // Load deploy script and platform
   try {
-    const projectConfig = await getProjectDeployConfig(event.projectId);
+    const projectConfig = await getProjectDeployConfig(event.projectId, event.tenantId);
     if (projectConfig) {
       deployScript = projectConfig.deployScript;
       knownPlatform = projectConfig.platform;
@@ -328,7 +328,7 @@ export async function finalizeDeploy(ctx: {
   // stale "torn_down"/"none". markProjectInfraLive is non-fatal (no-op on
   // missing projectId, warns on error, never throws), so it cannot block the
   // success flip. app_url + infra stay atomic with the "success" status below.
-  await markProjectInfraLive(ctx.event.projectId);
+  await markProjectInfraLive(ctx.event.projectId, ctx.event.tenantId);
 
   if (finalUrl) {
     await updateStatus(ctx.deploymentId, "success", { app_url: finalUrl, infra: serializeInfra(infra) });

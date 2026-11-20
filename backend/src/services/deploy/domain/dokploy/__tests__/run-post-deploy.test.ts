@@ -37,14 +37,14 @@ describe("stageRunPostDeploy", () => {
 
   it("does nothing when no deployScript is configured", async () => {
     mockGetProjectDeployConfig.mockResolvedValue({ deployScript: "" });
-    await stageRunPostDeploy({ projectId: "p1", log, sleep: noSleep });
+    await stageRunPostDeploy({ tenantId: "t1", projectId: "p1", log, sleep: noSleep });
     expect(mockResolveTarget).not.toHaveBeenCalled();
     expect(mockExecInContainer).not.toHaveBeenCalled();
   });
 
   it("does nothing when the script is only comments/blank lines", async () => {
     mockGetProjectDeployConfig.mockResolvedValue({ deployScript: "# a comment\n\n   \n# another" });
-    await stageRunPostDeploy({ projectId: "p1", log, sleep: noSleep });
+    await stageRunPostDeploy({ tenantId: "t1", projectId: "p1", log, sleep: noSleep });
     expect(mockResolveTarget).not.toHaveBeenCalled();
   });
 
@@ -52,7 +52,7 @@ describe("stageRunPostDeploy", () => {
     mockGetProjectDeployConfig.mockResolvedValue({ deployScript: "php artisan migrate --force" });
     mockResolveTarget.mockResolvedValue({ target: null, errorMessage: "Redeploy the project to enable running commands." });
 
-    await stageRunPostDeploy({ projectId: "p1", log, sleep: noSleep });
+    await stageRunPostDeploy({ tenantId: "t1", projectId: "p1", log, sleep: noSleep });
 
     expect(mockExecInContainer).not.toHaveBeenCalled();
     expect(logs.some((l) => /Skipping post-deploy commands/i.test(l))).toBe(true);
@@ -66,7 +66,7 @@ describe("stageRunPostDeploy", () => {
       .mockResolvedValueOnce({ exitCode: 0, output: "", timedOut: false })
       .mockResolvedValueOnce({ exitCode: 0, output: "Migrated.\n", timedOut: false });
 
-    await stageRunPostDeploy({ projectId: "p1", log, sleep: noSleep });
+    await stageRunPostDeploy({ tenantId: "t1", projectId: "p1", log, sleep: noSleep });
 
     expect(mockExecInContainer).toHaveBeenCalledTimes(2);
     // Readiness probe is the trivial command.
@@ -84,7 +84,7 @@ describe("stageRunPostDeploy", () => {
       .mockResolvedValueOnce({ exitCode: 1, output: "migration failed\n", timedOut: false });
 
     // Must not throw.
-    await expect(stageRunPostDeploy({ projectId: "p1", log, sleep: noSleep })).resolves.toBeUndefined();
+    await expect(stageRunPostDeploy({ tenantId: "t1", projectId: "p1", log, sleep: noSleep })).resolves.toBeUndefined();
     expect(logs.some((l) => /exited with code 1/i.test(l))).toBe(true);
   });
 
@@ -94,7 +94,7 @@ describe("stageRunPostDeploy", () => {
     // Readiness probe always fails; readinessTimeoutMs=0 ends the loop immediately.
     mockExecInContainer.mockResolvedValue({ exitCode: 1, output: "not running", timedOut: false });
 
-    await stageRunPostDeploy({ projectId: "p1", log, sleep: noSleep, readinessTimeoutMs: 0 });
+    await stageRunPostDeploy({ tenantId: "t1", projectId: "p1", log, sleep: noSleep, readinessTimeoutMs: 0 });
 
     // No script run beyond (at most) probing; the "did not become ready" note is logged.
     expect(logs.some((l) => /did not become ready/i.test(l))).toBe(true);
@@ -102,7 +102,7 @@ describe("stageRunPostDeploy", () => {
 
   it("does not throw if loading the config fails", async () => {
     mockGetProjectDeployConfig.mockRejectedValue(new Error("db down"));
-    await expect(stageRunPostDeploy({ projectId: "p1", log, sleep: noSleep })).resolves.toBeUndefined();
+    await expect(stageRunPostDeploy({ tenantId: "t1", projectId: "p1", log, sleep: noSleep })).resolves.toBeUndefined();
     expect(mockResolveTarget).not.toHaveBeenCalled();
   });
 
@@ -115,7 +115,7 @@ describe("stageRunPostDeploy", () => {
     });
 
     await stageRunPostDeploy({
-      projectId: "p1",
+      tenantId: "t1", projectId: "p1",
       buildType: "railpack",
       techStack: ["php", "laravel"],
       log,
@@ -148,7 +148,7 @@ describe("stageRunPostDeploy", () => {
       .mockResolvedValueOnce({ exitCode: 0, output: "", timedOut: false });
 
     await stageRunPostDeploy({
-      projectId: "p1",
+      tenantId: "t1", projectId: "p1",
       buildType: "railpack",
       primaryLanguage: "PHP",
       techStack: ["PHP", "Laravel"],
@@ -178,7 +178,7 @@ describe("stageRunPostDeploy", () => {
       .mockResolvedValueOnce({ exitCode: 0, output: "", timedOut: false });
 
     await stageRunPostDeploy({
-      projectId: "p1",
+      tenantId: "t1", projectId: "p1",
       buildType: "nixpacks",
       primaryLanguage: "PHP",
       techStack: ["PHP", "Laravel"],
@@ -201,7 +201,7 @@ describe("stageRunPostDeploy", () => {
 
     const advisories: Array<{ code: string }> = [];
     await stageRunPostDeploy({
-      projectId: "p1",
+      tenantId: "t1", projectId: "p1",
       buildType: "nixpacks",
       primaryLanguage: "PHP",
       techStack: ["PHP", "Laravel"],
@@ -225,7 +225,7 @@ describe("stageRunPostDeploy", () => {
 
     const advisories: Array<{ code: string }> = [];
     await stageRunPostDeploy({
-      projectId: "p1",
+      tenantId: "t1", projectId: "p1",
       buildType: "nixpacks",
       primaryLanguage: "PHP",
       techStack: ["PHP", "Laravel"],
@@ -244,7 +244,7 @@ describe("stageRunPostDeploy", () => {
 
     const advisories: Array<{ code: string }> = [];
     await stageRunPostDeploy({
-      projectId: "p1",
+      tenantId: "t1", projectId: "p1",
       buildType: "railpack",
       primaryLanguage: "PHP",
       techStack: ["PHP", "Laravel"],
@@ -266,7 +266,7 @@ describe("stageRunPostDeploy", () => {
       .mockResolvedValueOnce({ exitCode: 0, output: "Seeded.\n", timedOut: false });
 
     await stageRunPostDeploy({
-      projectId: "p1",
+      tenantId: "t1", projectId: "p1",
       buildType: "railpack",
       primaryLanguage: "PHP",
       log,
@@ -290,7 +290,7 @@ describe("stageRunPostDeploy", () => {
 
     // buildType "dockerfile" → gate off → the migrate command runs as-is.
     await stageRunPostDeploy({
-      projectId: "p1",
+      tenantId: "t1", projectId: "p1",
       buildType: "dockerfile",
       techStack: ["php", "laravel"],
       log,

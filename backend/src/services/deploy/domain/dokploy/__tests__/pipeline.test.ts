@@ -389,7 +389,7 @@ describe("executeDokployPipeline", () => {
 
     // Without this the project shows "No infrastructure" and the Tear Down
     // button stays disabled, so users cannot destroy what they just created.
-    expect(mockMarkInfraLive).toHaveBeenCalledWith("project-1");
+    expect(mockMarkInfraLive).toHaveBeenCalledWith("project-1", "tenant-1");
   });
 
   it("marks infra live BEFORE flipping the deployment to success", async () => {
@@ -435,7 +435,7 @@ describe("executeDokployPipeline", () => {
     // Marking infra "live" lets the Tear Down button light up for the orphans.
     const statusCalls = mockUpdateStatus.mock.calls.map((c) => c[1]);
     expect(statusCalls).toContain("failed");
-    expect(mockMarkInfraLive).toHaveBeenCalledWith("project-1");
+    expect(mockMarkInfraLive).toHaveBeenCalledWith("project-1", "tenant-1");
   });
 
   it("does not mark infra live with a truthy id when a projectless deploy fails", async () => {

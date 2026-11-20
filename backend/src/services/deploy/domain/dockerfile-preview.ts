@@ -11,7 +11,6 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { projectBelongsToTenant } from "../../../shared/service-clients/tenant-ownership.js";
 import { rm } from "node:fs/promises";
 import { cloneRepo, analyzeAndGenerate } from "../../../lib/build-pipeline.js";
 import { createConsoleLogger } from "../../../lib/logging.js";
@@ -52,9 +51,8 @@ export async function previewDockerfile(input: PreviewDockerfileInput): Promise<
 
   // Resolve the platform override server-side, exactly as the pipeline does.
   let knownPlatform = "";
-  // getProjectDeployConfig is keyed on the id alone; only read a project of this tenant.
-  if (projectId && (await projectBelongsToTenant(projectId, tenantId))) {
-    const cfg = await getProjectDeployConfig(projectId);
+  if (projectId) {
+    const cfg = await getProjectDeployConfig(projectId, tenantId);
     if (cfg?.platform) knownPlatform = cfg.platform;
   }
 

@@ -5,10 +5,7 @@ import { createTestEnv } from "../../../../shared/__tests__/test-helpers.js";
 
 vi.mock("../../../../shared/config.js", () => ({ env: createTestEnv() }));
 vi.mock("../../../../shared/supabase/client.js", () => ({ supabaseAdmin: { from: vi.fn() } }));
-const mockProjectOwned = vi.fn(async () => true);
-vi.mock("../../../../shared/service-clients/tenant-ownership.js", () => ({
-  projectBelongsToTenant: (...a: unknown[]) => mockProjectOwned(...(a as [])),
-}));
+
 
 const mockRm = vi.fn().mockResolvedValue(undefined);
 vi.mock("node:fs/promises", () => ({ rm: (...args: unknown[]) => mockRm(...args) }));
@@ -145,16 +142,10 @@ describe("previewDockerfile", () => {
 
     await previewDockerfile(baseInput({ projectId: "proj-1" }));
 
-    expect(mockGetProjectDeployConfig).toHaveBeenCalledWith("proj-1");
+    expect(mockGetProjectDeployConfig).toHaveBeenCalledWith("proj-1", TENANT);
     expect(mockAnalyzeAndGenerate).toHaveBeenCalledWith(
       expect.objectContaining({ knownPlatform: "laravel" }),
     );
-  });
-
-  it("does not read the platform of another tenant's project", async () => {
-    mockProjectOwned.mockResolvedValueOnce(false);
-    await previewDockerfile(baseInput({ projectId: "someone-elses" }));
-    expect(mockGetProjectDeployConfig).not.toHaveBeenCalled();
   });
 
   it("propagates a clone failure and does not call analyze (no temp dir to clean)", async () => {

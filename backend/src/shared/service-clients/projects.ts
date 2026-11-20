@@ -25,17 +25,19 @@ export interface ProjectDeployConfig {
  *
  * @example
  * ```ts
- * const config = await getProjectDeployConfig(projectId);
+ * const config = await getProjectDeployConfig(projectId, tenantId);
  * if (config?.deployScript) { ... }
  * ```
  */
-export async function getProjectDeployConfig(projectId: string): Promise<ProjectDeployConfig | null> {
-  if (!projectId) return null;
-
+export async function getProjectDeployConfig(projectId: string, tenantId: string): Promise<ProjectDeployConfig | null> {
+  // The tenant is part of the lookup, not a courtesy: a caller that forgot to validate
+  // a body-supplied projectId must find nothing rather than another tenant's settings.
+  if (!projectId || !tenantId) return null;
   const { data, error } = await supabaseAdmin
     .from("projects")
     .select("settings, platform")
     .eq("id", projectId)
+    .eq("organization_id", tenantId)
     .maybeSingle();
 
   if (error) {
