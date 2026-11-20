@@ -5,7 +5,7 @@
  * used by the aws-s3 and gcp-storage static adapters.
  */
 
-import { join, extname } from "node:path";
+import { join, extname, dirname } from "node:path";
 import { existsSync, readdirSync, statSync, readFileSync, copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import type { DetectedStack } from "../../../../lib/repo-analyzer/types.js";
 import type { RunCmdFn } from "../run-cmd.js";
@@ -130,6 +130,15 @@ export function getMimeType(filePath: string): string {
   return MIME_TYPES[ext] || "application/octet-stream";
 }
 
+// ─── Tenant code runs without the backend's secrets ───────────────
+
+/** Options for every command that executes the repository's own code (install and build scripts). */
+function tenantCodeOpts(cwd: string, env?: Record<string, string>) {
+  // HOME is the build's own temp directory (the clone's parent), removed with it, so package manager
+  // caches are not shared between tenants' builds.
+  return { cwd, env, isolateEnv: true, homeDir: dirname(cwd) };
+}
+
 // ─── Install Dependencies ──────────────────────────────────────────
 
 /**
@@ -151,7 +160,7 @@ export async function installDeps(opts: {
 
   // Enable corepack for yarn/pnpm — required for projects declaring packageManager in package.json
   if (packageManager === "yarn" || packageManager === "pnpm") {
-    const corepackResult = await runCmd("corepack", ["enable"], { cwd: repoDir });
+    const corepackResult = await runCmd("corepack", ["enable"], tenantCodeOpts(repoDir));
     if (corepackResult.code !== 0) {
       await appendLog("⚠ corepack enable failed — falling back to global package manager");
     }
@@ -160,29 +169,29 @@ export async function installDeps(opts: {
   let installOk = false;
 
   if (packageManager === "pnpm") {
-    const result = await runCmd("pnpm", ["install", "--frozen-lockfile"], { cwd: repoDir });
+    const result = await runCmd("pnpm", ["install", "--frozen-lockfile"], tenantCodeOpts(repoDir));
     installOk = result.code === 0;
     if (!installOk) {
       await appendLog("⚠ pnpm install --frozen-lockfile failed, trying pnpm install...");
-      const fallback = await runCmd("pnpm", ["install"], { cwd: repoDir });
+      const fallback = await runCmd("pnpm", ["install"], tenantCodeOpts(repoDir));
       installOk = fallback.code === 0;
     }
   } else if (packageManager === "yarn") {
     // Yarn v4 (Berry) uses --immutable instead of --frozen-lockfile
-    const result = await runCmd("yarn", ["install", "--immutable"], { cwd: repoDir });
+    const result = await runCmd("yarn", ["install", "--immutable"], tenantCodeOpts(repoDir));
     installOk = result.code === 0;
     if (!installOk) {
       await appendLog("⚠ yarn install --immutable failed, trying yarn install...");
-      const fallback = await runCmd("yarn", ["install"], { cwd: repoDir });
+      const fallback = await runCmd("yarn", ["install"], tenantCodeOpts(repoDir));
       installOk = fallback.code === 0;
     }
   } else {
     // Default to npm
-    const result = await runCmd("npm", ["ci"], { cwd: repoDir });
+    const result = await runCmd("npm", ["ci"], tenantCodeOpts(repoDir));
     installOk = result.code === 0;
     if (!installOk) {
       await appendLog("⚠ npm ci failed, trying npm install...");
-      const fallback = await runCmd("npm", ["install"], { cwd: repoDir });
+      const fallback = await runCmd("npm", ["install"], tenantCodeOpts(repoDir));
       installOk = fallback.code === 0;
     }
   }
@@ -266,7 +275,7 @@ async function runScript(
   env?: Record<string, string>,
 ): Promise<{ code: number; output: string }> {
   const pm = packageManager === "yarn" || packageManager === "pnpm" ? packageManager : "npm";
-  return runCmd(pm, ["run", script], { cwd, env });
+  return runCmd(pm, ["run", script], tenantCodeOpts(cwd, env));
 }
 
 /**
@@ -284,11 +293,11 @@ async function runBin(
 ): Promise<{ code: number; output: string }> {
   if (packageManager === "yarn") {
     // yarn exec runs a binary from the project's dependencies
-    return runCmd("yarn", ["exec", bin, ...args], { cwd, env });
+    return runCmd("yarn", ["exec", bin, ...args], tenantCodeOpts(cwd, env));
   } else if (packageManager === "pnpm") {
-    return runCmd("pnpm", ["exec", bin, ...args], { cwd, env });
+    return runCmd("pnpm", ["exec", bin, ...args], tenantCodeOpts(cwd, env));
   }
-  return runCmd("npx", [bin, ...args], { cwd, env });
+  return runCmd("npx", [bin, ...args], tenantCodeOpts(cwd, env));
 }
 
 async function buildNuxt(

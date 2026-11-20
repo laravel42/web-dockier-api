@@ -1,11 +1,24 @@
 import { spawn } from "node:child_process";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
+export interface RunCmdOptions {
+  cwd?: string;
+  env?: Record<string, string>;
+  stdin?: string;
+  /**
+   * Run with a minimal environment instead of a copy of this process's. Required for anything that
+   * executes a tenant's code (install scripts, build scripts): with the full environment a
+   * package's postinstall could read the backend's database, JWT and encryption secrets.
+   */
+  isolateEnv?: boolean;
+  /** HOME for an isolated command. Defaults to the system temp dir; give it a per-build directory. */
+  homeDir?: string;
+}
 export type RunCmdFn = (
   cmd: string,
   args: string[],
-  opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }
+  opts?: RunCmdOptions
 ) => Promise<{ code: number; output: string }>;
 
 /** Augmented PATH that includes Pulumi binary locations. */
@@ -17,6 +30,25 @@ function getAugmentedPath(): string {
 }
 
 const augmentedPath = getAugmentedPath();
+/**
+ * The environment a child process gets. Isolated children see only what they need to run
+ * (PATH, HOME, locale, CI) plus whatever the caller passes explicitly in `opts.env`.
+ *
+ * shortcut: this hides the environment, not the filesystem or the network. Code that runs in
+ * this process's user can still read files it can reach (cloud CLI and docker credentials in the
+ * real home directory); upgrade to running the build in a container if tenant builds must be
+ * fully contained.
+ */
+export function buildChildEnv(opts?: RunCmdOptions): Record<string, string | undefined> {
+  if (!opts?.isolateEnv) return { ...process.env, PATH: augmentedPath, ...opts?.env };
+  return {
+    PATH: augmentedPath,
+    HOME: opts.homeDir ?? tmpdir(),
+    LANG: "C.UTF-8",
+    CI: "true",
+    ...opts.env,
+  };
+}
 
 /**
  * Run a command and collect its output. No log streaming — just returns code + output.
@@ -25,12 +57,12 @@ const augmentedPath = getAugmentedPath();
 export function runCmd(
   cmd: string,
   args: string[],
-  opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }
+  opts?: RunCmdOptions
 ): Promise<{ code: number; output: string }> {
   return new Promise((resolve) => {
     const proc = spawn(cmd, args, {
       cwd: opts?.cwd,
-      env: { ...process.env, PATH: augmentedPath, ...opts?.env },
+      env: buildChildEnv(opts),
       stdio: [opts?.stdin ? "pipe" : "ignore", "pipe", "pipe"],
     });
     if (opts?.stdin) {
@@ -58,7 +90,7 @@ export function createStreamingRunCmd(
     return new Promise((resolve) => {
       const proc = spawn(cmd, args, {
         cwd: opts?.cwd || undefined,
-        env: { ...process.env, PATH: augmentedPath, ...opts?.env },
+        env: buildChildEnv(opts),
         stdio: [opts?.stdin ? "pipe" : "ignore", "pipe", "pipe"],
       });
       if (opts?.stdin) {
