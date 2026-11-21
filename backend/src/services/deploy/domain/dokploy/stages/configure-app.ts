@@ -8,6 +8,7 @@
  */
 
 import type { DokployClient } from "../client.js";
+import { formatDokployEnv } from "../env-text.js";
 import type { DokployBuildType, DeployService } from "../types.js";
 import { getApplication, upsertApplication, deleteApplicationMapping } from "../mappings.js";
 import type { GitProviderConfig } from "./sync-git.js";
@@ -397,7 +398,7 @@ export async function stageConfigureApp(params: {
   }
   if (finalEnv.length > 0) {
     await log(`[stage:configure-app] Setting ${finalEnv.length} environment variables...`);
-    const envString = finalEnv.map((v) => `${v.name}=${v.value}`).join("\n");
+    const envString = formatDokployEnv(finalEnv);
     await client.saveEnvironment({
       applicationId,
       env: envString,

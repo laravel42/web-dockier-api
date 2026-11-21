@@ -15,6 +15,7 @@
  */
 
 import type { DokployClient } from "../client.js";
+import { formatDokployEnv } from "../env-text.js";
 import { getCompose, upsertCompose, deleteComposeMapping } from "../mappings.js";
 import type { GitProviderConfig } from "./sync-git.js";
 import { getErrMsg } from "../../../../../shared/utils/error-message.js";
@@ -178,7 +179,7 @@ export async function stageConfigureCompose(params: {
   // Sent even when empty so a previously-set env is cleared rather than
   // silently retained from an earlier deploy — Dockier owns this field, the
   // same way it owns the application's env.
-  const envString = envVars.map((v) => `${v.name}=${v.value}`).join("\n");
+  const envString = formatDokployEnv(envVars);
   await log(`${MARKER} Setting ${envVars.length} environment variable(s)...`);
   await client.saveComposeEnvironment({ composeId, env: envString, createEnvFile: true });
 
