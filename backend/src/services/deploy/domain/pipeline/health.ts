@@ -6,6 +6,7 @@
  */
 
 import { pollUntil } from "../infra/poll-until.js";
+import { guardedFetch } from "../../../../shared/http/guarded-fetch.js";
 import { appendLog } from "./helpers.js";
 import { logTimestamp as ts } from "../../../../shared/utils/time.js";
 import { NATIVE_STAGE, stageMarker } from "../../../../lib/logging.js";
@@ -29,7 +30,8 @@ export async function waitForAppReady(deploymentId: string, appUrl: string): Pro
   const result = await pollUntil({
     check: async (attempt) => {
       try {
-        const response = await fetch(appUrl, {
+        // Follows redirects, and the app being checked decides where they go.
+        const response = await guardedFetch(appUrl, {
           method: "GET",
           signal: AbortSignal.timeout(10_000),
           redirect: "follow",

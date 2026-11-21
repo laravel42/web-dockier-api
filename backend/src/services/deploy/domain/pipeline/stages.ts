@@ -16,6 +16,7 @@ import { getProviderCredentialsSafe } from "../../../../lib/provider-credentials
 import { getGitConnectionCredentials } from "../../../../shared/service-clients/git-connections.js";
 import { getActiveDeployment } from "../../../../shared/service-clients/deployments.js";
 import { getErrMsg } from "../../../../shared/utils/error-message.js";
+import { guardedFetch } from "../../../../shared/http/guarded-fetch.js";
 import { getAdapter } from "../adapters/index.js";
 import { extractRegionFromScript } from "../infra/gcp-helpers.js";
 import { executePostDeployScript } from "../lifecycle/post-deploy.js";
@@ -290,7 +291,9 @@ export async function stageHealthCheck(ctx: PipelineContext): Promise<void> {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
 
-      const response = await fetch(ctx.healthCheckUrl, {
+      // healthCheckUrl is typed by the tenant and this runs on our host: a plain fetch would let it
+      // probe cloud metadata and internal services, and the log below reports the status it got.
+      const response = await guardedFetch(ctx.healthCheckUrl, {
         method: "GET",
         signal: controller.signal,
         redirect: "follow",

@@ -18,6 +18,7 @@
 
 import { sleep } from "../../../../../shared/utils/time.js";
 import { getErrMsg } from "../../../../../shared/utils/error-message.js";
+import { guardedFetch } from "../../../../../shared/http/guarded-fetch.js";
 import type { RuntimeHint } from "./trigger-deploy.js";
 
 export interface VerifyResult {
@@ -58,7 +59,8 @@ export async function stageVerifyDeploy(params: {
     attempts = 5,
     intervalMs = 6_000,
     requestTimeoutMs = 10_000,
-    fetchImpl = fetch,
+    // The deployed app answers this request and may redirect it anywhere, so refuse internal targets.
+    fetchImpl = guardedFetch,
   } = params;
 
   if (!appUrl) return { ok: false, reason: "skipped" };
