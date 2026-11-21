@@ -754,7 +754,7 @@ export class DokployClient {
       if (response.status >= 400 && response.status < 500) {
         const errorBody = await response.text().catch(() => "");
         throw new DokployError(
-          `Dokploy API error: ${response.status} ${response.statusText} — ${errorBody}`,
+          `Dokploy API error: ${response.status} ${response.statusText} — ${safeErrorBody(errorBody)}`,
           response.status,
           endpoint || url,
         );
@@ -772,6 +772,15 @@ export class DokployClient {
   }
 }
 
+/**
+ * Dokploy's 4xx body ends up in deploy logs the tenant reads. Validation errors can repeat a value
+ * they were sent, and the clone URL we send carries the git token as `user:token@host`, so strip
+ * credentials from URLs and cap the length.
+ */
+export function safeErrorBody(body: string): string {
+  const stripped = body.replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s:/@"'\\]+:[^\s/@"'\\]+@/gi, "$1[redacted]@");
+  return stripped.length > 1000 ? `${stripped.slice(0, 1000)}…` : stripped;
+}
 // ─── Factory ─────────────────────────────────────────────────────
 
 /**

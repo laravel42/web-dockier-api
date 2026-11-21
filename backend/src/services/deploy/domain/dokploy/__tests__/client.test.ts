@@ -17,7 +17,7 @@ function setMockEnv(values: Record<string, unknown>) {
   Object.assign(mockEnv, values);
 }
 
-import { DokployClient } from "../client.js";
+import { DokployClient, safeErrorBody } from "../client.js";
 import { DokployError } from "../types.js";
 
 describe("DokployClient", () => {
@@ -632,5 +632,26 @@ describe("request timeout cleanup", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(pendingBefore);
+  });
+});
+
+describe("safeErrorBody", () => {
+  it("strips credentials from URLs", () => {
+    const body = JSON.stringify({ message: 'Invalid url "https://x-access-token:ghp_secretvalue123@github.com/o/r.git"' });
+    const out = safeErrorBody(body);
+    expect(out).not.toContain("ghp_secretvalue123");
+    expect(out).toContain("https://[redacted]@github.com/o/r.git");
+  });
+
+  it("leaves URLs without credentials and ordinary text alone", () => {
+    expect(safeErrorBody("Application not found: https://github.com/o/r.git")).toBe(
+      "Application not found: https://github.com/o/r.git",
+    );
+  });
+
+  it("caps the length", () => {
+    const out = safeErrorBody("x".repeat(5000));
+    expect(out.length).toBeLessThan(1010);
+    expect(out.endsWith("…")).toBe(true);
   });
 });
