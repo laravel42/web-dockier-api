@@ -12,7 +12,7 @@ import jwt from "jsonwebtoken";
 // ─── Constants ─────────────────────────────────────────────────────
 // UUIDs must pass Zod's strict UUID v4 format: version nibble [1-8], variant nibble [89ab]
 
-export const TEST_JWT_SECRET = "test-secret-at-least-16-chars";
+export const TEST_JWT_SECRET = "test-secret-at-least-32-chars-long";
 export const TEST_TENANT_ID = "a1b2c3d4-1234-4abc-8def-111111111111";
 export const TEST_USER_ID = "b2c3d4e5-2345-4bcd-9abc-222222222222";
 export const TEST_EMAIL = "test@dockier.dev";

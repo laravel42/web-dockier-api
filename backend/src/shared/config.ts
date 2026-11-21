@@ -46,7 +46,8 @@ const envObjectSchema = z
     SUPABASE_SECRET_KEY: optionalEnv(supabaseSecretKeySchema),
     /** @deprecated Use SUPABASE_SECRET_KEY (sb_secret_...) instead. */
     SUPABASE_SERVICE_ROLE_KEY: optionalEnv(z.string().min(20)),
-    JWT_SECRET: z.string().min(16),
+    // Signs every session token with HS256, so a short secret can be brute-forced offline from one token.
+    JWT_SECRET: z.string().min(32),
     CORS_ORIGIN: z.string().default("*"),
     OPENAI_API_KEY: optionalEnv(z.string()),
     // Blank counts as unset: `OPENAI_MODEL=` (or `=   # note`) would otherwise send model "" to OpenAI.
