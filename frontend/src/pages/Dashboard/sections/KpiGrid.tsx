@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { statCardCls, typeStatDelta, typeStatLabel, typeStatValueSm } from "@/utils/styles";
+import Skeleton from "@/components/ui/Skeleton";
 import RocketIcon from "@/components/icons/outlined/RocketIcon";
 import { CircleAlertIcon, CircleCheckIcon, FolderClosedIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react";
 
@@ -18,6 +19,7 @@ interface Props {
   scans: number;
   totalFindings: number;
   showDeploys?: boolean;
+  loading?: boolean;
 }
 
 export default function KpiGrid({
@@ -28,6 +30,7 @@ export default function KpiGrid({
   scans,
   totalFindings,
   showDeploys = true,
+  loading = false,
 }: Props) {
   const iconCls = "size-4 text-primary-500";
 
@@ -51,7 +54,7 @@ export default function KpiGrid({
 
   return (
     <div className="mb-8 overflow-x-auto scrollbar-hide">
-      <div className="flex min-w-full gap-3 sm:gap-4">
+      <div className="flex min-w-full gap-3 sm:gap-4" aria-busy={loading || undefined}>
         {kpis.map((kpi) => (
           <div
             key={kpi.label}
@@ -61,8 +64,8 @@ export default function KpiGrid({
               <span className={`${typeStatLabel} truncate`}>{kpi.label}</span>
               <span className="shrink-0">{kpi.icon}</span>
             </div>
-            <div className={`mt-2 sm:mt-3 ${typeStatValueSm}`}>{kpi.value}</div>
-            <div className={`mt-0.5 sm:mt-1 ${typeStatDelta} truncate`}>{kpi.delta}</div>
+            <div className={`mt-2 sm:mt-3 ${typeStatValueSm}`}>{loading ? <Skeleton className="h-7 w-12" /> : kpi.value}</div>
+            <div className={`mt-0.5 sm:mt-1 ${typeStatDelta} truncate`}>{loading ? <Skeleton className="h-3 w-24" /> : kpi.delta}</div>
           </div>
         ))}
       </div>

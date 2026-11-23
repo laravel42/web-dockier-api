@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { usePermissions } from "../context/PermissionsContext";
-import PageLoading from "./ui/PageLoading";
 import type { PermissionKey } from "../config/permissions";
 
 interface PermissionRouteProps {
@@ -18,7 +17,7 @@ export default function PermissionRoute({
   const { has, loading } = usePermissions();
 
   if (loading) {
-    return <PageLoading />;
+    return null;
   }
 
   if (!has(permission)) {

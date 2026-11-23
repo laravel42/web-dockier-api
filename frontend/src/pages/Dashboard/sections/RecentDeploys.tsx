@@ -1,6 +1,7 @@
 import type { Deployment as Deploy, Provider, Project } from "@/types";
 import { cardCls, typeCardDateCls, typeCardTitle, typePanelDesc, typePanelTitle, dashboardActivityRowCls } from "@/utils/styles";
 import Button from "@/components/ui/Button";
+import Skeleton from "@/components/ui/Skeleton";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import ProviderBadge from "@/components/ProviderBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
@@ -11,11 +12,12 @@ interface Props {
   providers: Provider[];
   projectMap: Record<string, Project>;
   fallbackCommitByProject?: Record<string, string>;
+  loading?: boolean;
   onViewAll: () => void;
   onViewDeploy: (id: string) => void;
 }
 
-export default function RecentDeploys({ deploys, providers, projectMap, fallbackCommitByProject, onViewAll, onViewDeploy }: Props) {
+export default function RecentDeploys({ deploys, providers, projectMap, fallbackCommitByProject, loading, onViewAll, onViewDeploy }: Props) {
   return (
     <div className={cardCls}>
       <div className="px-5 py-4 flex items-center justify-between">
@@ -27,7 +29,20 @@ export default function RecentDeploys({ deploys, providers, projectMap, fallback
           View all
         </Button>
       </div>
-      {deploys.length === 0 ? (
+      {loading ? (
+        <ul className="divide-y divide-border/40" aria-busy="true">
+          {Array.from({ length: 5 }, (_, i) => (
+            <li key={i} className="flex items-center gap-3 px-5 py-3">
+              <Skeleton className="size-2 rounded-full" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+              <Skeleton className="h-5 w-14" />
+            </li>
+          ))}
+        </ul>
+      ) : deploys.length === 0 ? (
         <p className="text-sm text-text-muted text-center py-8">No deployments yet</p>
       ) : (
         <ul className="divide-y divide-border/40">

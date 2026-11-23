@@ -1,5 +1,4 @@
 import PageHeader from "@/components/ui/PageHeader";
-import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
 import Button from "@/components/ui/Button";
 import { useDashboard } from "./useDashboard";
@@ -27,12 +26,10 @@ export default function Dashboard() {
   } = useDashboard();
   const { has, loading: permLoading } = usePermissions();
   const canViewDeploys = has("deploy:view");
+  const pending = loading || permLoading;
 
-  if (loading || permLoading) {
-    return <PageLoading />;
-  }
 
-  if (error) {
+  if (!pending && error) {
     return (
       <div>
         <PageHeader title="Dashboard" description="Overview of your projects, scans, and deployments." />
@@ -41,7 +38,7 @@ export default function Dashboard() {
     );
   }
 
-  if (projects.length === 0) {
+  if (!pending && projects.length === 0) {
     return <GettingStarted navigate={navigate} />;
   }
 
@@ -68,13 +65,15 @@ export default function Dashboard() {
         scans={totals.scans}
         totalFindings={totalFindings}
         showDeploys={canViewDeploys}
+        loading={pending}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {canViewDeploys && (
+        {(pending || canViewDeploys) && (
           <RecentDeploys
             deploys={recentDeploys}
             providers={providers}
+            loading={pending}
             projectMap={projectMap}
             fallbackCommitByProject={fallbackCommitByProject}
             onViewAll={() => navigate("/deploy")}
@@ -82,6 +81,7 @@ export default function Dashboard() {
           />
         )}
         <RecentScans
+          loading={pending}
           scans={recentScans}
           projectMap={projectMap}
           fallbackCommitByProject={fallbackCommitByProject}

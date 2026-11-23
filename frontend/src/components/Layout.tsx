@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Outlet } from "react-router-dom";
 import TopNavbar from "./TopNavbar";
 import ErrorBoundary from "./ErrorBoundary";
@@ -21,7 +22,10 @@ export default function Layout() {
       >
         <div className="w-full min-w-0">
           <ErrorBoundary title="This page encountered an error">
-            <Outlet />
+            {/* Keeps the navbar on screen while a lazy page chunk loads; the page's own skeletons take over. */}
+            <Suspense fallback={null}>
+              <Outlet />
+            </Suspense>
           </ErrorBoundary>
         </div>
       </main>
