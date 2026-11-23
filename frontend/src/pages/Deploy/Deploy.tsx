@@ -3,8 +3,8 @@ import { useDeploy } from "./useDeploy";
 import DeployEmptyState from "./sections/EmptyState";
 import DeployCard from "./sections/DeployCard";
 import DeployTable from "./sections/DeployTable";
+import CardTableSkeleton from "@/components/ui/CardTableSkeleton";
 import PageHeader from "@/components/ui/PageHeader";
-import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
 import ListToolbar from "@/components/ui/ListToolbar";
 import Pagination from "@/components/ui/Pagination";
@@ -45,8 +45,19 @@ export default function Deploy() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Deployments" />
-        <PageLoading />
+        <PageHeader title="Deployments" description="Loading deployments…" />
+        <ListToolbar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search by project or repository"
+          viewMode={viewMode}
+          onViewModeChange={changeViewMode}
+        />
+        <CardTableSkeleton
+          viewMode={viewMode}
+          label="Loading deployments"
+          columns={["Name", "Repository", "Branch", "Deploys", "Tech", "Last deploy"]}
+        />
       </div>
     );
   }

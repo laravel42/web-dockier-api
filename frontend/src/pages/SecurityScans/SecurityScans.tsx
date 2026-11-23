@@ -3,7 +3,7 @@ import ScanProjectCard from "./sections/ScanProjectCard";
 import ScanProjectTable from "./sections/ScanProjectTable";
 import EmptyProjectCard from "./sections/EmptyProjectCard";
 import PageHeader from "@/components/ui/PageHeader";
-import PageLoading from "@/components/ui/PageLoading";
+import CardTableSkeleton from "@/components/ui/CardTableSkeleton";
 import PageError from "@/components/ui/PageError";
 import EmptyState from "@/components/ui/EmptyState";
 import ListToolbar from "@/components/ui/ListToolbar";
@@ -33,16 +33,8 @@ export default function SecurityScans() {
   } = useSecurityScans();
 
   // Search and paging keep the toolbar mounted; only the very first load blanks the page.
-  if (loading && sortedProjectIds.length === 0 && !search) {
-    return (
-      <div>
-        <PageHeader title="Security Scans" />
-        <PageLoading />
-      </div>
-    );
-  }
 
-  if (error) {
+  if (error && !loading) {
     return (
       <div>
         <PageHeader title="Security Scans" />
@@ -68,7 +60,11 @@ export default function SecurityScans() {
     <div>
       <PageHeader
         title="Security Scans"
-        description={`${pagination.total} ${pagination.total === 1 ? "project" : "projects"}`}
+        description={
+          loading && sortedProjectIds.length === 0
+            ? "Loading projects…"
+            : `${pagination.total} ${pagination.total === 1 ? "project" : "projects"}`
+        }
       />
 
       <ListToolbar
@@ -80,7 +76,11 @@ export default function SecurityScans() {
       />
 
       {loading ? (
-        <PageLoading />
+        <CardTableSkeleton
+          viewMode={viewMode}
+          label="Loading security scans"
+          columns={["Name", "Tech", "Branch", "Scans", "Findings", "Last scan"]}
+        />
       ) : sortedProjectIds.length === 0 ? (
         <EmptyMessage>No projects match your search.</EmptyMessage>
       ) : viewMode === "table" ? (

@@ -1,6 +1,5 @@
 import ConfirmModal from "@/components/ConfirmModal";
 import PageHeader from "@/components/ui/PageHeader";
-import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import ListToolbar from "@/components/ui/ListToolbar";
 import Pagination from "@/components/ui/Pagination";
@@ -10,6 +9,7 @@ import Button from "@/components/ui/Button";
 import ProjectFormModal from "./sections/ProjectFormModal";
 import ProjectTable from "./sections/ProjectTable";
 import ProjectCard from "./sections/ProjectCard";
+import ProjectsSkeleton from "./sections/ProjectsSkeleton";
 import { PlusIcon } from "lucide-react";
 import { cardGridCls } from "@/utils/styles";
 
@@ -44,7 +44,11 @@ export default function Projects() {
     <div>
       <PageHeader
         title="Projects"
-        description={`${pagination.total} connected ${pagination.total === 1 ? "repository" : "repositories"}`}
+        description={
+          loading && projects.length === 0
+            ? "Loading repositories…"
+            : `${pagination.total} connected ${pagination.total === 1 ? "repository" : "repositories"}`
+        }
         actions={
           canCreate ? (
             <Button onClick={openCreate} iconLeft={<PlusIcon className="size-4" />}>
@@ -60,11 +64,9 @@ export default function Projects() {
         onSuccess={reload}
       />
 
-      {loading && projects.length === 0 && !search ? (
-        <PageLoading />
-      ) : loadError ? (
+      {loadError && !loading ? (
         <PageError message={loadError} onRetry={reload} />
-      ) : pagination.total === 0 && !search && !loading ? (
+      ) : !loading && pagination.total === 0 && !search ? (
         <EmptyMessage>No projects yet. Create one to get started.</EmptyMessage>
       ) : (
         <>
@@ -77,7 +79,7 @@ export default function Projects() {
           />
 
           {loading ? (
-            <PageLoading />
+            <ProjectsSkeleton viewMode={viewMode} />
           ) : projects.length === 0 ? (
             <EmptyMessage>No projects match your search.</EmptyMessage>
           ) : viewMode === "table" ? (
