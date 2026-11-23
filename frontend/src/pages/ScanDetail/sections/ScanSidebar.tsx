@@ -9,7 +9,7 @@ import {
 import { usePermissions } from "@/context/PermissionsContext";
 import type { Scan } from "@/types";
 import Button from "@/components/ui/Button";
-import Spinner from "@/components/Spinner";
+import HistoryRowsSkeleton from "@/components/ui/HistoryRowsSkeleton";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { ShieldCheckIcon, Trash2Icon } from "lucide-react";
 import ScanStatusDot from "@/components/ScanStatusDot";
@@ -101,9 +101,7 @@ export default function ScanSidebar({
           </div>
 
           {allScansLoading ? (
-            <div className="flex justify-center py-4">
-              <Spinner className="size-3.5" />
-            </div>
+            <HistoryRowsSkeleton />
           ) : allScans.length === 0 ? (
             <p className="text-xs text-text-muted text-center py-3">No scans yet</p>
           ) : (

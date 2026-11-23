@@ -1,7 +1,7 @@
 import type { Project } from "@/types";
 import type { RepoAnalysis } from "@/components/DeployWizard";
 import { usePermissions } from "@/context/PermissionsContext";
-import { TabSpinner } from "../settings/shared";
+import PanelSkeleton from "./PanelSkeleton";
 import GeneralSection from "../settings/GeneralSection";
 import DeploymentsSection from "../settings/DeploymentsSection";
 import EnvironmentSection from "../settings/EnvironmentSection";
@@ -23,7 +23,7 @@ export default function ProjectSettingsTab({ project, section, analysis, onProje
   const { has, loading: permissionsLoading } = usePermissions();
   const canManage = has("project:manage");
 
-  if (permissionsLoading) return <TabSpinner label="Loading…" />;
+  if (permissionsLoading) return <PanelSkeleton />;
 
   return (
     <div className="min-h-0 min-w-0 flex-1 overflow-auto pr-1">

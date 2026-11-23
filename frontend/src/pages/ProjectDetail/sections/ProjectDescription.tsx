@@ -40,7 +40,8 @@ import { osvApi } from "@/services/osv";
 import { TabPanelHeader, tabPanelContentCls } from "@/components/TabPanelHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import TabSpinner from "@/components/ui/TabSpinner";
+import PanelSkeleton from "./PanelSkeleton";
+import TextSkeleton from "./TextSkeleton";
 
 /*
   Both editors are fetched on demand. The overview tab is the default one, but
@@ -561,7 +562,7 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
               <div>
                 <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Details</p>
                 <ErrorBoundary title="Couldn't load the details renderer">
-                  <Suspense fallback={<TabSpinner label="Loading details…" />}>
+                  <Suspense fallback={<TextSkeleton />}>
                     <MarkdownPreview source={details} style={{ background: "transparent", color: "inherit", fontSize: "0.875rem" }} />
                   </Suspense>
                 </ErrorBoundary>
@@ -966,7 +967,7 @@ export default function ProjectDescription({
       {dependencies && dependencies.length > 0 ? (
         <DependenciesTab data={dependencies} />
       ) : analysisLoading ? (
-        <TabSpinner label="Scanning dependencies…" />
+        <PanelSkeleton rows={4} />
       ) : (
         <EmptyState compact description="No dependencies detected." />
       )}
@@ -1163,10 +1164,10 @@ export default function ProjectDescription({
           >
             {activeMainTabSafe === "overview" ? (
               permissionsLoading ? (
-                <TabSpinner label="Loading overview…" />
+                <TextSkeleton lines={8} />
               ) : (
                 <ErrorBoundary title="Couldn't load the overview">
-                  <Suspense fallback={<TabSpinner label="Loading overview…" />}>
+                  <Suspense fallback={<TextSkeleton lines={8} />}>
                     <OverviewEditor
                       project={project}
                       editable={canEditOverview}

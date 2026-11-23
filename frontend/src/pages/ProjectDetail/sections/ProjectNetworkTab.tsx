@@ -11,7 +11,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { EyeIcon, EyeOffIcon, PlusIcon, XIcon } from "lucide-react";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
-import TabSpinner from "@/components/ui/TabSpinner";
+import PanelSkeleton from "./PanelSkeleton";
 import { cn } from "@/utils/cn";
 import { getErrorMessage } from "@/utils/errors";
 import { useAsyncData } from "@/hooks/useAsyncData";
@@ -810,7 +810,16 @@ export default function ProjectNetworkTab({ project }: Props) {
   // Spinner only before the first response: a refresh after add/delete keeps the tab
   // (and any open modal) mounted instead of replacing it.
   if (permissionsLoading || (canView && data === null && !error)) {
-    return <TabSpinner label="Loading network rules…" />;
+    // Same title as the loaded tab, so only the body changes when the data lands.
+    return (
+      <div className="space-y-6 overflow-y-auto pr-1">
+        <TabPanelHeader
+          title="Network"
+          description="Manage security credentials and redirect rules applied at the proxy layer."
+        />
+        <PanelSkeleton rows={4} />
+      </div>
+    );
   }
 
   if (!canView) {
@@ -825,10 +834,12 @@ export default function ProjectNetworkTab({ project }: Props) {
 
   return (
     <div className="space-y-6 overflow-y-auto pr-1">
-      <TabPanelHeader
-        title="Network"
-        description="Manage security credentials and redirect rules applied at the proxy layer."
-      />
+      <div>
+        <TabPanelHeader
+          title="Network"
+          description="Manage security credentials and redirect rules applied at the proxy layer."
+        />
+      </div>
       {/* Sync status bar */}
       {hasRules && canManage && (
         <div className="flex items-center justify-between rounded-lg border border-border px-4 py-2.5">

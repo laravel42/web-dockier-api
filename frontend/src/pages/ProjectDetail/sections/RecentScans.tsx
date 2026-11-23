@@ -8,7 +8,7 @@ import { isScanSecurityClean } from "@/utils/scanSummary";
 import ScanStatusDot from "@/components/ScanStatusDot";
 import EmptyState from "@/components/ui/EmptyState";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
-import TabSpinner from "@/components/ui/TabSpinner";
+import PanelSkeleton from "./PanelSkeleton";
 import { clickableProps } from "@/utils/a11y";
 
 interface Props {
@@ -81,7 +81,7 @@ export default function RecentScans({
           title="Security"
           description="Review scan history and findings for this project."
         />
-        <TabSpinner label="Loading scan history…" />
+        <PanelSkeleton />
       </div>
     );
   }

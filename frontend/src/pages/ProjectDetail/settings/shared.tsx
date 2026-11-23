@@ -2,7 +2,6 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 
 export { TabPanelHeader as SectionTitle } from "@/components/TabPanelHeader";
-export { default as TabSpinner } from "@/components/ui/TabSpinner";
 
 export function SettingsRow({
   label,

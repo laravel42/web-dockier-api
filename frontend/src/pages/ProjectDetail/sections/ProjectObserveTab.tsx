@@ -30,7 +30,7 @@ import { useUrlSection } from "@/hooks/useUrlSection";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { getErrorMessage } from "@/utils/errors";
 import { timeAgo } from "@/utils/timeAgo";
-import TabSpinner from "@/components/ui/TabSpinner";
+import PanelSkeleton from "./PanelSkeleton";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { labelCls, toneDotCls } from "@/utils/styles";
 import { Link } from "react-router-dom";
@@ -104,7 +104,7 @@ function HeartbeatsSection({ project, canManage }: { project: Project; canManage
 
   const handleCopyUrl = (heartbeat: Heartbeat) => void copy(heartbeat.pingUrl, heartbeat.id);
 
-  if (loading) return <TabSpinner label="Loading heartbeats…" />;
+  if (loading) return <PanelSkeleton />;
 
   return (
     <div className="flex flex-col gap-4">
@@ -507,7 +507,7 @@ function ActivitySection({ project }: { project: Project }) {
     }
   };
 
-  if (loading) return <TabSpinner label="Loading activity…" />;
+  if (loading) return <PanelSkeleton />;
 
   return (
     <div className="flex flex-col gap-3">
@@ -706,7 +706,7 @@ export default function ProjectObserveTab({ project }: Props) {
   const [activeSection, setActiveSection] = useUrlSection(SECTION_KEYS);
   const handleSectionKeyDown = useTabListKeyboard(SECTION_KEYS, setActiveSection);
 
-  if (permissionsLoading) return <TabSpinner label="Loading…" />;
+  if (permissionsLoading) return <PanelSkeleton />;
 
   return (
     <div className="flex min-h-0 flex-col gap-6">

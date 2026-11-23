@@ -15,7 +15,7 @@ import { ArrowRightIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, RefreshCw
 import { destructiveReason } from "../destructiveCommand";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import TabSpinner from "@/components/ui/TabSpinner";
+import PanelSkeleton from "./PanelSkeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,7 +52,7 @@ export default function ProjectCommandsTab({ project }: Props) {
   const { has, loading: permissionsLoading } = usePermissions();
 
   if (permissionsLoading) {
-    return <TabSpinner label="Loading commands…" />;
+    return <PanelSkeleton />;
   }
 
   if (!has("project:view")) {
@@ -231,7 +231,7 @@ function CommandsPanel({ project, canManage }: { project: Project; canManage: bo
 
       {/* Recent commands section */}
       {showSpinner ? (
-        <TabSpinner label="Loading commands…" />
+        <PanelSkeleton />
       ) : showLoadError ? (
         <div className="flex flex-col items-center gap-3 pb-6 text-center">
           <p className="text-sm text-danger-500">{error}</p>

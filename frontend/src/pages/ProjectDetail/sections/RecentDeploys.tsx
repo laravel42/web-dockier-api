@@ -8,7 +8,7 @@ import ProviderBadge from "@/components/ProviderBadge";
 import EmptyState from "@/components/ui/EmptyState";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
-import TabSpinner from "@/components/ui/TabSpinner";
+import PanelSkeleton from "./PanelSkeleton";
 import { clickableProps } from "@/utils/a11y";
 
 interface Props {
@@ -94,7 +94,7 @@ export default function RecentDeploys({
           title="Deployments"
           description="Deploy history and status for this project."
         />
-        <TabSpinner label="Loading deploy history…" />
+        <PanelSkeleton />
       </div>
     );
   }

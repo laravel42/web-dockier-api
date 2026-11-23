@@ -16,7 +16,7 @@ const at = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>)
 describe("RecentDeploys", () => {
   it("shows a loading state, not 'never deployed', before the fetch settles", () => {
     at(<RecentDeploys deploys={[]} allProviders={[]} navigate={() => {}} loaded={false} />);
-    expect(screen.getByText("Loading deploy history…")).toBeInTheDocument();
+    expect(document.querySelector("[aria-busy='true']")).toBeInTheDocument();
     expect(screen.queryByText(/hasn't been deployed yet/)).not.toBeInTheDocument();
   });
 
@@ -28,14 +28,14 @@ describe("RecentDeploys", () => {
   it("prefers the error over both", () => {
     at(<RecentDeploys deploys={[]} allProviders={[]} navigate={() => {}} loaded={false} error="offline" />);
     expect(screen.getByText("Couldn't load deploys")).toBeInTheDocument();
-    expect(screen.queryByText("Loading deploy history…")).not.toBeInTheDocument();
+    expect(document.querySelector("[aria-busy='true']")).not.toBeInTheDocument();
   });
 });
 
 describe("RecentScans", () => {
   it("shows a loading state, not 'never scanned', before the fetch settles", () => {
     at(<RecentScans scans={[]} navigate={() => {}} loaded={false} />);
-    expect(screen.getByText("Loading scan history…")).toBeInTheDocument();
+    expect(document.querySelector("[aria-busy='true']")).toBeInTheDocument();
     expect(screen.queryByText(/No security scans have been run/)).not.toBeInTheDocument();
   });
 

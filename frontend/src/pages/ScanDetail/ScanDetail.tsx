@@ -13,7 +13,7 @@ import EmptyScanState from "./sections/EmptyScanState";
 import CreateIssueModal from "./sections/CreateIssueModal";
 import FixWithAIModal from "./sections/FixWithAIModal";
 import ConfirmModal from "@/components/ConfirmModal";
-import PageLoading from "@/components/ui/PageLoading";
+import ScanDetailSkeleton from "./sections/ScanDetailSkeleton";
 import PageError from "@/components/ui/PageError";
 import type { ScanProgress } from "@/types";
 
@@ -46,7 +46,7 @@ export default function ScanDetail() {
   const progressToShow = core.scanProgress ?? (progressHold ? heldProgress : null);
 
   if (core.loading) {
-    return <PageLoading />;
+    return <ScanDetailSkeleton onBack={() => core.navigate("/security")} />;
   }
 
   if (core.pageError || (!core.scan && !core.project)) {
@@ -79,7 +79,7 @@ export default function ScanDetail() {
   }
 
   if (!core.scan) {
-    return <PageLoading />;
+    return <ScanDetailSkeleton onBack={() => core.navigate("/security")} />;
   }
 
   const skippedEngines = core.scan.summary.skippedEngines ?? [];

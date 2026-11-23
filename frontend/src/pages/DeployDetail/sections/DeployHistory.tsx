@@ -12,7 +12,7 @@ import Button from "@/components/ui/Button";
 import ProviderBadge from "@/components/ProviderBadge";
 import BranchCommitLabel from "@/components/BranchCommitLabel";
 import RocketIcon from "@/components/icons/outlined/RocketIcon";
-import Spinner from "@/components/Spinner";
+import HistoryRowsSkeleton from "@/components/ui/HistoryRowsSkeleton";
 
 interface Props {
   deploys: Deployment[];
@@ -69,9 +69,7 @@ export default function DeployHistory({
           </div>
 
           {loading ? (
-            <div className="flex justify-center py-4">
-              <Spinner className="size-3.5" />
-            </div>
+            <HistoryRowsSkeleton />
           ) : error && deploys.length === 0 ? (
             <p role="alert" className="text-xs text-danger-500 text-center py-3">{error}</p>
           ) : deploys.length === 0 ? (

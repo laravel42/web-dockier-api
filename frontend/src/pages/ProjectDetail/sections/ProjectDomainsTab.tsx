@@ -28,7 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu";
 import { dnsBannerCopy } from "@/utils/dnsBannerCopy";
-import TabSpinner from "@/components/ui/TabSpinner";
+import PanelSkeleton from "./PanelSkeleton";
 
 interface Props {
   project: Project;
@@ -818,7 +818,18 @@ export default function ProjectDomainsTab({ project, domainRefreshKey }: Props) 
   // Spinner only before the first response: a refresh after add/delete keeps the tab
   // (and the staged attachment card) mounted instead of replacing it.
   if (permissionsLoading || (canView && data === null && !error)) {
-    return <TabSpinner label="Loading domains…" />;
+    // Same title as the loaded tab, so only the body changes when the data lands.
+    return (
+      <div className="space-y-6 overflow-y-auto pr-1">
+        <TabPanelHeader
+          title="Domains"
+          description="Manage your site's domains and SSL certificates."
+          linkText="Learn more"
+          linkHref="https://docs.dockier.dev/domains"
+        />
+        <PanelSkeleton rows={4} />
+      </div>
+    );
   }
 
   if (!canView) {

@@ -1,7 +1,7 @@
 import type { CommitInfo } from "@/types";
 import { cardCls } from "@/utils/styles";
 import { dayLabel, timeAgo } from "@/utils/timeAgo";
-import Spinner from "@/components/Spinner";
+import PanelSkeleton from "./PanelSkeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import { TabPanelSectionTitle } from "@/components/TabPanelHeader";
 
@@ -34,9 +34,7 @@ export default function RecentCommits({ commits, commitsLoading, commitsError }:
     return (
       <section className="flex flex-col gap-3">
         <TabPanelSectionTitle title="Recent Commits" />
-        <div className={`${cardCls} p-6 flex justify-center`}>
-          <Spinner className="size-5 " />
-        </div>
+        <PanelSkeleton />
       </section>
     );
   }

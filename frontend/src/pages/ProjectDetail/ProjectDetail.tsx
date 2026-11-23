@@ -15,7 +15,7 @@ import PRDetailModal from "./modals/PRDetailModal";
 import FixPreviewModal from "./modals/FixPreviewModal";
 import ReviewPreviewModal, { type GeneratedReview } from "./modals/ReviewPreviewModal";
 import type { FixPlan, ReviewComment } from "@/services/git";
-import PageLoading from "@/components/ui/PageLoading";
+import ProjectDetailSkeleton from "./sections/ProjectDetailSkeleton";
 import PageError from "@/components/ui/PageError";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectSiteUrl } from "@/hooks/useProjectSiteUrl";
@@ -25,6 +25,7 @@ import { resolveDeployUrl } from "@/utils/resolveDeployUrl";
 import { gitApi } from "@/services/api";
 import type { RepoIssue, RepoPullRequest } from "@/types";
 import { ChevronLeftIcon } from "lucide-react";
+import Skeleton from "@/components/ui/Skeleton";
 
 export default function ProjectDetail() {
   const {
@@ -197,7 +198,25 @@ export default function ProjectDetail() {
   const repoFaviconUrl = useProjectRepoFavicon(project ?? undefined);
 
   if (loading) {
-    return <PageLoading />;
+    return (
+      <div>
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/projects")} iconLeft={<ChevronLeftIcon className="size-4" />}>
+            Back to Projects
+          </Button>
+          {/* Same chip as DeployInfraStatus: deploy segment, divider, infra segment. */}
+          <div
+            className="inline-flex h-7 items-center overflow-hidden rounded-md border border-border/60 bg-card/40"
+            aria-hidden="true"
+          >
+            <span className="px-2.5"><Skeleton className="h-3.5 w-24" /></span>
+            <span className="w-px self-stretch bg-border/50" />
+            <span className="px-2.5"><Skeleton className="h-3.5 w-36" /></span>
+          </div>
+        </div>
+        <ProjectDetailSkeleton />
+      </div>
+    );
   }
 
   if (error || !project) {

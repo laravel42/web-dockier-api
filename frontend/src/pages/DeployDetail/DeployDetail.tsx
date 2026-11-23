@@ -6,7 +6,7 @@ import InfoCards from "./sections/InfoCards";
 import { resolveDeployUrl } from "@/utils/resolveDeployUrl";
 import DeployLogs from "./sections/DeployLogs";
 import DeployHistory from "./sections/DeployHistory";
-import PageLoading from "@/components/ui/PageLoading";
+import DeployDetailSkeleton from "./sections/DeployDetailSkeleton";
 import PageError from "@/components/ui/PageError";
 import { usePermissions } from "@/context/PermissionsContext";
 import { ChevronLeftIcon } from "lucide-react";
@@ -32,7 +32,7 @@ export default function DeployDetail() {
   const canRedeploy = has("deploy:create");
 
   if (loading) {
-    return <PageLoading />;
+    return <DeployDetailSkeleton onBack={() => navigate("/projects")} />;
   }
 
   if (error || !deploy) {

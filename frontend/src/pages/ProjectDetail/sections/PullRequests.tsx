@@ -1,7 +1,7 @@
 import type { RepoPullRequest } from "@/types";
 import { cardCls } from "@/utils/styles";
 import { timeAgo } from "@/utils/timeAgo";
-import Spinner from "@/components/Spinner";
+import PanelSkeleton from "./PanelSkeleton";
 import GitBranchIcon from "@/components/icons/outlined/GitBranchIcon";
 import { TabPanelSectionTitle } from "@/components/TabPanelHeader";
 
@@ -17,9 +17,7 @@ export default function PullRequests({ pullRequests, pullRequestsLoading, pullRe
     return (
       <section className="flex flex-col gap-3">
         <TabPanelSectionTitle title="Pull Requests" />
-        <div className={`${cardCls} p-6 flex justify-center`}>
-          <Spinner className="size-5 " />
-        </div>
+        <PanelSkeleton />
       </section>
     );
   }

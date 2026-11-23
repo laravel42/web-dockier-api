@@ -10,6 +10,7 @@ import { emptyFilterMessage, PROVIDER_DEFS } from "../utils/providerFilters";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import type { Finding, PMIntegration, SecurityFindingCounts, SkippedEngine } from "@/types";
 import Spinner from "@/components/Spinner";
+import FindingsSkeleton from "./FindingsSkeleton";
 import PageError from "@/components/ui/PageError";
 import {
   ChevronRightIcon,
@@ -138,11 +139,7 @@ export default function FindingsList({
   const hasActiveFilter = Boolean(severityFilter || providerFilter);
 
   if (findingsLoading && findings.length === 0) {
-    return (
-      <div className="flex justify-center py-8">
-        <Spinner />
-      </div>
-    );
+    return <FindingsSkeleton />;
   }
 
   // Before the empty states: a failed load has no counts, which read as "looking clean".

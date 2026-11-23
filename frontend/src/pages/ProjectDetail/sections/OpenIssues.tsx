@@ -1,7 +1,7 @@
 import type { RepoIssue } from "@/types";
 import { cardCls } from "@/utils/styles";
 import { timeAgo } from "@/utils/timeAgo";
-import Spinner from "@/components/Spinner";
+import PanelSkeleton from "./PanelSkeleton";
 import { CircleAlertIcon, MessageSquareTextIcon } from "lucide-react";
 import { TabPanelSectionTitle } from "@/components/TabPanelHeader";
 
@@ -35,9 +35,7 @@ export default function OpenIssues({ issues, issuesLoading, issuesError, onIssue
     return (
       <section className="flex flex-col gap-3">
         <TabPanelSectionTitle title="Open Issues" />
-        <div className={`${cardCls} p-6 flex justify-center`}>
-          <Spinner className="size-5 " />
-        </div>
+        <PanelSkeleton />
       </section>
     );
   }

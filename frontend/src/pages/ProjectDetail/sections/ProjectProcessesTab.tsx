@@ -29,7 +29,7 @@ import StatusPill from "@/components/ui/StatusPill";
 import { useUrlSection } from "@/hooks/useUrlSection";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import TabSpinner from "@/components/ui/TabSpinner";
+import PanelSkeleton from "./PanelSkeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -829,16 +829,15 @@ export default function ProjectProcessesTab({ project }: Props) {
       .catch(() => setHasDeployment(false));
   }, [project.id, canView]);
 
-  // Spinner only before the first response: a refresh after an action keeps the lists mounted.
-  if (permissionsLoading || (canView && data === null && !error)) {
-    return <TabSpinner label="Loading processes…" />;
-  }
+  // Skeleton only before the first response: a refresh after an action keeps the lists mounted.
+  // The title and sub-tabs do not depend on the data, so they render while it loads.
+  const waiting = permissionsLoading || (canView && data === null && !error);
 
-  if (!canView) {
+  if (!waiting && !canView) {
     return <p className="text-sm text-text-muted text-center py-8">You don't have permission to view processes.</p>;
   }
 
-  if (error) {
+  if (!waiting && error) {
     return <p className="text-sm text-danger-500 text-center py-8">{error}</p>;
   }
 
@@ -894,7 +893,9 @@ export default function ProjectProcessesTab({ project }: Props) {
         aria-labelledby={tabId(subTab)}
         className="flex-1 min-w-0"
       >
-        {subTab === "processes" ? (
+        {waiting ? (
+          <PanelSkeleton rows={4} />
+        ) : subTab === "processes" ? (
           <div className="space-y-4">
             {/* Header */}
             <div className="rounded-lg border border-border p-4">

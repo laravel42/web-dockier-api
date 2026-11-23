@@ -2,7 +2,8 @@ import { useState } from "react";
 import { notificationsApi } from "@/services/notifications";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { Input } from "@/components/ui/input";
-import { SectionTitle, SettingsRow, TabSpinner } from "./shared";
+import Skeleton from "@/components/ui/Skeleton";
+import { SectionTitle, SettingsRow } from "./shared";
 import SettingsCard from "./SettingsCard";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 
@@ -27,7 +28,6 @@ export default function NotificationsSection({ canManage }: Props) {
   const [slackOverride, setSlackOverride] = useState<boolean | null>(null);
   const [discordOverride, setDiscordOverride] = useState<boolean | null>(null);
 
-  if (loading) return <TabSpinner label="Loading notifications…" />;
 
   return (
     <div className="flex flex-col gap-6">
@@ -50,11 +50,11 @@ export default function NotificationsSection({ canManage }: Props) {
         </SettingsRow>
 
         <SettingsRow label="Slack deployment notifications" description="Enable and configure Slack deployment notifications.">
-          <ToggleSwitch checked={slackOverride ?? slackEnabled} onChange={setSlackOverride} disabled={!canManage} />
+          {loading ? <Skeleton className="h-5 w-9 rounded-full" /> : <ToggleSwitch checked={slackOverride ?? slackEnabled} onChange={setSlackOverride} disabled={!canManage} />}
         </SettingsRow>
 
         <SettingsRow label="Discord deployment notifications" description="Enable and configure Discord deployment notifications.">
-          <ToggleSwitch checked={discordOverride ?? discordEnabled} onChange={setDiscordOverride} disabled={!canManage} />
+          {loading ? <Skeleton className="h-5 w-9 rounded-full" /> : <ToggleSwitch checked={discordOverride ?? discordEnabled} onChange={setDiscordOverride} disabled={!canManage} />}
         </SettingsRow>
 
         <SettingsRow label="Telegram deployment notifications" description="Enable and configure Telegram deployment notifications." border={false}>

@@ -1,6 +1,6 @@
 import type { RepoStats } from "@/types";
 import { getKpiCards } from "../constants";
-import Spinner from "@/components/Spinner";
+import Skeleton from "@/components/ui/Skeleton";
 
 interface Props {
   stats: RepoStats | null;
@@ -28,11 +28,12 @@ export default function ProjectStatsStrip({ stats, statsLoading, statsError, emb
       <div
         className={
           embedded
-            ? `${outerCls} flex h-12 items-center justify-center`
-            : `${outerCls} flex h-12 items-center justify-center rounded-lg border border-border/60 bg-card/40`
+            ? `${outerCls} h-12`
+            : `${outerCls} h-12 rounded-lg border border-border/60 bg-card/40`
         }
+        aria-busy="true"
       >
-        <Spinner />
+        <Skeleton className="size-full" />
       </div>
     );
   }
