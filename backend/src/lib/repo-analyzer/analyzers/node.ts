@@ -84,9 +84,11 @@ export function analyzeNodeProject(files: RepoFiles, appDir: string, config: Rep
     // lockfile fallbacks in the branches below are invented defaults, and
     // pinning one would override a builder's own (better) inference.
     config.features.add("declaredPackageManager");
+    if (pm === "pnpm") config.features.add("pnpm");
   } else if (existsApp("pnpm-lock.yaml") || existsRoot("pnpm-lock.yaml")) {
     config.packageManager = "pnpm";
     config.packageManagerVersion = "10.14.0";
+    config.features.add("pnpm");
   } else if (existsApp("yarn.lock") || existsRoot("yarn.lock")) {
     config.packageManager = "yarn";
     config.packageManagerVersion = "4.5.0";

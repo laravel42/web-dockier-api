@@ -100,12 +100,22 @@ export async function resolveRuntimeStartCommand(params: {
       phpVersion: runtime.config.phpVersion || undefined,
       hasDockerfile: runtime.hasDockerfile,
       dockerfilePort: runtime.dockerfilePort,
-      ...(runtime.config.features.has("declaredPackageManager")
+      // The "pnpm" feature, not packageManager: the PHP analyzer overwrites
+      // packageManager with "composer" on a Laravel repo that also uses pnpm.
+      ...(runtime.config.features.has("pnpm")
         ? {
-            packageManager: runtime.config.packageManager,
-            packageManagerVersion: runtime.config.packageManagerVersion || undefined,
+            packageManager: "pnpm",
+            // Lockfile-only repos carry an invented version; leave it out so configure-app pins its minimum.
+            packageManagerVersion: runtime.config.features.has("declaredPackageManager")
+              ? runtime.config.packageManagerVersion || undefined
+              : undefined,
           }
-        : {}),
+        : runtime.config.features.has("declaredPackageManager") && runtime.config.packageManager !== "composer"
+          ? {
+              packageManager: runtime.config.packageManager,
+              packageManagerVersion: runtime.config.packageManagerVersion || undefined,
+            }
+          : {}),
     };
 
     if (runtime.platformAdapter) {

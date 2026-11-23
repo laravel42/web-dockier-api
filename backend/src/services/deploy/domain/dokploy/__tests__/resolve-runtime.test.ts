@@ -205,6 +205,15 @@ describe("resolveRuntimeStartCommand", () => {
     expect(result.kind).toBe("server");
   });
 
+  it("reports pnpm (without an invented version) for a Laravel repo with only a pnpm lockfile", async () => {
+    serveRepo(["package.json", "pnpm-lock.yaml", "composer.json"], {
+      "package.json": pkg({ deps: { vite: "^6.0.0" } }),
+      "composer.json": JSON.stringify({ require: { php: "^8.4", "laravel/framework": "^12.0" } }),
+    });
+    const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/crm", branch: "main", log });
+    expect(result.packageManager).toBe("pnpm");
+    expect(result.packageManagerVersion).toBeUndefined();
+  });
   it("returns empty (no throw) when credentials are missing", async () => {
     mockGetCreds.mockResolvedValue(null);
     const result = await resolveRuntimeStartCommand({ tenantId: "t1", gitConnectionId: "g1", repo: "acme/app", branch: "main", log });

@@ -367,7 +367,8 @@ export async function stageConfigureApp(params: {
   // actually activate inside the container (see withRailpackPackages).
   const withPackages = withRailpackPackages(withStartCmd, buildType, repoAnalysis.packageManager, repoAnalysis.packageManagerVersion);
   if (!envHas(withStartCmd, "RAILPACK_PACKAGES") && envHas(withPackages, "RAILPACK_PACKAGES")) {
-    await log(`[stage:configure-app] Pinning pnpm@${repoAnalysis.packageManagerVersion} for the Railpack build (declared by the repo).`);
+    const pinned = withPackages.find((v) => v.name === "RAILPACK_PACKAGES")?.value;
+    await log(`[stage:configure-app] Pinning ${pinned} for the Railpack build (repo declares ${repoAnalysis.packageManagerVersion ?? "no pnpm version"}; Dockier's minimum is pnpm 10 unless the repo declares 9).`);
   }
   // Repair the install step for pnpm 11+, whose global bin directory moved to a
   // place Railpack does not put on PATH (see withRailpackInstallCmd).
@@ -921,9 +922,21 @@ function withRailpackPackages(
   packageManagerVersion: string | undefined,
 ): Array<{ name: string; value: string }> {
   if (buildType !== "railpack" || packageManager !== "pnpm") return envVars;
-  if (!packageManagerVersion || !/^\d+(\.\d+){0,2}$/.test(packageManagerVersion)) return envVars;
   if (envHas(envVars, "RAILPACK_PACKAGES")) return envVars;
-  return [...envVars, { name: "RAILPACK_PACKAGES", value: `pnpm@${packageManagerVersion}` }];
+  const version = effectivePnpmVersion(packageManagerVersion);
+  if (!version) return envVars;
+  return [...envVars, { name: "RAILPACK_PACKAGES", value: `pnpm@${version}` }];
+}
+/**
+ * pnpm version to pin: never below 10, unless the repo explicitly declares 9.x.
+ * Without a declaration Railpack infers 9 from any modern lockfile, and pnpm 9
+ * rejects a pnpm-workspace.yaml with no `packages` field (valid from pnpm 10.5).
+ * Returns undefined for a range or tag, which is left to Railpack.
+ */
+function effectivePnpmVersion(declared: string | undefined): string | undefined {
+  if (!declared) return "10";
+  if (!/^\d+(\.\d+){0,2}$/.test(declared)) return undefined;
+  return Number(declared.split(".")[0]) < 9 ? "10" : declared;
 }
 
 /**

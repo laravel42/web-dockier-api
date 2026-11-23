@@ -503,6 +503,18 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
       await run(node(), someEnv);
       expect(envMap().RAILPACK_PACKAGES).toBeUndefined();
     });
+    it("pins pnpm 10 for a lockfile-only pnpm repo (Railpack would infer 9)", async () => {
+      await run(node({ packageManager: "pnpm" }), someEnv);
+      expect(envMap().RAILPACK_PACKAGES).toBe("pnpm@10");
+    });
+    it("raises a declared pnpm below 9 to 10", async () => {
+      await run(node({ packageManager: "pnpm", packageManagerVersion: "8.15.4" }), someEnv);
+      expect(envMap().RAILPACK_PACKAGES).toBe("pnpm@10");
+    });
+    it("keeps an explicitly declared pnpm 9", async () => {
+      await run(node({ packageManager: "pnpm", packageManagerVersion: "9.15.9" }), someEnv);
+      expect(envMap().RAILPACK_PACKAGES).toBe("pnpm@9.15.9");
+    });
 
     it("leaves npm/yarn/bun to Railpack", async () => {
       await run(node({ packageManager: "yarn", packageManagerVersion: "4.5.0" }), someEnv);

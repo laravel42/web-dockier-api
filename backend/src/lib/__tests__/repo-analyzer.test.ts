@@ -456,4 +456,13 @@ describe("analyzeRepoFiles — declared vs guessed package manager", () => {
     expect(config.packageManagerVersion).toBe("10.14.0");
     expect(config.features.has("declaredPackageManager")).toBe(false);
   });
+  it("keeps the pnpm signal on a Laravel repo, where PHP overwrites packageManager", () => {
+    const config = analyzeRepoFiles(new MapRepoFiles({
+      "package.json": pkg({ deps: { vite: "^6.0.0" } }),
+      "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+      "composer.json": JSON.stringify({ require: { php: "^8.4", "laravel/framework": "^12.0" } }),
+    }));
+    expect(config.packageManager).toBe("composer");
+    expect(config.features.has("pnpm")).toBe(true);
+  });
 });
