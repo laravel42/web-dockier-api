@@ -11,7 +11,6 @@ import Button from "@/components/ui/Button";
 import { getErrorMessage } from "@/utils/errors";
 import { usePermissions } from "@/context/PermissionsContext";
 import { useToast } from "@/context/useToast";
-import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { useConfirmableAction } from "@/hooks/useConfirmableAction";
@@ -19,6 +18,7 @@ import { PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
 import MetadataBar from "./components/MetadataBar";
 import SettingsHeroHeader from "./components/SettingsHeroHeader";
+import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
 
 export default function SourceControlTab() {
   const { has } = usePermissions();
@@ -194,7 +194,7 @@ export default function SourceControlTab() {
       <ConfirmModal open={confirmRemove} onClose={closeRemoveConfirm} onConfirm={removeConnection} message="Are you sure you want to remove this connection?" />
 
       {loading ? (
-        <PageLoading />
+        <SettingsCardGridSkeleton />
       ) : error ? (
         <PageError message={error} onRetry={reload} />
       ) : (

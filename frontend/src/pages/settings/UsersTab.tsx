@@ -9,7 +9,6 @@ import { labelCls, settingsBadgeCls, settingsCardCls, settingsCardGridCls, setti
 import { Input } from "@/components/ui/input";
 import Button from "@/components/ui/Button";
 import { formatCardDateTime } from "@/utils/formatCardDate";
-import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import Alert from "@/components/ui/Alert";
 import { getErrorMessage } from "@/utils/errors";
@@ -20,6 +19,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { CheckIcon, ClipboardIcon, EyeIcon, EyeOffIcon, UserRoundPlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
+import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
 
 const LANGUAGE_OPTIONS = [
   { value: "en", label: "English" },
@@ -226,7 +226,7 @@ export default function UsersTab() {
       </div>
 
       {loading ? (
-        <PageLoading />
+        <SettingsCardGridSkeleton />
       ) : loadError ? (
         <PageError message={loadError} onRetry={fetchData} />
       ) : (

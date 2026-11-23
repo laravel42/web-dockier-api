@@ -6,12 +6,12 @@ import { countries } from "@/data/countries";
 import { Combobox } from "@/components/ui/Combobox";
 import { SettingsField, SettingsTextField } from "@/components/SettingsField";
 import Button from "@/components/ui/Button";
-import PageLoading from "@/components/ui/PageLoading";
 import Alert from "@/components/ui/Alert";
 import { getErrorMessage } from "@/utils/errors";
 import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import ConfirmModal from "@/components/ConfirmModal";
 import { emptyBillingDetails, type BillingDetails } from "@/types/billing";
+import { SettingsFormCardsSkeleton, FormFieldsSkeleton } from "./components/SettingsSkeletons";
 
 type Msg = { text: string; variant: "error" | "success" | "info" } | null;
 
@@ -195,7 +195,7 @@ export default function ProfileTab() {
       errorFallback: "That code did not work",
     },
   );
-  if (loading) return <PageLoading />;
+  if (loading) return <SettingsFormCardsSkeleton />;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -256,7 +256,7 @@ export default function ProfileTab() {
             <h2 className="text-base font-semibold text-text mb-1">Billing Data</h2>
             <p className="text-sm text-text-secondary mb-5">Organization details used for invoices and receipts.</p>
             {billingLoading ? (
-              <PageLoading />
+              <FormFieldsSkeleton fields={4} />
             ) : (
               <>
                 {billingMessage && <Alert variant={billingMessage.variant} className="mb-4">{billingMessage.text}</Alert>}

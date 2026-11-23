@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import Button from "@/components/ui/Button";
 import { usePermissions } from "@/context/PermissionsContext";
-import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { useConfirmableAction } from "@/hooks/useConfirmableAction";
@@ -22,6 +21,7 @@ import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
 import MetadataBar from "./components/MetadataBar";
 import SettingsHeroHeader from "./components/SettingsHeroHeader";
+import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
 
 /** Provider types the app supports. Only AWS and GCP for now. */
 type ProviderKind = "aws" | "gcp";
@@ -279,7 +279,7 @@ export default function ProvidersTab() {
       <ConfirmModal open={confirmRemove} onClose={closeRemoveConfirm} onConfirm={removeProvider} message="Are you sure you want to remove this provider?" />
 
       {loading ? (
-        <PageLoading />
+        <SettingsCardGridSkeleton />
       ) : error ? (
         <PageError message={error} onRetry={reload} />
       ) : (

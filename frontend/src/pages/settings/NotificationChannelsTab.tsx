@@ -11,13 +11,13 @@ import { labelCls, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiv
 import { Input } from "@/components/ui/input";
 import Button from "@/components/ui/Button";
 import { usePermissions } from "@/context/PermissionsContext";
-import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { notifyInAppNotificationsChanged } from "@/hooks/useInAppNotificationsEnabled";
 import { BellIcon, LinkIcon, MailIcon, PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
+import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
 
 export default function NotificationChannelsTab() {
   const { has } = usePermissions();
@@ -210,7 +210,7 @@ export default function NotificationChannelsTab() {
       <ConfirmModal open={confirmRemove} onClose={closeRemoveConfirm} onConfirm={removeChannel} message="Are you sure you want to remove this channel?" />
 
       {loading ? (
-        <PageLoading />
+        <SettingsCardGridSkeleton />
       ) : error ? (
         <PageError message={error} onRetry={reload} />
       ) : (

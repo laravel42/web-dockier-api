@@ -3,13 +3,13 @@ import { codeAnalysisApi } from "@/services/api";
 import { useToast } from "@/context/useToast";
 import { getErrorMessage } from "@/utils/errors";
 import TechBadge from "@/components/TechBadge";
-import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
 import Button from "@/components/ui/Button";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./RulesFilterSidebar";
 import { severityDotCls } from "./shared";
 import { useRuleOverrides } from "./useRuleOverrides";
+import { RuleCardsSkeleton } from "../components/SettingsSkeletons";
 
 type OpengrepRule = Awaited<ReturnType<typeof codeAnalysisApi.listOpengrepRules>>["rules"][number];
 
@@ -43,7 +43,7 @@ export default function SemgrepRulesPanel({ filter, onChanged }: { filter: strin
   const count = (pred: (r: OpengrepRule) => boolean) => rules.filter(pred).length;
   const resetPage = () => setVisible(PAGE);
 
-  if (loading) return <PageLoading />;
+  if (loading) return <RuleCardsSkeleton sidebar />;
   // Without the overrides every switch would read "on", including rules turned off.
   if (loadError) return <PageError message={loadError} onRetry={retryLoad} />;
 

@@ -12,7 +12,6 @@ import { segmentActiveCls, segmentIdleCls } from "@/utils/styles";
 import { Input } from "@/components/ui/input";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
-import PageLoading from "@/components/ui/PageLoading";
 import { PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./sections/RulesFilterSidebar";
@@ -21,6 +20,7 @@ import SonarQubeRulesPanel from "./sections/SonarQubeRulesPanel";
 import { severityDotCls } from "./sections/shared";
 // Shared with the scan page so Settings and the scan it starts cannot disagree.
 import { loadScanTools, saveScanTools } from "@/utils/scanTools";
+import { RuleCardsSkeleton } from "./components/SettingsSkeletons";
 
 // ─── Types ───
 
@@ -381,7 +381,7 @@ function CustomRulesPanel({
           <ConfirmModal open={!!deleteId} onClose={onCloseDelete} onConfirm={onConfirmDelete} message="Are you sure you want to delete this custom rule?" />
 
           {loading ? (
-            <PageLoading />
+            <RuleCardsSkeleton />
           ) : (
             <div className="grid grid-cols-2 gap-2">
               {filtered.map(r => (

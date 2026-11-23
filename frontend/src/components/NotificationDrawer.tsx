@@ -14,7 +14,7 @@ import {
 } from "./ui/Drawer";
 import Button from "./ui/Button";
 import Pagination from "./ui/Pagination";
-import PageLoading from "./ui/PageLoading";
+import NotificationListSkeleton from "./NotificationListSkeleton";
 import PageError from "./ui/PageError";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { useToast } from "../context/useToast";
@@ -165,7 +165,7 @@ export default function NotificationDrawer({ open, onOpenChange }: NotificationD
           {error ? (
             <PageError message={error} onRetry={reload} />
           ) : !data ? (
-            <PageLoading />
+            <NotificationListSkeleton />
           ) : notifications.length === 0 ? (
             <div className="flex items-center justify-center py-12 text-sm text-text-muted">
               No notifications

@@ -10,13 +10,13 @@ import Button from "@/components/ui/Button";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import { getErrorMessage } from "@/utils/errors";
 import { usePermissions } from "@/context/PermissionsContext";
-import PageLoading from "@/components/ui/PageLoading";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import Alert from "@/components/ui/Alert";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { KeyRoundIcon, PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
+import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
 
 export default function SshKeysTab() {
   const { has } = usePermissions();
@@ -152,7 +152,7 @@ export default function SshKeysTab() {
       </Modal>
 
       {loading ? (
-        <PageLoading />
+        <SettingsCardGridSkeleton />
       ) : loadError ? (
         <PageError message={loadError} onRetry={reload} />
       ) : (

@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { codeAnalysisApi } from "@/services/api";
 import TechBadge from "@/components/TechBadge";
-import PageLoading from "@/components/ui/PageLoading";
 import PageError from "@/components/ui/PageError";
 import Button from "@/components/ui/Button";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import RulesFilterSidebar from "./RulesFilterSidebar";
 import { severityDotCls } from "./shared";
 import { useRuleOverrides } from "./useRuleOverrides";
+import { RuleCardsSkeleton } from "../components/SettingsSkeletons";
 
 type SonarRule = Awaited<ReturnType<typeof codeAnalysisApi.listSonarRules>>["rules"][number];
 
@@ -66,7 +66,7 @@ export default function SonarQubeRulesPanel({ filter, onChanged }: { filter: str
     void load();
   }, []);
 
-  if (loading) return <PageLoading />;
+  if (loading) return <RuleCardsSkeleton sidebar />;
   if (unreachable) {
     return (
       <p className="text-sm text-text-muted text-center py-12">

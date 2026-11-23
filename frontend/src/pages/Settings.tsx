@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTabListKeyboard, panelId, tabId } from "../hooks/useTabListKeyboard";
 import { usePermissions } from "../context/PermissionsContext";
 import PageHeader from "../components/ui/PageHeader";
-import PageLoading from "../components/ui/PageLoading";
+import { SettingsTabsSkeleton, SettingsFormCardsSkeleton } from "./settings/components/SettingsSkeletons";
 import ProfileTab from "./settings/ProfileTab";
 import UsersTab from "./settings/UsersTab";
 import RolesTab from "./settings/RolesTab";
@@ -49,7 +49,8 @@ export default function Settings() {
     return (
       <div>
         <PageHeader title="Settings" description="Account, team, and workspace." />
-        <PageLoading />
+        <SettingsTabsSkeleton />
+        <SettingsFormCardsSkeleton />
       </div>
     );
   }

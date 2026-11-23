@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { notificationsApi } from "../services/api";
 import { useInAppNotificationsEnabled } from "../hooks/useInAppNotificationsEnabled";
 import PageHeader from "../components/ui/PageHeader";
-import PageLoading from "../components/ui/PageLoading";
+import NotificationListSkeleton from "../components/NotificationListSkeleton";
 import PageError, { EmptyMessage } from "../components/ui/PageError";
 import Pagination from "../components/ui/Pagination";
 import { cardCls } from "../utils/styles";
@@ -37,7 +37,14 @@ export default function Notifications() {
   }, [inAppEnabled, inAppLoading, navigate]);
 
   if (inAppLoading || !inAppEnabled) {
-    return <PageLoading />;
+    return (
+      <div>
+        <PageHeader title="Notifications" description="Activity from your projects and deployments" />
+        <div className={cardCls}>
+          <NotificationListSkeleton />
+        </div>
+      </div>
+    );
   }
 
   const markRead = async (id: string) => {
@@ -82,7 +89,9 @@ export default function Notifications() {
       {error ? (
         <PageError message={error} onRetry={reload} />
       ) : !data ? (
-        <PageLoading />
+        <div className={cardCls}>
+          <NotificationListSkeleton />
+        </div>
       ) : !notifications.length ? (
         <EmptyMessage>No notifications</EmptyMessage>
       ) : (
