@@ -86,7 +86,8 @@ vi.mock("../stages/sync-git.js", () => ({
 vi.mock("../stages/provision-server.js", () => ({
   stageProvisionServer: (...args: unknown[]) => mockProvisionServer(...args),
 }));
-vi.mock("../stages/configure-app.js", () => ({
+vi.mock("../stages/configure-app.js", async (importOriginal) => ({
+  phpBuildBlockReason: (await importOriginal<typeof import("../stages/configure-app.js")>()).phpBuildBlockReason,
   stageConfigureApp: (...args: unknown[]) => mockConfigureApp(...args),
 }));
 vi.mock("../stages/trigger-deploy.js", () => ({
@@ -274,6 +275,15 @@ describe("executeDokployPipeline", () => {
     expect(failLine).toContain("Deployment failed after 2 attempts");
   });
 
+  it("refuses a PHP version no builder can install before creating any resource", async () => {
+    mockResolveRuntime.mockResolvedValueOnce({ runtime: "php", phpVersion: "8.0", hasDockerfile: false });
+    await executeDokployPipeline(basePipelineInput);
+    expect(mockEnsureProject).not.toHaveBeenCalled();
+    expect(mockProvisionServer).not.toHaveBeenCalled();
+    const logLines = mockAppendLog.mock.calls.map((c) => c[1] as string);
+    expect(logLines.find((l) => l.includes("Pipeline failed"))).toContain("composer.json");
+    expect(mockUpdateStatus).toHaveBeenCalledWith(basePipelineInput.deploymentId, "failed");
+  });
   it("skips execution if deployment is already building (idempotency guard)", async () => {
     mockGetDeploymentCurrentStatus.mockResolvedValue("building");
 

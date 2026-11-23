@@ -32,7 +32,7 @@ import { stageEnsureProject } from "./stages/ensure-project.js";
 import { stageSyncGit } from "./stages/sync-git.js";
 import { stageProvisionServer } from "./stages/provision-server.js";
 import { stageProvisionDatabases } from "./stages/provision-databases.js";
-import { stageConfigureApp } from "./stages/configure-app.js";
+import { stageConfigureApp, phpBuildBlockReason } from "./stages/configure-app.js";
 import { resolveRuntimeStartCommand } from "./stages/resolve-runtime.js";
 import { stageDeployWithRetry } from "./stages/trigger-deploy.js";
 import { fetchBuildLogTail } from "./stages/build-log.js";
@@ -94,6 +94,43 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
   try {
     await updateStatus(deploymentId, "building");
     await log("▶ Starting deployment pipeline...");
+    // Resolve a server start command for apps whose repo has no `start` script
+    // (e.g. SSR Astro via @astrojs/node). Prefer one already on the event;
+    // otherwise re-derive it from the repo's config files (no clone). Non-fatal
+    // — undefined just lets Railpack infer as before.
+    //
+    // Runs first so an unbuildable repo fails before any Dokploy resource or VM
+    // is created. Its log lines carry [stage:configure-app] markers, so they are
+    // held back and written where that stage starts, keeping the wizard's
+    // timeline in order.
+    const runtimeLogs: string[] = [];
+    const resolvedRuntime = await resolveRuntimeStartCommand({
+      tenantId,
+      gitConnectionId,
+      repo,
+      branch,
+      explicit: event.startCommand,
+      log: async (line) => { runtimeLogs.push(line); },
+    });
+    // Does the repo have a root Dockerfile, and may we use it?
+    //
+    // Existence comes from the analyzer, which looked at the real file tree.
+    // `event.hasDocker` is only a fallback for when that analysis could not run
+    // (no credentials, provider error): it is derived from `buildMethod`, which
+    // carries a template default, so trusting it alone would point Dokploy at a
+    // `./Dockerfile` that may not exist.
+    //
+    // The user's choice in the Analysis step arrives as that same buildMethod
+    // ("dockerfile" = use mine, anything else = build it for me), which is
+    // persisted on the deployment row so a redeploy or rollback keeps it.
+    // `useRepoDockerfile: false` is the equivalent opt-out for API callers.
+    const repoHasDockerfile = resolvedRuntime.hasDockerfile ?? (event.hasDocker ?? false);
+    const optedOutOfDockerfile =
+      event.useRepoDockerfile === false ||
+      (event.buildMethod !== undefined && event.buildMethod !== "dockerfile");
+    const useRepoDockerfile = repoHasDockerfile && !optedOutOfDockerfile;
+    const buildBlock = phpBuildBlockReason(resolvedRuntime, useRepoDockerfile);
+    if (buildBlock) throw new Error(buildBlock);
 
     // ─── Stage 1: Ensure Dokploy Project ─────────────────────────
     const orgName = await getOrganizationName(tenantId);
@@ -141,37 +178,9 @@ export async function executeDokployPipeline(event: PipelineInput): Promise<void
     });
     await checkpoint();
 
-    // Resolve a server start command for apps whose repo has no `start` script
-    // (e.g. SSR Astro via @astrojs/node). Prefer one already on the event;
-    // otherwise re-derive it from the repo's config files (no clone). Non-fatal
-    // — undefined just lets Railpack infer as before.
-    const resolvedRuntime = await resolveRuntimeStartCommand({
-      tenantId,
-      gitConnectionId,
-      repo,
-      branch,
-      explicit: event.startCommand,
-      log,
-    });
+    for (const line of runtimeLogs) await log(line);
     const { startCommand } = resolvedRuntime;
 
-    // Does the repo have a root Dockerfile, and may we use it?
-    //
-    // Existence comes from the analyzer, which looked at the real file tree.
-    // `event.hasDocker` is only a fallback for when that analysis could not run
-    // (no credentials, provider error): it is derived from `buildMethod`, which
-    // carries a template default, so trusting it alone would point Dokploy at a
-    // `./Dockerfile` that may not exist.
-    //
-    // The user's choice in the Analysis step arrives as that same buildMethod
-    // ("dockerfile" = use mine, anything else = build it for me), which is
-    // persisted on the deployment row so a redeploy or rollback keeps it.
-    // `useRepoDockerfile: false` is the equivalent opt-out for API callers.
-    const repoHasDockerfile = resolvedRuntime.hasDockerfile ?? (event.hasDocker ?? false);
-    const optedOutOfDockerfile =
-      event.useRepoDockerfile === false ||
-      (event.buildMethod !== undefined && event.buildMethod !== "dockerfile");
-    const useRepoDockerfile = repoHasDockerfile && !optedOutOfDockerfile;
     if (repoHasDockerfile && optedOutOfDockerfile) {
       await log("[stage:configure-app] Repository Dockerfile ignored — this deploy was configured to build the image automatically.");
     }

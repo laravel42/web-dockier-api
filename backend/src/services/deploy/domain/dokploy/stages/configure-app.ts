@@ -621,6 +621,29 @@ function determineBuildType(analysis: RepoAnalysisInfo): DokployBuildType {
  */
 const RAILPACK_MIN_PHP = { major: 8, minor: 2 };
 
+/**
+ * Why this repo cannot be built at all, or undefined when it can. Below PHP 8.1
+ * no builder can install the runtime: Railpack starts at 8.2, Nixpacks takes
+ * 7.4/8.0 from a nixpkgs snapshot that dropped them ("php80 has been dropped"),
+ * and pinning 8.2 via RAILPACK_PACKAGES makes mise compile PHP from source in a
+ * builder without bison. Neither tool reads the version from anywhere but
+ * composer.json, so the fix is in the repository. A repo Dockerfile picks its
+ * own PHP image and is never blocked.
+ */
+export function phpBuildBlockReason(
+  analysis: Pick<RepoAnalysisInfo, "runtime" | "phpVersion" | "primaryLanguage" | "techStack">,
+  useRepoDockerfile: boolean,
+): string | undefined {
+  if (useRepoDockerfile) return undefined;
+  const isPhp = analysis.runtime === "php" || isPhpApp(analysis.primaryLanguage, analysis.techStack ?? []);
+  const parsed = isPhp ? parsePhpVersion(analysis.phpVersion) : null;
+  if (!parsed || parsed.major * 100 + parsed.minor >= 801) return undefined;
+  return (
+    `PHP ${analysis.phpVersion} can no longer be built: PHP versions older than 8.1 are no longer available, and the ` +
+    `version is read only from composer.json. Raise "require.php" in composer.json to "^8.2", check that ` +
+    `composer install still passes on PHP 8.2, and deploy again.`
+  );
+}
 /** Parse a "major.minor" PHP version. Returns null when unparseable. */
 function parsePhpVersion(version: string | undefined): { major: number; minor: number } | null {
   if (!version) return null;

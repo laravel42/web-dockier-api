@@ -9,7 +9,7 @@ vi.mock("../mappings.js", () => ({
   deleteApplicationMapping: vi.fn(async () => undefined),
 }));
 
-const { stageConfigureApp } = await import("../stages/configure-app.js");
+const { stageConfigureApp, phpBuildBlockReason } = await import("../stages/configure-app.js");
 import type { DokployClient } from "../client.js";
 import type { GitProviderConfig } from "../stages/sync-git.js";
 import type { ProvisionedDatabase } from "../stages/provision-databases.js";
@@ -942,5 +942,26 @@ describe("stageConfigureApp — container port + Node runtime env", () => {
       [{ name: "RAILPACK_START_CMD", value: "node custom.mjs" }],
     );
     expect(envMap().RAILPACK_START_CMD).toBe("node custom.mjs");
+  });
+});
+// Below PHP 8.1 no builder can install the runtime (Nixpacks: "php80 has been
+// dropped"; a php@8.2 Railpack pin makes mise compile PHP and fail on bison),
+// so the pipeline refuses before creating anything.
+describe("phpBuildBlockReason", () => {
+  const php = (phpVersion?: string) => ({ runtime: "php", primaryLanguage: "php", techStack: ["PHP", "Laravel"], phpVersion });
+  it("blocks PHP below 8.1 and names the composer.json fix", () => {
+    for (const v of ["7.4", "8.0"]) {
+      const reason = phpBuildBlockReason(php(v), false);
+      expect(reason).toContain(`PHP ${v}`);
+      expect(reason).toContain('"^8.2"');
+      expect(reason).not.toMatch(/railpack|nixpacks/i);
+    }
+  });
+  it("allows 8.1 and newer, and an unknown version", () => {
+    for (const v of ["8.1", "8.2", "8.4", undefined]) expect(phpBuildBlockReason(php(v), false)).toBeUndefined();
+  });
+  it("never blocks a repo Dockerfile build or a non-PHP app", () => {
+    expect(phpBuildBlockReason(php("8.0"), true)).toBeUndefined();
+    expect(phpBuildBlockReason({ runtime: "node", primaryLanguage: "javascript", techStack: ["Node.js"], phpVersion: "8.0" }, false)).toBeUndefined();
   });
 });
