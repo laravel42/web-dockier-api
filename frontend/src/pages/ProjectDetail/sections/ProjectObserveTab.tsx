@@ -546,11 +546,10 @@ function ActivitySection({ project }: { project: Project }) {
               className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-card/50"
             >
               <ActivityEventIcon eventType={entry.eventType} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-text">{entry.description}</p>
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="text-xs text-text-muted">
+              {/* Below sm the time and actor sit on a second line under the description. */}
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+                <p className="min-w-0 text-sm text-text sm:flex-1">{entry.description}</p>
+                <p className="text-xs text-text-muted sm:shrink-0 sm:text-right">
                   {timeAgo(entry.createdAt)}
                   {entry.actorName && (
                     <> by <span className="font-medium text-text">{entry.actorName}</span></>

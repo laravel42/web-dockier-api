@@ -117,7 +117,7 @@ export function DeployInfraStatus({
   if (!deploy && !showInfraBadge && !infra) return null;
 
   const segmentCls =
-    "inline-flex h-full items-center gap-1.5 px-2.5 text-ui transition-colors hover:bg-card/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500/40";
+    "inline-flex h-full items-center gap-1.5 whitespace-nowrap px-2.5 text-ui transition-colors hover:bg-card/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500/40";
 
   const providerName = providerKey ? getProviderStyle(providerKey).name || providerKey.toUpperCase() : "";
   const infraLabel = [providerName, serviceLabel].filter(Boolean).join(" · ");

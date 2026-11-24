@@ -333,10 +333,10 @@ function DomainsSection({
       {/* Add domain form */}
       {canManage && (
         <form onSubmit={handleAdd} className="px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
             <Input
               type="text"
-              className="flex-1"
+              className="w-full sm:flex-1"
               placeholder="your-domain.com"
               value={newDomain}
               onChange={(e) => setNewDomain(e.target.value)}
@@ -397,7 +397,7 @@ function DomainsSection({
 
       {/* Domain list */}
       {domains.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 gap-2">
+        <div className="flex flex-col items-center justify-center px-2 py-8 gap-2">
           <p className="text-sm font-medium text-text">No custom domains</p>
           <p className="text-xs text-text-muted">
             Add a domain above to get started.
@@ -565,7 +565,7 @@ function CertificatesSection({
 
   return (
     <div className="rounded-lg border border-border">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+      <div className="flex flex-col items-start gap-3 px-4 py-3 border-b border-border sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-text">Certificates</h3>
           <p className="text-xs text-text-muted mt-0.5">
@@ -592,7 +592,7 @@ function CertificatesSection({
       </div>
 
       {certificates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 gap-2">
+        <div className="flex flex-col items-center justify-center px-2 py-8 gap-2">
           <p className="text-sm font-medium text-text">No certificates</p>
           <p className="text-xs text-text-muted">
             Add a certificate to secure your site with HTTPS.
@@ -850,7 +850,7 @@ export default function ProjectDomainsTab({ project, domainRefreshKey }: Props) 
   return (
     <div className="space-y-6 overflow-y-auto pr-1">
       {/* Header with actions */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
         <TabPanelHeader
           title="Domains"
           description="Manage your site's domains and SSL certificates."

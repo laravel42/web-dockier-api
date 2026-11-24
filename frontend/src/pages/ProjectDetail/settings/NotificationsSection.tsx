@@ -34,7 +34,7 @@ export default function NotificationsSection({ canManage }: Props) {
       <SectionTitle title="Notifications" description="Manage your site's notification settings." />
 
       <SettingsCard>
-        <SettingsRow label="Deployment failure emails" description="Dockier can notify you by email whenever your site fails to deploy.">
+        <SettingsRow stackOnMobile label="Deployment failure emails" description="Dockier can notify you by email whenever your site fails to deploy.">
           <Input
             type="email"
             value={failureEmail}

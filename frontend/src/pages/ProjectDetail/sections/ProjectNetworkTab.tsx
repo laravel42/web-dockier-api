@@ -55,7 +55,7 @@ function SecurityRulesSection({
       </div>
 
       {rules.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 gap-3">
+        <div className="flex flex-col items-center justify-center px-2 py-8 gap-3">
           <p className="text-sm font-medium text-text">No security rules yet</p>
           <p className="text-xs text-text-muted">
             Get started and create your first security rule.
@@ -577,7 +577,7 @@ function RedirectRulesSection({
       </div>
 
       {rules.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 gap-3">
+        <div className="flex flex-col items-center justify-center px-2 py-8 gap-3">
           <p className="text-sm font-medium text-text">No redirect rules yet</p>
           <p className="text-xs text-text-muted">
             Get started and create your first redirect rule.

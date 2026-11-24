@@ -899,7 +899,7 @@ export default function ProjectProcessesTab({ project }: Props) {
           <div className="space-y-4">
             {/* Header */}
             <div className="rounded-lg border border-border p-4">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
                 <div>
                   <h3 className="text-sm font-semibold text-text">Background processes</h3>
                   <p className="text-xs text-text-muted mt-1">
@@ -949,7 +949,7 @@ export default function ProjectProcessesTab({ project }: Props) {
           <div className="space-y-4">
             {/* Scheduler header */}
             <div className="rounded-lg border border-border p-4">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
                 <div>
                   <h3 className="text-sm font-semibold text-text">Scheduled jobs</h3>
                   <p className="text-xs text-text-muted mt-1">

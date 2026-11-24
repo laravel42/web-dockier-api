@@ -73,7 +73,7 @@ export default function GeneralSection({ project, analysis, canManage, onProject
       {/* Main settings card */}
       <SettingsCard>
         {/* Framework */}
-        <SettingsRow label="Framework" description="The framework used by the installed application.">
+        <SettingsRow stackOnMobile label="Framework" description="The framework used by the installed application.">
           {project.platform ? (
             <PlatformBadge slug={project.platform} version={frameworkVersion} />
           ) : (
@@ -82,7 +82,7 @@ export default function GeneralSection({ project, analysis, canManage, onProject
         </SettingsRow>
 
         {/* Tags */}
-        <SettingsRow label="Tags" description="Tags are used to help you organize and find your projects.">
+        <SettingsRow stackOnMobile label="Tags" description="Tags are used to help you organize and find your projects.">
           <TagPicker projectId={project.id} disabled={!canManage} />
         </SettingsRow>
 
@@ -127,30 +127,30 @@ export default function GeneralSection({ project, analysis, canManage, onProject
         <div className="flex flex-col gap-4">
           <div>
             <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-root-directory`}>Root directory</label>
-            <div className="flex items-center gap-0">
-              <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-0">
+              <span className="inline-flex h-9 items-center overflow-hidden rounded-md border border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap sm:rounded-r-none sm:border-r-0">
                 /home/dockier/{project.name}/
               </span>
               <Input id={`${fid}-root-directory`}
                 type="text"
                 defaultValue=""
                 disabled={!canManage}
-                className="grow rounded-l-none w-20 h-9 text-xs font-mono"
+                className="grow w-full h-9 text-xs font-mono sm:w-20 sm:rounded-l-none"
               />
             </div>
           </div>
 
           <div>
             <label className={cn(labelCls, "mb-1 text-xs")} htmlFor={`${fid}-web-directory`}>Web directory</label>
-            <div className="flex items-center gap-0">
-              <span className="inline-flex h-9 items-center rounded-l-md border border-r-0 border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap">
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-0">
+              <span className="inline-flex h-9 items-center overflow-hidden rounded-md border border-border bg-secondary-50/50 px-3 text-xs text-text-muted font-mono text-nowrap sm:rounded-r-none sm:border-r-0">
                 /home/dockier/{project.name}/
               </span>
               <Input id={`${fid}-web-directory`}
                 type="text"
                 defaultValue="current/public"
                 disabled={!canManage}
-                className="grow rounded-l-none w-36 h-9 text-xs font-mono"
+                className="grow w-full h-9 text-xs font-mono sm:w-36 sm:rounded-l-none"
               />
             </div>
           </div>
@@ -164,16 +164,16 @@ export default function GeneralSection({ project, analysis, canManage, onProject
           <p className="text-xs text-text-muted mt-0.5">Configure your site's Git settings.</p>
         </div>
 
-        <SettingsRow label="Repository" description="Configure the Git repository that should be deployed.">
-          <div className="inline-flex items-center rounded-md border border-border bg-background overflow-clip">
-            <span className="px-3 py-2 text-xs font-mono text-text">
+        <SettingsRow stackOnMobile label="Repository" description="Configure the Git repository that should be deployed.">
+          <div className="inline-flex max-w-full items-center rounded-md border border-border bg-background overflow-clip">
+            <span className="min-w-0 break-all px-3 py-2 text-xs font-mono text-text">
               {project.repository || "Not connected"}
             </span>
             {canManage && (
               <button
                 type="button"
                 onClick={() => setShowGitModal(true)}
-                className="border-l border-border px-2.5 py-2 text-xs font-medium text-text-muted hover:bg-muted hover:text-text transition-colors"
+                className="shrink-0 border-l border-border px-2.5 py-2 text-xs font-medium text-text-muted hover:bg-muted hover:text-text transition-colors"
               >
                 Edit
               </button>
@@ -181,7 +181,7 @@ export default function GeneralSection({ project, analysis, canManage, onProject
           </div>
         </SettingsRow>
 
-        <SettingsRow label="Branch" description="Configure the Git branch that should be deployed." border={false}>
+        <SettingsRow stackOnMobile label="Branch" description="Configure the Git branch that should be deployed." border={false}>
           <BranchPickerInline project={project} canManage={canManage} onProjectUpdate={onProjectUpdate} />
         </SettingsRow>
       </SettingsCard>
@@ -199,7 +199,7 @@ export default function GeneralSection({ project, analysis, canManage, onProject
         <p className="text-sm font-semibold text-warning-500 mb-1">Warning</p>
         <p className="text-xs text-text-muted mb-4">These actions are reversible but may cause temporary downtime.</p>
 
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div>
             <p className="text-sm font-medium text-text">Tear down infrastructure</p>
             <p className="text-xs text-text-muted mt-0.5">
@@ -228,7 +228,7 @@ export default function GeneralSection({ project, analysis, canManage, onProject
         <p className="text-sm font-semibold text-danger-500 mb-1">Danger</p>
         <p className="text-xs text-text-muted mb-4">Destructive actions. Review carefully before proceeding.</p>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div>
             <p className="text-sm font-medium text-text">Delete project</p>
             <p className="text-xs text-text-muted mt-0.5">
