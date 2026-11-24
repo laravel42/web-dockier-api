@@ -5,7 +5,7 @@ import { SessionCache } from "@/pages/ProjectDetail/utils/sessionCache";
 import { getErrorMessage } from "@/utils/errors";
 import type { Project } from "@/types";
 import type { RepoAnalysis } from "@/components/DeployWizard";
-import { TEMPLATE_ANALYSIS } from "../constants/templateAnalysis";
+import { TEMPLATE_ANALYSIS } from "../templateAnalysis";
 
 // ─── Analysis session cache ────────────────────────────────────────
 // v13: the analysis schema gained `detectedDbEngine` (authoritative DB engine
