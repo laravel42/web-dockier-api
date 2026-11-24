@@ -8,7 +8,7 @@ import { PROVIDER_DEFS } from "../utils/providerFilters";
 /** Page-shaped placeholder shown while the scan itself loads. Same two columns as the loaded page. */
 export default function ScanDetailSkeleton({ onBack }: { onBack: () => void }) {
   return (
-    <div className="flex gap-6" aria-busy="true">
+    <div className="flex flex-col gap-6 lg:flex-row" aria-busy="true">
       <div className="min-w-0 flex-1">
         <button
           onClick={onBack}
@@ -39,7 +39,7 @@ export default function ScanDetailSkeleton({ onBack }: { onBack: () => void }) {
         </div>
         <FindingsSkeleton />
       </div>
-      <div className="w-72 shrink-0">
+      <div className="w-full lg:w-72 lg:shrink-0">
         <div className={`${cardCls} overflow-hidden`}>
           <div className={sidebarPanelHeadCls}>
             <p className={sidebarPanelHeadTitleCls}>History</p>

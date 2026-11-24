@@ -28,19 +28,19 @@ export default function ScanHeader({ scan, project, liveStatus, onBack, onNaviga
             <ShieldCheckIcon className="size-6" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-semibold text-text">Scan Results</h1>
               <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusColors[status] || "bg-secondary-100 text-text-muted"}`}>
                 {status}
               </span>
             </div>
-            <div className="mt-0.5 flex items-center gap-3">
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
               {project && (
                 <button onClick={onNavigateProject} className="text-sm text-primary-500 transition-colors hover:text-primary-700">
                   {project.name}
                 </button>
               )}
-              <span className="truncate font-mono text-sm text-text-muted">{scan.repo}</span>
+              <span className="min-w-0 break-all font-mono text-sm text-text-muted">{scan.repo}</span>
             </div>
           </div>
         </div>

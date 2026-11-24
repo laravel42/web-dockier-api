@@ -84,7 +84,7 @@ export default function SummaryCards({
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-6">
-      {cards.map((c) => {
+      {cards.map((c, i) => {
         const tone = TONE_STYLES[c.tone];
         const isActive = c.filter !== null && severityFilter === c.filter;
         const isFilesLive = c.label === "Files" && scanRunning;
@@ -94,7 +94,7 @@ export default function SummaryCards({
             key={c.label}
             type="button"
             onClick={() => c.filter !== null && onFilterChange(c.filter)}
-            className={`${cardCls} px-3 py-2.5 text-left transition-all ${tone.surface} ${
+            className={`${cardCls} px-3 py-2.5 text-left transition-all ${i === cards.length - 1 ? "col-span-2 sm:col-span-1" : ""} ${tone.surface} ${
               isActive ? tone.active : ""
             } ${c.filter === null ? "cursor-default pointer-events-none" : "cursor-pointer"} ${
               isFilesLive && !isActive ? "ring-1 ring-primary/30" : ""

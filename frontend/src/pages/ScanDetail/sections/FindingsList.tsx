@@ -186,10 +186,11 @@ export default function FindingsList({
               const infoCount = severityCount(fileFindings, "info");
               return (
               <details key={filePath} className={`${cardCls} group`}>
-                <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none hover:bg-secondary-50/50 transition-colors">
+                <summary className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 cursor-pointer select-none hover:bg-secondary-50/50 transition-colors">
                   <ChevronRightIcon className="size-3.5  text-text-muted shrink-0 transition-transform group-open:rotate-90" />
-                  <span className="text-xs font-mono text-text truncate">{displayFindingPath(filePath)}</span>
-                  <div className="flex items-center gap-1 ml-auto shrink-0">
+                  <span className="min-w-0 flex-1 truncate text-xs font-mono text-text">{displayFindingPath(filePath)}</span>
+                  {/* pl-5.5 lines the badges up with the path: chevron (size-3.5) + gap-2. */}
+                  <div className="flex basis-full items-center gap-1 pl-5.5 sm:ml-auto sm:basis-auto sm:shrink-0 sm:pl-0">
                     {errorCount > 0 && (
                       <SeverityBadge severity="error" count={errorCount} />
                     )}
@@ -253,13 +254,13 @@ function FindingRow({ finding: f, fileContent, pmIntegrations, hasConnectionId, 
   const canCreateMR = has("scan:create_mr") && hasConnectionId;
 
   return (
-    <div className="p-3  pl-9">
-      <div className="mb-4 flex items-center gap-2">
+    <div className="p-3 sm:pl-9">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <SeverityBadge severity={f.severity as "error" | "warning" | "info"} />
         <span className="text-xs text-text-muted font-mono">L{f.startLine}</span>
         <span className="text-xs text-text-muted font-mono px-1 py-px bg-secondary-50 rounded">{f.ruleId}</span>
         {(canCreateIssue || canCreateMR) && (
-          <div className="flex items-center gap-2 ml-auto shrink-0">
+          <div className="flex basis-full flex-wrap items-center gap-2 sm:ml-auto sm:basis-auto sm:shrink-0">
             {canCreateIssue && (
               <Button
                 variant="outline-primary"

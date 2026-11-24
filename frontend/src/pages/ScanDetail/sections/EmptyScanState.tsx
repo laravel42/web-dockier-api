@@ -24,13 +24,13 @@ export default function EmptyScanState({
   onRunScan, onSelectScan, runScanBusy,
 }: Props) {
   return (
-    <div className="flex gap-6">
+    <div className="flex flex-col gap-6 lg:flex-row">
       <div className="flex-1 min-w-0">
         <Button variant="ghost" onClick={onBack} iconLeft={<ChevronLeftIcon className="size-4" />} className="mb-6">
           All Scans
         </Button>
         <h1 className="font-display font-semibold text-text tracking-tight mb-2">{project.name}</h1>
-        <div className={`${cardCls} p-12 text-center mt-6`}>
+        <div className={`${cardCls} p-6 text-center mt-6 sm:p-12`}>
           <ShieldCheckIcon className="size-12  mx-auto text-text-muted mb-4" />
           <p className="text-sm text-text-muted mb-1">No security scans yet for this project.</p>
           <p className="text-sm text-text-muted">Click "Run new scan" to get started.</p>

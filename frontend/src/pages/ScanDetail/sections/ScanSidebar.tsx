@@ -45,8 +45,8 @@ export default function ScanSidebar({
   const canManageScans = isOwner || has("scan:manage");
 
   return (
-    <div className="w-72 shrink-0">
-      <div className="sticky top-6 space-y-2">
+    <div className="w-full lg:w-72 lg:shrink-0">
+      <div className="space-y-2 lg:sticky lg:top-6">
         <div className={`${cardCls} overflow-hidden`}>
           <div className="p-2 border-b border-border/40">
             <Button
