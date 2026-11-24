@@ -8,7 +8,7 @@ const logLines = ["w-full", "w-11/12", "w-4/5", "w-full", "w-2/3", "w-5/6", "w-3
 /** Page-shaped placeholder shown while the deployment itself loads. Same two columns as the loaded page. */
 export default function DeployDetailSkeleton({ onBack }: { onBack: () => void }) {
   return (
-    <div className="flex gap-6" aria-busy="true">
+    <div className="flex flex-col gap-6 lg:flex-row" aria-busy="true">
       <div className="min-w-0 flex-1">
         <button
           onClick={onBack}
@@ -40,7 +40,7 @@ export default function DeployDetailSkeleton({ onBack }: { onBack: () => void })
           </div>
         </div>
       </div>
-      <div className="w-72 shrink-0">
+      <div className="w-full lg:w-72 lg:shrink-0">
         <div className={`${cardCls} overflow-hidden`}>
           <div className={sidebarPanelHeadCls}>
             <p className={sidebarPanelHeadTitleCls}>History</p>

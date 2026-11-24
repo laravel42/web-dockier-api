@@ -26,19 +26,19 @@ export default function DeployHeader({
   const isInProgress = ["pending", "building", "deploying"].includes(deploy.status);
 
   return (
-    <div className="flex items-center justify-between mb-6">
-      <div className="flex items-center gap-3">
-        <div className="size-12 rounded-xl bg-primary-500/15 flex items-center justify-center text-primary-500">
+    <div className="mb-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary-500/15 text-primary-500">
           <RocketIcon className="size-6" />
         </div>
-        <div>
-          <div className="flex items-center gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className={typePageTitle}>Deployment</h1>
             <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[deploy.status] || "bg-secondary-100 text-text-muted"}`}>
               {deploy.status}
             </span>
           </div>
-          <div className="flex items-center gap-3 mt-0.5">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
             {project && (
               <button
                 onClick={onNavigateProject}
@@ -47,7 +47,7 @@ export default function DeployHeader({
                 {project.name}
               </button>
             )}
-            <span className={`${typeCaption} font-mono`}>{deploy.repo}</span>
+            <span className={`${typeCaption} min-w-0 break-all font-mono`}>{deploy.repo}</span>
           </div>
         </div>
       </div>

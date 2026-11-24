@@ -44,8 +44,8 @@ export default function DeployHistory({
   const canDeploy = has("deploy:create") && canLaunchDeploy && Boolean(onNewDeploy);
 
   return (
-    <div className="w-72 shrink-0">
-      <div className="sticky top-6 space-y-2">
+    <div className="w-full lg:w-72 lg:shrink-0">
+      <div className="space-y-2 lg:sticky lg:top-6">
         <div className={`${cardCls} overflow-hidden`}>
           {canDeploy && (
             <div className="p-2 border-b border-border/40">
