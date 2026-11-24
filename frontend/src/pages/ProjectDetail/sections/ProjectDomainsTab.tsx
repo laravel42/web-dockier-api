@@ -14,7 +14,7 @@ import Button from "@/components/ui/Button";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import ConfirmModal from "@/components/ConfirmModal";
 import Alert from "@/components/ui/Alert";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, ExternalLinkIcon, HashIcon, InfoIcon, PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { labelCls, settingsBadgeCls } from "@/utils/styles";

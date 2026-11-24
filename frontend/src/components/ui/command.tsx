@@ -2,7 +2,7 @@ import * as React from "react"
 import { Command as CommandPrimitive } from "cmdk"
 
 import { cn } from "@/utils/cn"
-import { inputCls } from "@/components/ui/input"
+import { inputCls } from "@/components/ui/Input"
 
 /*
   Styled to the app's own picker look rather than stock shadcn: the search field

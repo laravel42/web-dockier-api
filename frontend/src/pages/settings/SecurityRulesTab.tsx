@@ -9,7 +9,7 @@ import TechBadge from "@/components/TechBadge";
 import { Combobox } from "@/components/ui/Combobox";
 import { SettingsField, SettingsTextField } from "@/components/SettingsField";
 import { segmentActiveCls, segmentIdleCls } from "@/utils/styles";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import { PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";

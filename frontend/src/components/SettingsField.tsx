@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { Input } from "./ui/input";
+import { Input } from "./ui/Input";
 import { cn } from "@/utils/cn";
 import { labelCls } from "@/utils/styles";
 

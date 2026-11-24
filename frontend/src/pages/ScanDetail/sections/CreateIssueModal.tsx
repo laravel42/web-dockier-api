@@ -1,8 +1,8 @@
 import { useId } from "react";
 import Modal from "@/components/Modal";
 import Button from "@/components/ui/Button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 import type { PMIntegration, PMTeam, PMMember } from "@/types";
 import Spinner from "@/components/Spinner";
 import { Combobox } from "@/components/ui/Combobox";

@@ -9,7 +9,7 @@ import { getDefaultDeployScript } from "@/config/frameworks";
 import { SectionTitle, SettingsRow, CopyableField } from "./shared";
 import SettingsCard from "./SettingsCard";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 
 interface Props {
   project: Project;

@@ -8,7 +8,7 @@ import SettingsModalFooter from "@/components/SettingsModalFooter";
 import TechBadge from "@/components/TechBadge";
 import { Combobox } from "@/components/ui/Combobox";
 import { labelCls, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { usePermissions } from "@/context/PermissionsContext";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";

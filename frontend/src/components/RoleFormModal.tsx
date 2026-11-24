@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import Modal from "./Modal";
 import SettingsModalFooter from "./SettingsModalFooter";
 import Button from "./ui/Button";
-import { Input } from "./ui/input";
+import { Input } from "./ui/Input";
 import { SearchIcon, CheckIcon, MinusIcon, ChevronDownIcon, LockIcon } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { labelCls } from "@/utils/styles";

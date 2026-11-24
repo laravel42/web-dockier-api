@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 import Modal from "../components/Modal";
 import { SettingsField } from "../components/SettingsField";
-import { Input } from "../components/ui/input";
+import { Input } from "../components/ui/Input";
 import { Combobox } from "../components/ui/Combobox";
 import { clickableProps } from "../utils/a11y";
 import { useEscapeKey } from "../hooks/useEscapeKey";

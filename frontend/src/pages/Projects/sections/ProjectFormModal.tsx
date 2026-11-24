@@ -5,7 +5,7 @@ import RepoSelect from "@/components/RepoSelect";
 import BranchSelect from "@/components/BranchSelect";
 import { FRAMEWORK_CATEGORIES } from "@/config/frameworks";
 import Button from "@/components/ui/Button";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import { CheckIcon, ChevronDownIcon, LinkIcon } from "lucide-react";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { useProjectForm } from "../useProjectForm";

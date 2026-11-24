@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { notificationsApi } from "@/services/notifications";
 import { useAsyncData } from "@/hooks/useAsyncData";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import Skeleton from "@/components/ui/Skeleton";
 import { SectionTitle, SettingsRow } from "./shared";
 import SettingsCard from "./SettingsCard";

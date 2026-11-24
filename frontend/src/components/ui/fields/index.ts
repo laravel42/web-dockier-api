@@ -1,2 +1,2 @@
-export { InputWithLabel } from "./input-with-label";
-export { PasswordInput } from "./password-input";
+export { InputWithLabel } from "./InputWithLabel";
+export { PasswordInput } from "./PasswordInput";

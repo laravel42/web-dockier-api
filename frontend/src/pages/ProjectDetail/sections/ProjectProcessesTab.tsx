@@ -20,7 +20,7 @@ import Spinner from "@/components/Spinner";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
-import { Input, inputCls } from "@/components/ui/input";
+import { Input, inputCls } from "@/components/ui/Input";
 import { CircleCheckIcon, CopyIcon, EllipsisVerticalIcon, FileTextIcon, PauseIcon, PlayIcon, RefreshCwIcon, SquareIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import type { StatusTone } from "@/utils/styles";
 import { labelCls } from "@/utils/styles";

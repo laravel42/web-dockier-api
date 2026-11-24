@@ -7,7 +7,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import Modal from "@/components/Modal";
 import Spinner from "@/components/Spinner";
 import Button from "@/components/ui/Button";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import { EllipsisVerticalIcon, SearchIcon } from "lucide-react";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { labelCls } from "@/utils/styles";

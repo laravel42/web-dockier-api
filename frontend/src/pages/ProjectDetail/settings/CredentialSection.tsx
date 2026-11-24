@@ -1,7 +1,7 @@
 import { useState, useId } from "react";
 import Modal from "@/components/Modal";
 import Button from "@/components/ui/Button";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { SectionTitle } from "./shared";
 import SettingsCard from "./SettingsCard";

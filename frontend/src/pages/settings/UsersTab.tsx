@@ -6,7 +6,7 @@ import SettingsModalFooter from "@/components/SettingsModalFooter";
 import { SettingsField, SettingsTextField } from "@/components/SettingsField";
 import { Combobox } from "@/components/ui/Combobox";
 import { labelCls, settingsBadgeCls, settingsCardCls, settingsCardGridCls, settingsCardInteractiveCls, typeCardDateCls } from "@/utils/styles";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { formatCardDateTime } from "@/utils/formatCardDate";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";

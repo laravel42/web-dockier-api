@@ -15,7 +15,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/Tooltip";
 import { CheckIcon, ClipboardIcon, ExternalLinkIcon } from "lucide-react";
 import { langColors } from "../constants";
 import ContributorsGrid from "./ContributorsGrid";

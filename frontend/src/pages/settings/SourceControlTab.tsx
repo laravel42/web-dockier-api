@@ -6,7 +6,7 @@ import SettingsModalFooter from "@/components/SettingsModalFooter";
 import SourceControlBadge, { getSourceControl } from "@/components/SourceControlBadge";
 import { Combobox } from "@/components/ui/Combobox";
 import { labelCls, settingsBadgeCls, settingsCardGridCls, settingsCardInteractiveCls, settingsCardCls } from "@/utils/styles";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { getErrorMessage } from "@/utils/errors";
 import { usePermissions } from "@/context/PermissionsContext";

@@ -16,7 +16,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import Spinner from "@/components/Spinner";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import { ArchiveXIcon, CheckIcon, ClockIcon, CopyIcon, DownloadIcon, EllipsisVerticalIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import {
   DropdownMenu,

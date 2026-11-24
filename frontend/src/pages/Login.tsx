@@ -7,7 +7,7 @@ import { usePermissions } from "../context/PermissionsContext";
 import Alert from "../components/ui/Alert";
 import AuthLayout from "../components/AuthLayout";
 import { InputWithLabel } from "../components/ui/fields";
-import { PasswordInput } from "../components/ui/fields/password-input";
+import { PasswordInput } from "../components/ui/fields/PasswordInput";
 import { btnLink } from "../utils/styles";
 import Button from "../components/ui/Button";
 import { getErrorMessage } from "../utils/errors";

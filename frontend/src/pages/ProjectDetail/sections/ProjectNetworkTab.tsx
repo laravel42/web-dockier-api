@@ -8,7 +8,7 @@ import Spinner from "@/components/Spinner";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import ConfirmModal from "@/components/ConfirmModal";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import { EyeIcon, EyeOffIcon, PlusIcon, XIcon } from "lucide-react";
 import { TabPanelHeader } from "@/components/TabPanelHeader";
 import PanelSkeleton from "./PanelSkeleton";
