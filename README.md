@@ -100,15 +100,13 @@ Security scans use SonarQube, which runs as a container. Without it, scans
 still complete but report SonarQube as not run. From the repo root:
 
 ```bash
-# SonarQube + its Postgres only (UI on http://localhost:9100), backend stays on pnpm backend:dev
-docker compose up -d --wait
-
-# ...or SonarQube + the backend, built from backend/Dockerfile like production
-docker compose --profile backend up -d --build --wait
-
-docker compose --profile backend logs -f backend   # backend logs
-docker compose --profile backend stop backend      # stop it before going back to pnpm backend:dev
-docker compose --profile backend down              # stop everything, keeping data
+# SonarQube (UI on http://localhost:9100) + the backend, built from backend/Dockerfile like production
+docker compose up -d --build
+# ...or SonarQube + its Postgres only, with the backend on pnpm backend:dev
+docker compose up -d --wait sonarqube
+docker compose logs -f backend   # backend logs
+docker compose stop backend      # stop it before going back to pnpm backend:dev
+docker compose down              # stop everything, keeping data
 ```
 
 - The first SonarQube start takes a few minutes. Log in once as `admin` /

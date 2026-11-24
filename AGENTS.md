@@ -473,9 +473,9 @@ pnpm db:migrate --dry-run     # Show which migrations would be applied
 pnpm db:migrate               # Apply them (asks before touching a hosted database)
 
 # Docker (repo root)
-docker compose up -d --wait                           # SonarQube + its Postgres only, on localhost:9100
-docker compose --profile backend up -d --build --wait # ...plus the backend, built from backend/Dockerfile
-docker compose --profile backend stop backend         # Stop it before running pnpm backend:dev (shared queue, same port)
+docker compose up -d --build                          # SonarQube + its Postgres + the backend (built from backend/Dockerfile)
+docker compose up -d --wait sonarqube                 # SonarQube + its Postgres only, on localhost:9100 (run pnpm backend:dev yourself)
+docker compose stop backend                           # Stop it before running pnpm backend:dev (shared queue, same port)
 
 # Frontend
 cd frontend && pnpm install   # Install frontend dependencies

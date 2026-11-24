@@ -1,12 +1,13 @@
 # Local SonarQube for security scans. Reachable at http://localhost:9100
 #
-#   docker compose up -d --wait      start and block until SonarQube is healthy
+#   docker compose up -d --build     start SonarQube AND the backend
+#   docker compose up -d --wait sonarqube   SonarQube only (run `pnpm backend:dev` yourself)
 #   docker compose down              stop, keeping the volumes
 #   docker compose down -v           stop and discard the analysis history
 #
-# By default this starts ONLY SonarQube and its database; the backend and
-# frontend run with `pnpm backend:dev` and `pnpm dev`. The backend can also run
-# here, opt-in — see the `backend` service at the end.
+# By default this starts SonarQube, its database and the backend; the frontend
+# runs with `pnpm dev`. To run the backend on the host instead (hot reload),
+# start only `sonarqube` as above.
 # SonarQube is a stateful service rather than a library — it carries its own
 # Postgres and an embedded Elasticsearch — so a container is the only sane way
 # to run it. The app itself just needs SONARQUBE_URL to point here.
@@ -84,16 +85,15 @@ services:
   # The backend, built from the same Dockerfile Railway uses, so a scan here runs
   # with exactly the Semgrep and sonar-scanner versions production ships.
   #
-  #   docker compose --profile backend up -d --build --wait
+  #   docker compose up -d --build
   #
-  # Behind a profile on purpose: the plain `docker compose up -d --wait` above
-  # still starts only SonarQube, so `pnpm backend:dev` (with hot reload) keeps
-  # working and the two never fight over port 4000. Run one or the other.
+  # For `pnpm backend:dev` (hot reload) start only SonarQube with
+  # `docker compose up -d --wait sonarqube`, or stop this one with
+  # `docker compose stop backend`: the two fight over port 4000 and the queue.
   # The frontend stays on `pnpm dev`: Vite on a bind mount under Docker Desktop
   # reloads far slower than natively, and production serves it from Cloudflare
   # Pages, not from a container.
   backend:
-    profiles: ["backend"]
     build:
       context: .
       dockerfile: backend/Dockerfile
