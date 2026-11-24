@@ -52,7 +52,7 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
             const summary = s.summary;
             return (
               <li key={s.id}>
-                <div {...clickableProps(() => onViewScan(s.id))} className={dashboardActivityRowCls}>
+                <div {...clickableProps(() => onViewScan(s.id))} className={`${dashboardActivityRowCls} flex-wrap sm:flex-nowrap`}>
                   <ScanStatusDot status={s.status} summary={summary} />
                   <div className="min-w-0 flex-1">
                     <p className={`${typeCardTitle} truncate`}>{proj?.name || s.repo}</p>
@@ -66,7 +66,7 @@ export default function RecentScans({ scans, projectMap, fallbackCommitByProject
                     </div>
                   </div>
                   {s.summary && s.status === "completed" && (
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex basis-full flex-wrap items-center gap-1.5 pl-5 sm:basis-auto sm:shrink-0 sm:flex-nowrap sm:pl-0">
                       {s.summary.errors > 0 && <SeverityBadge severity="error" count={s.summary.errors} />}
                       {s.summary.warnings > 0 && <SeverityBadge severity="warning" count={s.summary.warnings} />}
                       {s.summary.infos > 0 && <SeverityBadge severity="info" count={s.summary.infos} />}
