@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useAuth } from "../context/AuthContext";
 import AppBrand from "./AppBrand";
 import {
@@ -10,11 +10,12 @@ import {
 } from "../config/nav";
 import { useInAppNotificationsEnabled } from "../hooks/useInAppNotificationsEnabled";
 import { navLinkActiveCls, navLinkCls, navLinkIdleCls } from "../utils/styles";
+import { Drawer, DrawerBody, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from "./ui/Drawer";
 import NotificationDropdown from "./NotificationDropdown";
 import { useTheme } from "../context/ThemeContext";
 import { usePermissions } from "../context/PermissionsContext";
 import RocketIcon from "./icons/outlined/RocketIcon";
-import { FolderClosedIcon, LayoutGridIcon, LogOutIcon, MonitorIcon, MoonIcon, SettingsIcon, ShieldCheckIcon, SunMediumIcon } from "lucide-react";
+import { FolderClosedIcon, LayoutGridIcon, LogOutIcon, MenuIcon, MonitorIcon, MoonIcon, SettingsIcon, ShieldCheckIcon, SunMediumIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,7 +46,23 @@ function NavItem({ item, active }: { item: NavItemConfig; active: boolean }) {
   );
 }
 
+/** Full-width, touch-sized row for the mobile menu; closes the drawer on navigation. */
+function MobileNavItem({ item, active, onNavigate }: { item: NavItemConfig; active: boolean; onNavigate: () => void }) {
+  return (
+    <Link
+      to={item.to}
+      onClick={onNavigate}
+      className={`flex items-center gap-3 rounded-md px-4 py-3 text-base font-medium transition-colors ${active ? navLinkActiveCls : navLinkIdleCls}`}
+      aria-current={active ? "page" : undefined}
+    >
+      {navIcons[item.icon]}
+      <span>{item.label}</span>
+    </Link>
+  );
+}
+
 export default function TopNavbar() {
+  const [menuOpen, setMenuOpen] = useState(false);
   const { logout, email, userProfile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,11 +88,11 @@ export default function TopNavbar() {
 
   return (
     <header className="sticky top-0 z-40 shrink-0 border-b border-border/40 bg-card/30 backdrop-blur supports-backdrop-filter:bg-card/60">
-      <div className="mx-auto grid h-14 w-full max-w-[1600px] grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
+      <div className="mx-auto grid h-14 w-full max-w-[1600px] grid-cols-[1fr_auto] items-center lg:grid-cols-[1fr_auto_1fr] gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
         <AppBrand size="sm" className="justify-self-start" />
 
         <nav
-          className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto scrollbar-hide"
+          className="hidden min-w-0 items-center justify-center gap-1 overflow-x-auto scrollbar-hide lg:flex"
           aria-label="Main navigation"
         >
           {visibleNavItems.map((item) => (
@@ -144,6 +161,34 @@ export default function TopNavbar() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Drawer open={menuOpen} onOpenChange={setMenuOpen}>
+            <DrawerTrigger asChild>
+              <button
+                type="button"
+                className="flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground lg:hidden"
+                aria-label="Open navigation menu"
+              >
+                <MenuIcon className="size-5" />
+              </button>
+            </DrawerTrigger>
+            <DrawerContent className="max-w-xs" aria-describedby={undefined}>
+              <DrawerHeader>
+                <DrawerTitle>Menu</DrawerTitle>
+              </DrawerHeader>
+              <DrawerBody>
+                <nav className="flex flex-col gap-1 p-3" aria-label="Main navigation">
+                  {visibleNavItems.map((item) => (
+                    <MobileNavItem
+                      key={item.to}
+                      item={item}
+                      active={isNavItemActive(location.pathname, item)}
+                      onNavigate={() => setMenuOpen(false)}
+                    />
+                  ))}
+                </nav>
+              </DrawerBody>
+            </DrawerContent>
+          </Drawer>
         </div>
       </div>
     </header>
