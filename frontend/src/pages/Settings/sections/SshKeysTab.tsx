@@ -16,7 +16,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { KeyRoundIcon, PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
-import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
+import { SettingsCardGridSkeleton } from "../components/SettingsSkeletons";
 
 export default function SshKeysTab() {
   const { has } = usePermissions();

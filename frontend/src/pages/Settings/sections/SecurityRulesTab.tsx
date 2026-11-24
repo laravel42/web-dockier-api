@@ -14,13 +14,13 @@ import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import { PlusIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import ToggleSwitch from "@/components/ui/ToggleSwitch";
-import RulesFilterSidebar from "./sections/RulesFilterSidebar";
-import SemgrepRulesPanel from "./sections/SemgrepRulesPanel";
-import SonarQubeRulesPanel from "./sections/SonarQubeRulesPanel";
-import { severityDotCls } from "./sections/shared";
+import RulesFilterSidebar from "./RulesFilterSidebar";
+import SemgrepRulesPanel from "./SemgrepRulesPanel";
+import SonarQubeRulesPanel from "./SonarQubeRulesPanel";
+import { severityDotCls } from "./shared";
 // Shared with the scan page so Settings and the scan it starts cannot disagree.
 import { loadScanTools, saveScanTools } from "@/utils/scanTools";
-import { RuleCardsSkeleton } from "./components/SettingsSkeletons";
+import { RuleCardsSkeleton } from "../components/SettingsSkeletons";
 
 // ─── Types ───
 

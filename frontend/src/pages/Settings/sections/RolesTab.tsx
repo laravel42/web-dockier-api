@@ -11,7 +11,7 @@ import { getErrorMessage } from "@/utils/errors";
 import Button from "@/components/ui/Button";
 import { PlusIcon, ShieldCheckIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
-import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
+import { SettingsCardGridSkeleton } from "../components/SettingsSkeletons";
 
 function isAdminRole(role: RoleItem | null): boolean {
   if (!role) return false;

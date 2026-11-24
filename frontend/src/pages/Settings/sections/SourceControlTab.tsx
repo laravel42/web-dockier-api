@@ -16,9 +16,9 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
-import MetadataBar from "./components/MetadataBar";
-import SettingsHeroHeader from "./components/SettingsHeroHeader";
-import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
+import MetadataBar from "../components/MetadataBar";
+import SettingsHeroHeader from "../components/SettingsHeroHeader";
+import { SettingsCardGridSkeleton } from "../components/SettingsSkeletons";
 
 export default function SourceControlTab() {
   const { has } = usePermissions();

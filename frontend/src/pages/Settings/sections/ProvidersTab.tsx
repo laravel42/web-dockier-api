@@ -19,9 +19,9 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
-import MetadataBar from "./components/MetadataBar";
-import SettingsHeroHeader from "./components/SettingsHeroHeader";
-import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
+import MetadataBar from "../components/MetadataBar";
+import SettingsHeroHeader from "../components/SettingsHeroHeader";
+import { SettingsCardGridSkeleton } from "../components/SettingsSkeletons";
 
 /** Provider types the app supports. Only AWS and GCP for now. */
 type ProviderKind = "aws" | "gcp";

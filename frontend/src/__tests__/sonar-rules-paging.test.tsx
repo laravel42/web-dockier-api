@@ -14,7 +14,7 @@ const api = vi.hoisted(() => ({
 vi.mock("@/services/api", () => ({ codeAnalysisApi: api }));
 vi.mock("@/context/useToast", () => ({ useToast: () => ({ error: vi.fn(), success: vi.fn() }) }));
 
-const SonarQubeRulesPanel = (await import("../pages/settings/sections/SonarQubeRulesPanel")).default;
+const SonarQubeRulesPanel = (await import("../pages/Settings/sections/SonarQubeRulesPanel")).default;
 
 const rule = (key: string) => ({
   key, name: key, severity: "MAJOR", lang: "java", langName: "Java", type: "BUG", status: "READY",

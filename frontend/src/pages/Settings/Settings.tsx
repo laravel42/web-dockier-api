@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { useTabListKeyboard, panelId, tabId } from "../hooks/useTabListKeyboard";
-import { usePermissions } from "../context/PermissionsContext";
-import PageHeader from "../components/ui/PageHeader";
-import { SettingsTabsSkeleton, SettingsFormCardsSkeleton } from "./settings/components/SettingsSkeletons";
-import ProfileTab from "./settings/ProfileTab";
-import UsersTab from "./settings/UsersTab";
-import RolesTab from "./settings/RolesTab";
-import ProvidersTab from "./settings/ProvidersTab";
-import SshKeysTab from "./settings/SshKeysTab";
-import SourceControlTab from "./settings/SourceControlTab";
-import NotificationChannelsTab from "./settings/NotificationChannelsTab";
-import IntegrationsTab from "./settings/IntegrationsTab";
-import SecurityRulesTab from "./settings/SecurityRulesTab";
+import { useTabListKeyboard, panelId, tabId } from "@/hooks/useTabListKeyboard";
+import { usePermissions } from "@/context/PermissionsContext";
+import PageHeader from "@/components/ui/PageHeader";
+import { SettingsTabsSkeleton, SettingsFormCardsSkeleton } from "./components/SettingsSkeletons";
+import ProfileTab from "./sections/ProfileTab";
+import UsersTab from "./sections/UsersTab";
+import RolesTab from "./sections/RolesTab";
+import ProvidersTab from "./sections/ProvidersTab";
+import SshKeysTab from "./sections/SshKeysTab";
+import SourceControlTab from "./sections/SourceControlTab";
+import NotificationChannelsTab from "./sections/NotificationChannelsTab";
+import IntegrationsTab from "./sections/IntegrationsTab";
+import SecurityRulesTab from "./sections/SecurityRulesTab";
 
 type Tab = "profile" | "users" | "roles" | "providers" | "ssh-keys" | "source-control" | "channels" | "integrations" | "security-rules";
 

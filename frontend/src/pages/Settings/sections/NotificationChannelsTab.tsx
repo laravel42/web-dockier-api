@@ -17,7 +17,7 @@ import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import { notifyInAppNotificationsChanged } from "@/hooks/useInAppNotificationsEnabled";
 import { BellIcon, LinkIcon, MailIcon, PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
-import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
+import { SettingsCardGridSkeleton } from "../components/SettingsSkeletons";
 
 export default function NotificationChannelsTab() {
   const { has } = usePermissions();

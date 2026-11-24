@@ -25,8 +25,8 @@ vi.mock("@/components/RoleFormModal", () => ({
     open ? <button onClick={() => onSubmit({ name: "x", description: "", permissions: [] })}>submit role</button> : null,
 }));
 
-const RolesTab = (await import("../pages/settings/RolesTab")).default;
-const UsersTab = (await import("../pages/settings/UsersTab")).default;
+const RolesTab = (await import("../pages/Settings/sections/RolesTab")).default;
+const UsersTab = (await import("../pages/Settings/sections/UsersTab")).default;
 
 beforeEach(() => vi.clearAllMocks());
 

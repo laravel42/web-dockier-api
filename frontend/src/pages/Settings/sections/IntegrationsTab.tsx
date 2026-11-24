@@ -19,7 +19,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import PageError from "@/components/ui/PageError";
 import { PlusIcon, Grid2X2PlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
-import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
+import { SettingsCardGridSkeleton } from "../components/SettingsSkeletons";
 
 // Older versions kept non-server integrations, secrets included, in localStorage; drop what is left.
 // shortcut: runs on every load of this tab, remove once old browsers have had time to visit it.

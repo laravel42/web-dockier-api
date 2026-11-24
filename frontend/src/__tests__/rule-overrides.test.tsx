@@ -19,8 +19,8 @@ vi.mock("@/services/api", () => ({ codeAnalysisApi: api }));
 const toastError = vi.fn();
 vi.mock("@/context/useToast", () => ({ useToast: () => ({ error: toastError, success: vi.fn() }) }));
 
-const SemgrepRulesPanel = (await import("../pages/settings/sections/SemgrepRulesPanel")).default;
-const SecurityRulesTab = (await import("../pages/settings/SecurityRulesTab")).default;
+const SemgrepRulesPanel = (await import("../pages/Settings/sections/SemgrepRulesPanel")).default;
+const SecurityRulesTab = (await import("../pages/Settings/sections/SecurityRulesTab")).default;
 
 const RULE_ID = "ocaml.lang.security.ocamllint-marshal";
 const NEXT_SCAN = /apply to the next scan/i;

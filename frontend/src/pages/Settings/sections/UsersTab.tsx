@@ -19,7 +19,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { CheckIcon, ClipboardIcon, EyeIcon, EyeOffIcon, UserRoundPlusIcon } from "lucide-react";
 import { clickableProps } from "@/utils/a11y";
-import { SettingsCardGridSkeleton } from "./components/SettingsSkeletons";
+import { SettingsCardGridSkeleton } from "../components/SettingsSkeletons";
 
 const LANGUAGE_OPTIONS = [
   { value: "en", label: "English" },

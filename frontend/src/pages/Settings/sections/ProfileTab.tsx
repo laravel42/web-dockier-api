@@ -11,7 +11,7 @@ import { getErrorMessage } from "@/utils/errors";
 import { useConfirmableAction } from "@/hooks/useConfirmableAction";
 import ConfirmModal from "@/components/ConfirmModal";
 import { emptyBillingDetails, type BillingDetails } from "@/types/billing";
-import { SettingsFormCardsSkeleton, FormFieldsSkeleton } from "./components/SettingsSkeletons";
+import { SettingsFormCardsSkeleton, FormFieldsSkeleton } from "../components/SettingsSkeletons";
 
 type Msg = { text: string; variant: "error" | "success" | "info" } | null;
 
