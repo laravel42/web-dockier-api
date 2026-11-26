@@ -634,7 +634,7 @@ function ActivityDetailModal({
           tabIndex={0}
           role="region"
           aria-label="Event details output"
-          className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-terminal p-4 font-mono text-xs/relaxed text-strong whitespace-pre-wrap break-all"
+          className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-background p-4 font-mono text-xs/relaxed text-strong whitespace-pre-wrap break-all"
         >
           {output}
         </pre>
@@ -643,7 +643,7 @@ function ActivityDetailModal({
           tabIndex={0}
           role="region"
           aria-label="Event details output"
-          className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-terminal p-4 font-mono text-xs/relaxed text-strong whitespace-pre-wrap break-all"
+          className="max-h-80 overflow-auto rounded-lg border border-border/50 bg-background p-4 font-mono text-xs/relaxed text-strong whitespace-pre-wrap break-all"
         >
           {JSON.stringify(entry.metadata, null, 2)}
         </pre>

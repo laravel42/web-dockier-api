@@ -374,7 +374,7 @@ function CommandsPanel({ project, canManage }: { project: Project; canManage: bo
                 cannot be undone from here.
               </span>
             )}
-            <span className="mb-3 block font-mono text-xs break-all rounded-md border border-border bg-terminal px-3 py-2 text-strong">
+            <span className="mb-3 block font-mono text-xs break-all rounded-md border border-border bg-background px-3 py-2 text-strong">
               {pendingCommand}
             </span>
             {/* Restated here, not only in the paragraph above the field. */}

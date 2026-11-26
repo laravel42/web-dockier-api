@@ -131,10 +131,7 @@
      GitHub-dark hexes, so every surface under them must be theme-invariant too.
      It used bg-danger-surface, which light theme overrides to oklch(0.955 …) —
      near-white under pale inks. Also NOT overridden under [data-theme="light"]. */
-  --color-terminal-danger-surface: oklch(0.27 0.055 25);
-  /* Dim text on a terminal surface (the preview's line-number gutter). text-muted
-     flips to a dark grey in light theme, which vanishes on near-black. */
-  --color-terminal-dim: oklch(0.65 0.015 250);
+
 
   /* App aliases (backward compat) */
   --color-surface: var(--color-background);
@@ -686,10 +683,11 @@ strong, b {
 }
 
 /* Scan finding code preview — Prism token colors on Dockier surfaces.
-   These 7 hexes are GitHub-dark and deliberately have NO [data-theme="light"]
-   variant: the preview renders on theme-invariant terminal surfaces, exactly
-   like the deploy log. Do not "tokenize" them onto the per-theme ramp — see the
-   bg-terminal note in @theme above. */
+   The preview follows the theme (unlike the deploy log, which is pinned dark),
+   so BOTH palettes below are required: GitHub-dark here, GitHub-light in the
+   [data-theme="light"] block further down. Adding a token group here without
+   its light counterpart leaves that group unreadable on the light surface.
+   `code-preview.test.ts` measures every colour in both themes. */
 .code-preview pre,
 .code-preview code {
   background: transparent !important;
@@ -749,6 +747,58 @@ strong, b {
 .code-preview .token.important,
 .code-preview .token.variable {
   color: #ffa657;
+}
+
+/* Light theme — GitHub-light equivalents, same token groups, same order.
+   Darkened from GitHub's published values where those miss 4.5:1 on our
+   surface: the comment grey is #57606a, not #6e7781, which measures 4.16:1 on
+   bg-background and fails. */
+[data-theme="light"] .code-preview .token.comment,
+[data-theme="light"] .code-preview .token.prolog,
+[data-theme="light"] .code-preview .token.doctype,
+[data-theme="light"] .code-preview .token.cdata {
+  color: #57606a;
+}
+[data-theme="light"] .code-preview .token.punctuation {
+  color: #24292f;
+}
+[data-theme="light"] .code-preview .token.property,
+[data-theme="light"] .code-preview .token.tag,
+[data-theme="light"] .code-preview .token.boolean,
+[data-theme="light"] .code-preview .token.number,
+[data-theme="light"] .code-preview .token.constant,
+[data-theme="light"] .code-preview .token.symbol,
+[data-theme="light"] .code-preview .token.deleted {
+  color: #0550ae;
+}
+[data-theme="light"] .code-preview .token.selector,
+[data-theme="light"] .code-preview .token.attr-name,
+[data-theme="light"] .code-preview .token.string,
+[data-theme="light"] .code-preview .token.char,
+[data-theme="light"] .code-preview .token.builtin,
+[data-theme="light"] .code-preview .token.inserted {
+  color: #0a3069;
+}
+[data-theme="light"] .code-preview .token.operator,
+[data-theme="light"] .code-preview .token.entity,
+[data-theme="light"] .code-preview .token.url,
+[data-theme="light"] .code-preview .language-css .token.string,
+[data-theme="light"] .code-preview .style .token.string {
+  color: #6639ba;
+}
+[data-theme="light"] .code-preview .token.atrule,
+[data-theme="light"] .code-preview .token.attr-value,
+[data-theme="light"] .code-preview .token.keyword {
+  color: #cf222e;
+}
+[data-theme="light"] .code-preview .token.function,
+[data-theme="light"] .code-preview .token.class-name {
+  color: #6639ba;
+}
+[data-theme="light"] .code-preview .token.regex,
+[data-theme="light"] .code-preview .token.important,
+[data-theme="light"] .code-preview .token.variable {
+  color: #953800;
 }
 
 /* Scan/deploy sidebar — branch+commit chip (size="sidebar") */
