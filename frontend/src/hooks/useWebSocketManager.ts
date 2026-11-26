@@ -12,8 +12,10 @@ export interface UseWebSocketManagerOptions<T> {
   shouldReconnect?: (key: string) => boolean;
   /** Called after a connection closes (before reconnect decision). */
   onClose?: (key: string) => void;
-  /** Delay in ms before attempting reconnection. Default: 3000 */
+  /** Base delay in ms before the first reconnection. Doubles per attempt. Default: 3000 */
   reconnectDelay?: number;
+  /** Give up after this many consecutive failures. Default: 6 (~3min with the default delay) */
+  maxReconnectAttempts?: number;
   /** Parse the raw MessageEvent data into the typed message. Default: JSON.parse */
   parse?: (raw: string) => T;
 }
@@ -47,6 +49,8 @@ export function useWebSocketManager<T>(options: UseWebSocketManagerOptions<T>) {
 
   const socketsRef = useRef<Map<string, WebSocket>>(new Map());
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  /** Consecutive failed reconnects per key, for the backoff and the attempt cap. */
+  const attemptsRef = useRef<Map<string, number>>(new Map());
   // Ref to the latest `open` function so reconnect timers always call the current version
   const openRef = useRef<(key: string) => void>(() => {});
 
@@ -56,6 +60,7 @@ export function useWebSocketManager<T>(options: UseWebSocketManagerOptions<T>) {
       clearTimeout(timer);
       timersRef.current.delete(key);
     }
+    attemptsRef.current.delete(key);
     const socket = socketsRef.current.get(key);
     if (socket) {
       socket.onclose = null;
@@ -72,10 +77,14 @@ export function useWebSocketManager<T>(options: UseWebSocketManagerOptions<T>) {
 
     const parse = optionsRef.current.parse ?? ((raw: string) => JSON.parse(raw) as T);
     const reconnectDelay = optionsRef.current.reconnectDelay ?? 3000;
+    const maxAttempts = optionsRef.current.maxReconnectAttempts ?? 6;
 
     const ws = new WebSocket(url);
 
     ws.onmessage = (event) => {
+      // A delivered message proves the endpoint is healthy, so the next outage
+      // starts its backoff from scratch instead of inheriting an old streak.
+      attemptsRef.current.delete(key);
       try {
         const message = parse(event.data as string);
         optionsRef.current.onMessage(key, message);
@@ -96,10 +105,19 @@ export function useWebSocketManager<T>(options: UseWebSocketManagerOptions<T>) {
       if (!shouldReconnect) return;
       if (timersRef.current.has(key)) return;
 
+      // Capped exponential backoff: a fixed 3s retried forever, which hammered
+      // the API for as long as the tab stayed open on a dead endpoint.
+      const attempts = (attemptsRef.current.get(key) ?? 0) + 1;
+      if (attempts > maxAttempts) {
+        attemptsRef.current.delete(key);
+        return;
+      }
+      attemptsRef.current.set(key, attempts);
+
       const timer = setTimeout(() => {
         timersRef.current.delete(key);
         openRef.current(key);
-      }, reconnectDelay);
+      }, reconnectDelay * 2 ** (attempts - 1));
       timersRef.current.set(key, timer);
     };
 
@@ -112,7 +130,9 @@ export function useWebSocketManager<T>(options: UseWebSocketManagerOptions<T>) {
   }, [open]);
 
   const closeAll = useCallback(() => {
-    for (const key of socketsRef.current.keys()) {
+    // Timer keys too, not just sockets: a key awaiting a reconnect has no socket,
+    // so iterating sockets alone left its timer to fire after unmount.
+    for (const key of new Set([...socketsRef.current.keys(), ...timersRef.current.keys()])) {
       close(key);
     }
   }, [close]);
