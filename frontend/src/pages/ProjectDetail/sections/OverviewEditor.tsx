@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { BlockNoteEditor, type PartialBlock } from "@blocknote/core";
 import type { Project } from "@/types";
 import { gitApi } from "@/services/git";
 import { parseOwnerRepo } from "@/utils/parseOwnerRepo";
-import { normalizeOverviewBlocks } from "../utils/normalizeOverviewBlocks";
 import {
   getOverviewCacheKey,
   getCachedOverview,
@@ -59,32 +57,15 @@ async function fetchReadmeMarkdown(project: Project): Promise<string | null> {
   return null;
 }
 
-/** Headless BlockNote — only used to round-trip stored overviewBlocks → markdown. */
-function markdownToBlocks(markdown: string): PartialBlock[] {
-  const temp = BlockNoteEditor.create();
-  return normalizeOverviewBlocks(temp.tryParseMarkdownToBlocks(markdown));
-}
-
-function blocksToMarkdown(blocks: PartialBlock[]): string {
-  const temp = BlockNoteEditor.create({
-    initialContent: blocks.length > 0 ? blocks : undefined,
-  });
-  return temp.blocksToMarkdownLossy();
-}
-
 export default function OverviewEditor({
   project,
   clipOverflow = false,
 }: Props) {
   const cacheKey = getOverviewCacheKey(project);
   const cachedOnMount = getCachedOverview(cacheKey);
-  const savedOnMount = project.config?.overviewBlocks;
 
   const [markdown, setMarkdown] = useState<string | null>(() => {
-    if (savedOnMount && savedOnMount.length > 0) {
-      return blocksToMarkdown(normalizeOverviewBlocks(savedOnMount as PartialBlock[]));
-    }
-    if (cachedOnMount?.blocks) return blocksToMarkdown(cachedOnMount.blocks);
+    if (cachedOnMount?.markdown) return cachedOnMount.markdown;
     if (cachedOnMount && cachedOnMount.loadError) return "";
     return null;
   });
@@ -107,23 +88,10 @@ export default function OverviewEditor({
     }
 
     async function load() {
-      const saved = project.config?.overviewBlocks;
-      if (saved && saved.length > 0) {
-        const blocks = normalizeOverviewBlocks(saved as PartialBlock[]);
-        const md = blocksToMarkdown(blocks);
-        setCachedOverview(cacheKey, { blocks, loadError: null });
-        if (!cancelled) {
-          setMarkdown(md);
-          setLoadError(null);
-          hasLoadedRef.current = true;
-        }
-        return;
-      }
-
       const cached = getCachedOverview(cacheKey);
       if (cached) {
         if (!cancelled) {
-          setMarkdown(cached.blocks ? blocksToMarkdown(cached.blocks) : "");
+          setMarkdown(cached.markdown ?? "");
           setLoadError(cached.loadError);
           hasLoadedRef.current = true;
         }
@@ -143,22 +111,19 @@ export default function OverviewEditor({
           project.sourceType === "template"
             ? "Template projects don't have a linked repository overview."
             : "No README.md found in this repository.";
-        const entry = { blocks: undefined, loadError: msg };
-        setCachedOverview(cacheKey, entry);
+        setCachedOverview(cacheKey, { markdown: undefined, loadError: msg });
         setMarkdown("");
-        setLoadError(entry.loadError);
+        setLoadError(msg);
         hasLoadedRef.current = true;
         return;
       }
 
-      const blocks = markdownToBlocks(readme);
-      const entry = {
-        blocks: blocks.length > 0 ? blocks : undefined,
-        loadError: blocks.length === 0 ? "README.md is empty." : null,
-      };
-      setCachedOverview(cacheKey, entry);
+      // fetchReadmeMarkdown already rejects whitespace-only files, so a README
+      // that reaches here has content. The old "README.md is empty." branch
+      // needed a block parse to spot markdown that renders to nothing.
+      setCachedOverview(cacheKey, { markdown: readme, loadError: null });
       setMarkdown(readme);
-      setLoadError(entry.loadError);
+      setLoadError(null);
       hasLoadedRef.current = true;
     }
 

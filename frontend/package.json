@@ -21,7 +21,6 @@
     "devicons": "node scripts/generate-devicon-manifest.mjs"
   },
   "dependencies": {
-    "@blocknote/core": "^0.51.4",
     "@codemirror/language": "^6.12.3",
     "@codemirror/language-data": "^6.5.2",
     "@codemirror/state": "^6.6.0",
