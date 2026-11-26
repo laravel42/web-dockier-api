@@ -83,6 +83,17 @@ export const gitApi = {
       badges: TechBadgeInfo[];
     }>(`/git/repo-badges${buildQuery({ repo, branch, connectionId })}`),
 
+  /**
+   * Cache-only badges for a whole page of repos in one call. The single route
+   * above analyses on a miss and is capped at 30/min, which a list page of 50
+   * blew through; use this for lists and that one for a single known repo.
+   * A repo with nothing cached is absent from `results`, not empty in it.
+   */
+  getRepoBadgesBatch: (repos: Array<{ repo: string; branch?: string }>) =>
+    request<{
+      results: Array<{ repo: string; branch: string; badges: TechBadgeInfo[] }>;
+    }>("/git/repo-badges/batch", { method: "POST", body: JSON.stringify({ repos }) }),
+
   getRepoFavicon: (
     repo: string,
     branch?: string,

@@ -32,6 +32,7 @@ import {
   cacheFreshSince,
 } from "../domain/cache.js";
 import { requireConnection } from "./shared.js";
+import { badgeCacheKey, badgesFromAnalysisResult, badgesFromStackResult } from "../domain/badges.js";
 
 export async function registerAnalysisRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -166,31 +167,18 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
 
       const stackCached = await db.from("stack_cache").select("result").eq("organization_id", auth.tenantId).gt("created_at", cacheFreshSince("stack_cache")).eq("repo", repo).eq("branch", branch).maybeSingle();
       if (stackCached.data?.result) {
-        const parsed = parseJsonField<{ components?: Array<{ techs?: string[] }> }>(stackCached.data.result)!;
-        const techSet = new Set<string>();
-        for (const component of parsed.components ?? []) {
-          for (const tech of component.techs ?? []) techSet.add(tech);
-        }
-        if (techSet.size > 0) {
-          return {
-            badges: Array.from(techSet).map((name) => ({ name, category: "framework", confidence: 90 })),
-          };
-        }
+        const badges = badgesFromStackResult(parseJsonField(stackCached.data.result));
+        if (badges.length > 0) return { badges };
       }
 
       const analysisCached = await db.from("analysis_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repo).eq("branch", branch).maybeSingle();
       if (analysisCached.data?.result) {
-        const parsed = parseJsonField<{ techStack?: Array<{ name: string; category: string; confidence: number }> }>(analysisCached.data.result)!;
-        const techStack = parsed.techStack ?? [];
-        const hasFramework = techStack.some((item) => item.category === "framework");
-        if (techStack.length > 0 && (hasFramework || !request.query.connectionId)) {
-          return {
-            badges: techStack.map((item) => ({
-              name: item.name,
-              category: item.category,
-              confidence: item.confidence,
-            })),
-          };
+        const badges = badgesFromAnalysisResult(parseJsonField(analysisCached.data.result));
+        const hasFramework = badges.some((item) => item.category === "framework");
+        // With a connection in hand, a frameworkless hit is worth re-analysing
+        // below; without one, what is cached is all there will ever be.
+        if (badges.length > 0 && (hasFramework || !request.query.connectionId)) {
+          return { badges };
         }
       }
 
@@ -218,6 +206,99 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       }
 
       return { badges: [] };
+    },
+  );
+
+  /**
+   * Badges for many repos in one call, read strictly from cache.
+   *
+   * The list pages (Projects, Deploy, Security Scans) used to call the single
+   * route once per project — 50, or 100 on Deploy — against a 30/min tenant cap,
+   * so everything past the cap 429'd and silently lost its badges. One call for
+   * the whole page fits the budget with room to spare, and the two cache reads
+   * become two queries instead of two per project.
+   *
+   * Deliberately never analyses on a miss. Walking the git provider for a page
+   * of repos is what made the single route unusable here, and analysis_cache is
+   * warmed when the project is created (see domain/analysis-worker.ts). A repo
+   * with nothing cached is simply absent from the response, and the caller is
+   * expected to leave it unbadged rather than treat it as "no technologies".
+   *
+   * POST because a page of repo keys does not fit in a query string.
+   */
+  typed.post(
+    "/git/repo-badges/batch",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 60, windowMs: 60_000, prefix: "git-badges-batch" })],
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get technology badges for several repos, from cache only",
+        body: z.object({
+          repos: z
+            .array(z.object({ repo: z.string().min(1), branch: z.string().optional() }))
+            // Matches the largest list page (Deploy, 100) so a full page is one call.
+            .min(1)
+            .max(100),
+        }),
+        response: {
+          200: z.object({
+            results: z.array(
+              z.object({
+                repo: z.string(),
+                branch: z.string(),
+                badges: z.array(z.object({ name: z.string(), category: z.string(), confidence: z.number() })),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const wanted = request.body.repos.map((entry) => ({
+        repo: entry.repo,
+        branch: entry.branch || "main",
+      }));
+      const repoKeys = [...new Set(wanted.map((entry) => entry.repo))];
+
+      // Both tables are keyed (organization_id, repo, branch); filtering on repo
+      // and matching the branch in memory keeps this to one round trip each.
+      const [stackRows, analysisRows] = await Promise.all([
+        db.from("stack_cache").select("repo, branch, result").eq("organization_id", auth.tenantId).gt("created_at", cacheFreshSince("stack_cache")).in("repo", repoKeys),
+        db.from("analysis_cache").select("repo, branch, result").eq("organization_id", auth.tenantId).in("repo", repoKeys),
+      ]);
+
+      const fromStack = new Map<string, unknown>();
+      for (const row of stackRows.data ?? []) {
+        fromStack.set(badgeCacheKey(row.repo, row.branch), row.result);
+      }
+      const fromAnalysis = new Map<string, unknown>();
+      for (const row of analysisRows.data ?? []) {
+        fromAnalysis.set(badgeCacheKey(row.repo, row.branch), row.result);
+      }
+
+      const results: Array<{ repo: string; branch: string; badges: ReturnType<typeof badgesFromStackResult> }> = [];
+      for (const entry of wanted) {
+        const key = badgeCacheKey(entry.repo, entry.branch);
+
+        // Same precedence as the single route: the stack analysis wins when present.
+        const stackResult = fromStack.get(key);
+        const stackBadges = stackResult ? badgesFromStackResult(parseJsonField(stackResult)) : [];
+        if (stackBadges.length > 0) {
+          results.push({ ...entry, badges: stackBadges });
+          continue;
+        }
+
+        const analysisResult = fromAnalysis.get(key);
+        const analysisBadges = analysisResult ? badgesFromAnalysisResult(parseJsonField(analysisResult)) : [];
+        // No framework gate here, unlike the single route: that gate exists to
+        // decide whether re-analysing is worth it, and this route never does.
+        if (analysisBadges.length > 0) {
+          results.push({ ...entry, badges: analysisBadges });
+        }
+      }
+
+      return { results };
     },
   );
 
