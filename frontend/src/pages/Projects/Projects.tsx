@@ -1,9 +1,11 @@
+import { useMemo } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
 import PageHeader from "@/components/ui/PageHeader";
 import PageError, { EmptyMessage } from "@/components/ui/PageError";
 import ListToolbar from "@/components/ui/ListToolbar";
 import Pagination from "@/components/ui/Pagination";
 import { useProjects } from "./useProjects";
+import { useProjectActivity } from "./useProjectActivity";
 import { usePermissions } from "@/context/PermissionsContext";
 import Button from "@/components/ui/Button";
 import ProjectFormModal from "./sections/ProjectFormModal";
@@ -39,6 +41,20 @@ export default function Projects() {
     projectBadgeLoading,
     projectFavicons,
   } = useProjects();
+
+  const { deployByProject, scanByProject } = useProjectActivity(projects);
+
+  // Attention-first ordering: projects whose latest completed scan has errors
+  // float to the top, then projects whose latest deploy failed, then the rest.
+  // Array.sort is stable, so within each group the server order is preserved.
+  const orderedProjects = useMemo(() => {
+    const rank = (p: (typeof projects)[number]) => {
+      if ((scanByProject[p.id]?.latestCompleted?.summary.errors ?? 0) > 0) return 0;
+      if (deployByProject[p.id]?.status === "failed") return 1;
+      return 2;
+    };
+    return [...projects].sort((a, b) => rank(a) - rank(b));
+  }, [projects, scanByProject, deployByProject]);
 
   return (
     <div>
@@ -84,21 +100,26 @@ export default function Projects() {
             <EmptyMessage>No projects match your search.</EmptyMessage>
           ) : viewMode === "table" ? (
             <ProjectTable
-              projects={projects}
+              projects={orderedProjects}
               projectLangs={projectLangs}
               projectBadgeLoading={projectBadgeLoading}
+              deployByProject={deployByProject}
+              scanByProject={scanByProject}
               onSelect={(id) => navigate(`/projects/${id}`)}
             />
           ) : (
             <div className={cardGridCls}>
-              {projects.map((p) => (
+              {orderedProjects.map((p) => (
                 <ProjectCard
                   key={p.id}
                   project={p}
                   badges={projectLangs[p.id]}
                   badgeLoading={projectBadgeLoading.has(p.id)}
                   repoFaviconUrl={projectFavicons[p.id]}
+                  deploy={deployByProject[p.id]}
+                  scan={scanByProject[p.id]}
                   onSelect={(id) => navigate(`/projects/${id}`)}
+                  onOpenSecurity={(id) => navigate(`/security/project/${id}`)}
                 />
               ))}
             </div>

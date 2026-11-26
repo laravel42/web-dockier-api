@@ -45,8 +45,12 @@ export default function ScanDetail() {
 
   const progressToShow = core.scanProgress ?? (progressHold ? heldProgress : null);
 
+  // Security lives inside the project now (no global Security list), so "back"
+  // returns to the owning project when known, else to the Projects list.
+  const goBack = () => core.navigate(core.project ? `/projects/${core.project.id}` : "/projects");
+
   if (core.loading) {
-    return <ScanDetailSkeleton onBack={() => core.navigate("/security")} />;
+    return <ScanDetailSkeleton onBack={goBack} />;
   }
 
   if (core.pageError || (!core.scan && !core.project)) {
@@ -54,8 +58,8 @@ export default function ScanDetail() {
       <div>
         <PageError message={core.pageError || "Scan not found"} />
         <div className="text-center mt-4">
-          <Button variant="secondary" onClick={() => core.navigate("/security")}>
-            Back to Security Scans
+          <Button variant="secondary" onClick={goBack}>
+            Back to projects
           </Button>
         </div>
       </div>
@@ -66,7 +70,7 @@ export default function ScanDetail() {
     return (
       <EmptyScanState
         project={core.project}
-        onBack={() => core.navigate("/security")}
+        onBack={goBack}
         scanId={core.scanId}
         allScans={core.allScans}
         allScansLoading={core.allScansLoading}
@@ -79,7 +83,7 @@ export default function ScanDetail() {
   }
 
   if (!core.scan) {
-    return <ScanDetailSkeleton onBack={() => core.navigate("/security")} />;
+    return <ScanDetailSkeleton onBack={goBack} />;
   }
 
   const skippedEngines = core.scan.summary.skippedEngines ?? [];
@@ -90,7 +94,7 @@ export default function ScanDetail() {
           scan={core.scan}
           project={core.project}
           liveStatus={core.liveStatus}
-          onBack={() => core.navigate("/security")}
+          onBack={goBack}
           onNavigateProject={() => core.project && core.navigate(`/projects/${core.project.id}`)}
           actions={(
             <ProviderFilters

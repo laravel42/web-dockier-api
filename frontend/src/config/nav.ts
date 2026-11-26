@@ -19,13 +19,16 @@ export interface NavItemConfig {
   permission?: PermissionKey;
 }
 
-/** Main nav items, in display order. Rendered by TopNavbar as a flat list. */
+/**
+ * Main nav items, in display order. Rendered by TopNavbar as a flat list.
+ *
+ * Project-centric IA: Projects is the home and the only top-level destination.
+ * Deployments and Security are viewed inside each project; account Settings
+ * lives in the profile menu. Legacy /deploy, /security and /settings routes
+ * still exist (reachable directly) — they are just no longer top-level nav.
+ */
 export const sidebarNavItems: NavItemConfig[] = [
-  { to: "/dashboard", label: "Dashboard", icon: "dashboard", exact: true },
   { to: "/projects", label: "Projects", icon: "projects" },
-  { to: "/deploy", label: "Deploy", icon: "deploy", permission: "deploy:view" },
-  { to: "/security", label: "Security", icon: "security", permission: "scan:view" },
-  { to: "/settings", label: "Settings", icon: "settings" },
 ];
 
 export function isNavItemActive(pathname: string, item: NavItemConfig): boolean {

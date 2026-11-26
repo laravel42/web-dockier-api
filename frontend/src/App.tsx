@@ -15,14 +15,12 @@ import PageLoading from "./components/ui/PageLoading";
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Deploy = lazy(() => import("./pages/Deploy"));
 const DeployDetail = lazy(() => import("./pages/DeployDetail"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Projects = lazy(() => import("./pages/Projects/index"));
 const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
-const SecurityScans = lazy(() => import("./pages/SecurityScans/index"));
 const ScanDetail = lazy(() => import("./pages/ScanDetail/index"));
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -57,18 +55,14 @@ export default function App() {
                       </ProtectedRoute>
                     }
                   >
-                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/dashboard" element={<Navigate to="/projects" replace />} />
                     <Route path="/notifications" element={<Notifications />} />
                     <Route path="/projects" element={<Projects />} />
                     <Route path="/projects/:projectId" element={<ProjectDetail />} />
-                    <Route
-                      path="/security"
-                      element={
-                        <PermissionRoute permission="scan:view">
-                          <SecurityScans />
-                        </PermissionRoute>
-                      }
-                    />
+                    {/* Global Security list removed — security lives inside each
+                        project now. Redirect legacy links to Projects; the scan
+                        findings pages below stay (that's where findings live). */}
+                    <Route path="/security" element={<Navigate to="/projects" replace />} />
                     <Route
                       path="/security/project/:projectId"
                       element={
@@ -103,7 +97,7 @@ export default function App() {
                     />
                     <Route path="/settings" element={<Settings />} />
                   </Route>
-                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="*" element={<Navigate to="/projects" replace />} />
                 </Routes>
               </Suspense>
             </BrowserRouter>

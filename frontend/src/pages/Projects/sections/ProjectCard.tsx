@@ -5,7 +5,9 @@ import BranchCommitLabel from "@/components/BranchCommitLabel";
 import { getRepoSlug } from "@/utils/parseOwnerRepo";
 import { cardInteractiveCls, typeCardDateCls, typeCardTitle } from "@/utils/styles";
 import { formatCardDateTime } from "@/utils/formatCardDate";
-import type { Project, TechBadgeInfo } from "@/types";
+import { DeployTile, SecurityTile } from "./ProjectSignals";
+import type { ScanActivity } from "../useProjectActivity";
+import type { Project, TechBadgeInfo, Deployment } from "@/types";
 import { clickableProps } from "@/utils/a11y";
 
 interface Props {
@@ -13,7 +15,11 @@ interface Props {
   badges: TechBadgeInfo[] | undefined;
   badgeLoading?: boolean;
   repoFaviconUrl?: string;
+  deploy?: Deployment;
+  scan?: ScanActivity;
   onSelect: (id: string) => void;
+  /** Deep-link for the Security tile (the project's scan findings). */
+  onOpenSecurity?: (id: string) => void;
 }
 
 function getGitProvider(repository: string): string {
@@ -22,7 +28,7 @@ function getGitProvider(repository: string): string {
   return "github";
 }
 
-export default function ProjectCard({ project: p, badges, badgeLoading, repoFaviconUrl, onSelect }: Props) {
+export default function ProjectCard({ project: p, badges, badgeLoading, repoFaviconUrl, deploy, scan, onSelect, onOpenSecurity }: Props) {
   const provider = p.repository ? getGitProvider(p.repository) : "github";
 
   return (
@@ -51,12 +57,18 @@ export default function ProjectCard({ project: p, badges, badgeLoading, repoFavi
         />
       </div>
 
-      {/* Created + branch */}
-      <div className="flex items-center justify-between gap-2 mt-auto">
-        <span className={typeCardDateCls}>
-          Created: {formatCardDateTime(p.createdAt)}
-        </span>
-        <BranchCommitLabel branch={p.branch || "main"} onClick={() => onSelect(p.id)} />
+      {/* Deploy + security signal tiles, then created + branch — pinned to the bottom */}
+      <div className="mt-auto flex flex-col gap-2.5">
+        <div className="grid grid-cols-2 gap-2">
+          <DeployTile deploy={deploy} infraState={p.infraState} onClick={() => onSelect(p.id)} />
+          <SecurityTile scan={scan} onClick={onOpenSecurity ? () => onOpenSecurity(p.id) : undefined} />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className={typeCardDateCls}>
+            Created: {formatCardDateTime(p.createdAt)}
+          </span>
+          <BranchCommitLabel branch={p.branch || "main"} onClick={() => onSelect(p.id)} />
+        </div>
       </div>
     </div>
   );
