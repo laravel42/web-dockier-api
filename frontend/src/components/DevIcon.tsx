@@ -27,6 +27,7 @@ export default function DevIcon({ src, className = "", alt = "" }: Props) {
     <img
       src={url}
       alt={alt}
+      loading="lazy"
       className={className}
       onLoad={(e) => { (e.target as HTMLImageElement).style.display = ""; }}
       onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}

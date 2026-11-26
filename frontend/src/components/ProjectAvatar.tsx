@@ -60,6 +60,7 @@ function CustomAvatarImage({
     <img
       src={url}
       alt={alt}
+      loading="lazy"
       width={sizePixels[size]}
       height={sizePixels[size]}
       className={`${sizeClasses[size]} shrink-0 object-cover ${className}`}
@@ -96,6 +97,7 @@ function FaviconImage({
       <img
         src={url}
         alt={alt}
+        loading="lazy"
         width={sizePixels[size]}
         height={sizePixels[size]}
         className="size-full object-contain object-center"
