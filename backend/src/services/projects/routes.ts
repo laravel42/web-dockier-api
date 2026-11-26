@@ -13,6 +13,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAuth, getResolvedAuth } from "../../shared/auth/auth.js";
 import { projectConfigSchema, projectSchema, projectSettingsSchema } from "./schemas.js";
+import { enqueueRepoAnalysis } from "../git-integration/domain/analysis-worker.js";
 import { PERMISSIONS } from "../../shared/permissions/constants.js";
 import { successResponseSchema, paginationQuerySchema, paginationMetaSchema, paginatedResponse } from "../../shared/schemas/responses.js";
 import {
@@ -71,6 +72,19 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         tenantId: auth.tenantId,
         ...request.body,
       });
+      // Warm analysis_cache now so the badge and deploy-wizard read paths never
+      // have to analyse on demand. Enqueued and not awaited: it walks the repo
+      // on the git provider, and a failure must not fail the create.
+      if (project.connectionId && project.repository) {
+        await enqueueRepoAnalysis({
+          tenantId: auth.tenantId,
+          projectId: project.id,
+          connectionId: project.connectionId,
+          repository: project.repository,
+          branch: project.branch || "main",
+          correlationId: request.id,
+        });
+      }
       return hideHookTokenFromViewers(project, auth.permissions.includes(PERMISSIONS.PROJECT_MANAGE));
     },
   );

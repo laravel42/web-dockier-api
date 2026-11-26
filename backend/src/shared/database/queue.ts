@@ -117,6 +117,7 @@ export const COMMAND_EXEC_QUEUE = "command-exec";
 export const CONFIG_APPLY_QUEUE = "config-apply";
 export const CERT_POLL_QUEUE = "cert-poll";
 export const HEARTBEAT_CHECK_QUEUE = "heartbeat-check";
+export const REPO_ANALYSIS_QUEUE = "repo-analysis";
 
 // ─── Generic Worker Factory ────────────────────────────────────────
 

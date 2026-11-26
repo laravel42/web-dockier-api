@@ -8,6 +8,7 @@ import { destroyRateLimitStore } from "./shared/http/rate-limit.js";
 import { registerDeployWorker } from "./services/deploy/domain/worker.js";
 import { registerScanWorker } from "./services/code-analysis/domain/worker.js";
 import { registerCommandWorker } from "./services/commands/domain/worker.js";
+import { registerRepoAnalysisWorker } from "./services/git-integration/domain/analysis-worker.js";
 import { registerConfigApplyWorker } from "./shared/workers/config-apply.js";
 import { registerCertPollWorker } from "./shared/workers/cert-poll.js";
 import { registerHeartbeatCheckWorker } from "./services/observe/domain/heartbeat-check.js";
@@ -55,6 +56,7 @@ const workerRegistry: WorkerEntry[] = [
     },
   },
   { services: ["commands"], register: registerCommandWorker },
+  { services: ["git-integration"], register: registerRepoAnalysisWorker },
   {
     services: ["domains", "network"],
     register: registerConfigApplyWorker,
