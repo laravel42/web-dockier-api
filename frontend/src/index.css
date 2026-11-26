@@ -127,6 +127,15 @@
   --color-terminal-success: oklch(0.72 0.13 155);
   --color-terminal-danger: oklch(0.72 0.13 25);
 
+  /* Same reasoning for the scan code preview: its Prism inks below are pinned
+     GitHub-dark hexes, so every surface under them must be theme-invariant too.
+     It used bg-danger-surface, which light theme overrides to oklch(0.955 …) —
+     near-white under pale inks. Also NOT overridden under [data-theme="light"]. */
+  --color-terminal-danger-surface: oklch(0.27 0.055 25);
+  /* Dim text on a terminal surface (the preview's line-number gutter). text-muted
+     flips to a dark grey in light theme, which vanishes on near-black. */
+  --color-terminal-dim: oklch(0.65 0.015 250);
+
   /* App aliases (backward compat) */
   --color-surface: var(--color-background);
   --color-sidebar: oklch(0.19 0.008 50);
@@ -676,7 +685,11 @@ strong, b {
   font-size: var(--heading-max-size) !important;
 }
 
-/* Scan finding code preview — Prism token colors on Dockier surfaces */
+/* Scan finding code preview — Prism token colors on Dockier surfaces.
+   These 7 hexes are GitHub-dark and deliberately have NO [data-theme="light"]
+   variant: the preview renders on theme-invariant terminal surfaces, exactly
+   like the deploy log. Do not "tokenize" them onto the per-theme ramp — see the
+   bg-terminal note in @theme above. */
 .code-preview pre,
 .code-preview code {
   background: transparent !important;

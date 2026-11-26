@@ -104,6 +104,30 @@ describe("signal ramp contrast", () => {
       expect(light.includes(`--color-${name}:`), `${name} overridden in light`).toBe(false);
     }
   });
+
+  /**
+   * The scan code preview pins GitHub-dark Prism inks, so every surface and
+   * secondary ink under them has to be theme-invariant too. It used to sit on
+   * bg-danger-surface, which light theme overrides to oklch(0.955 …) — pale
+   * green strings on near-white. Same trap as the terminal inks above.
+   */
+  it("code-preview surfaces are theme-invariant and readable", () => {
+    const light = CSS.slice(CSS.indexOf('[data-theme="light"] {'));
+    for (const name of ["terminal-danger-surface", "terminal-dim"]) {
+      expect(() => token(name, "dark"), `${name} missing`).not.toThrow();
+      expect(light.includes(`--color-${name}:`), `${name} overridden in light`).toBe(false);
+    }
+    // The gutter's dim ink carries line numbers at 12px on the near-black fill.
+    expect(
+      ratio(token("terminal-dim", "dark"), token("terminal", "dark")),
+      "terminal-dim on terminal",
+    ).toBeGreaterThanOrEqual(AA);
+    // The highlighted row's own fill must still let its danger ink through.
+    expect(
+      ratio(token("terminal-danger", "dark"), token("terminal-danger-surface", "dark")),
+      "terminal-danger on its highlighted fill",
+    ).toBeGreaterThanOrEqual(AA);
+  });
   it("defines every signal in both themes", () => {
     for (const theme of ["dark", "light"] as const) {
       for (const s of SIGNALS) {

@@ -305,14 +305,14 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
     if (!row) return null;
 
     return (
-      <div className="code-preview rounded-lg overflow-hidden border border-border/60 bg-secondary-900/80">
+      <div className="code-preview rounded-lg overflow-hidden border border-border/60 bg-terminal">
         <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted px-3 py-2">
           <span className="min-w-0 truncate text-xs font-mono text-text-muted">{relativePath}</span>
           <span className="shrink-0 text-xs font-mono tabular-nums text-text-muted">L{row.lineNumber}</span>
         </div>
         <pre className="m-0 overflow-hidden p-0 font-mono text-sm/5 ">
-          <div className="flex items-start bg-danger-500/15">
-            <span className="shrink-0 select-none border-r border-border/30 bg-danger-500/10 py-px pr-3 text-right text-sm/5 tabular-nums  text-danger-500">
+          <div className="flex items-start bg-terminal-danger-surface">
+            <span className="shrink-0 select-none border-r border-border/30 py-px pr-3 text-right text-sm/5 tabular-nums text-terminal-danger bg-terminal-danger-surface">
               {row.lineNumber}
             </span>
             <code
@@ -340,7 +340,7 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
       : `L${rows[0]!.lineNumber}–${rows[rows.length - 1]!.lineNumber}${truncated ? "+" : ""}`;
 
   return (
-    <div className="code-preview rounded-lg overflow-hidden border border-border/60 bg-secondary-900/80">
+    <div className="code-preview rounded-lg overflow-hidden border border-border/60 bg-terminal">
       <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted px-3 py-2">
         <span className="min-w-0 truncate text-xs font-mono text-text-muted">{relativePath}</span>
         <span className="shrink-0 text-xs font-mono tabular-nums text-text-muted">{lineLabel}</span>
@@ -349,13 +349,13 @@ function CodePreview({ finding: f, fileContent }: { finding: Finding; fileConten
         {rows.map((row) => (
           <div
             key={row.lineNumber}
-            className={`flex items-start ${row.highlighted ? "bg-danger-surface" : "bg-secondary-900/40"}`}
+            className={`flex items-start ${row.highlighted ? "bg-terminal-danger-surface" : ""}`}
           >
             <span
               className={`shrink-0 select-none border-r py-px pr-3 text-right text-sm/5 tabular-nums ${
                 row.highlighted
-                  ? "border-danger-line bg-danger-500/10 text-danger-ink"
-                  : "border-border/30 bg-muted/30 text-text-muted"
+                  ? "border-danger-line text-terminal-danger"
+                  : "border-border/30 text-terminal-dim"
               }`}
               style={{ width: `${gutterWidth + 3}ch` }}
             >
