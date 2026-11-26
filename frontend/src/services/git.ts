@@ -94,16 +94,23 @@ export const gitApi = {
       results: Array<{ repo: string; branch: string; badges: TechBadgeInfo[] }>;
     }>("/git/repo-badges/batch", { method: "POST", body: JSON.stringify({ repos }) }),
 
-  getRepoFavicon: (
-    repo: string,
-    branch?: string,
-    connectionId?: string,
-    rootDirectory?: string,
-    webDirectory?: string,
+  /**
+   * Favicons for a page of repos in one call. The single route below is capped
+   * at 30/min, which a list of 50 blew through; use this for lists.
+   * A repo absent from `results` has no icon yet — ask again, do not cache it.
+   */
+  getRepoFaviconsBatch: (
+    repos: Array<{
+      repo: string;
+      branch?: string;
+      connectionId?: string;
+      rootDirectory?: string;
+      webDirectory?: string;
+    }>,
   ) =>
-    request<{ favicon: string | null; deployId: string | null }>(
-      `/git/repo-favicon${buildQuery({ repo, branch, connectionId, rootDirectory, webDirectory })}`,
-    ),
+    request<{
+      results: Array<{ repo: string; branch: string; favicon: string | null; deployId: string | null }>;
+    }>("/git/repo-favicons/batch", { method: "POST", body: JSON.stringify({ repos }) }),
 
   getRecentCommits: (connectionId: string, owner: string, repo: string, branch?: string, limit?: number) =>
     request<{

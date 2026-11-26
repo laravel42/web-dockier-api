@@ -20,11 +20,7 @@ interface ProjectInput {
   };
 }
 
-/**
- * The favicon route is tenant rate-limited, so resolve a few at a time rather
- * than opening one connection per project at once.
- */
-const FETCH_CONCURRENCY = 4;
+
 
 function buildFetchKey(p: ProjectInput): string {
   const rootDirectory = p.settings?.rootDirectory ?? "";
@@ -125,50 +121,47 @@ export function useProjectRepoFavicons(projects: ProjectInput[]): ProjectRepoFav
       });
     }
 
-    async function fetchOne(
-      projectId: string,
-      repoKey: string,
-      fetchKey: string,
-      project: ProjectInput,
-    ): Promise<void> {
+    void (async () => {
       try {
-        const res = await gitApi.getRepoFavicon(
-          repoKey,
-          project.branch || "main",
-          project.connectionId,
-          project.settings?.rootDirectory,
-          project.settings?.webDirectory,
+        const { results } = await gitApi.getRepoFaviconsBatch(
+          queue.map((item) => ({
+            repo: item.repoKey,
+            branch: item.project.branch || "main",
+            connectionId: item.project.connectionId,
+            rootDirectory: item.project.settings?.rootDirectory,
+            webDirectory: item.project.settings?.webDirectory,
+          })),
         );
         if (cancelled) return;
-        const favicon = res.favicon && isValidFaviconUrl(res.favicon) ? res.favicon : undefined;
-        setFetched((prev) => ({ ...prev, [projectId]: favicon }));
-        writeCachedFavicon(fetchKey, { favicon, deployId: res.deployId ?? null });
+
+        // Several projects can share a repo and branch, so index the answers and
+        // apply each to every project that was waiting on it.
+        const byPair = new Map(results.map((r) => [`${r.repo}@${r.branch}`, r]));
+        const resolved: Record<string, string | undefined> = {};
+        for (const item of queue) {
+          const answer = byPair.get(`${item.repoKey}@${item.project.branch || "main"}`);
+          // Absent means the route had no cached icon and did not get to resolving
+          // this one — it caps how many it walks per call. Not written to the
+          // cache, so the next visit asks again instead of trusting a blank.
+          if (!answer) continue;
+          const favicon = answer.favicon && isValidFaviconUrl(answer.favicon) ? answer.favicon : undefined;
+          resolved[item.projectId] = favicon;
+          writeCachedFavicon(item.fetchKey, { favicon, deployId: answer.deployId ?? null });
+        }
+        setFetched((prev) => ({ ...prev, ...resolved }));
       } catch {
-        if (cancelled) return;
-        // Leave any cached icon in place rather than blanking the avatar on a
-        // transient failure; the entry simply isn't refreshed.
-        setFetched((prev) => (prev[projectId] === undefined ? { ...prev, [projectId]: undefined } : prev));
+        /* Leave any cached icon in place rather than blanking avatars on a
+           transient failure; the entries simply aren't refreshed. */
       } finally {
         if (!cancelled) {
           setLoadingIds((prev) => {
-            if (!prev.has(projectId)) return prev;
             const next = new Set(prev);
-            next.delete(projectId);
+            for (const item of queue) next.delete(item.projectId);
             return next;
           });
         }
       }
-    }
-
-    let cursor = 0;
-    const workers = Array.from({ length: Math.min(FETCH_CONCURRENCY, queue.length) }, async () => {
-      while (!cancelled) {
-        const item = queue[cursor++];
-        if (!item) return;
-        await fetchOne(item.projectId, item.repoKey, item.fetchKey, item.project);
-      }
-    });
-    void Promise.all(workers);
+    })();
 
     return () => {
       cancelled = true;

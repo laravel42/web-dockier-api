@@ -33,6 +33,7 @@ import {
 } from "../domain/cache.js";
 import { requireConnection } from "./shared.js";
 import { badgeCacheKey, badgesFromAnalysisResult, badgesFromStackResult } from "../domain/badges.js";
+import { resolveFaviconsBatch } from "../domain/favicon-batch.js";
 
 export async function registerAnalysisRoutes(app: FastifyInstance) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -298,6 +299,57 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         }
       }
 
+      return { results };
+    },
+  );
+
+  /**
+   * Favicons for a page of repos in one call. See domain/favicon-batch.ts for
+   * why this one resolves misses while the badge batch does not.
+   *
+   * POST because a page of repo keys, each with its own directory overrides,
+   * does not fit in a query string.
+   */
+  typed.post(
+    "/git/repo-favicons/batch",
+    {
+      preHandler: [app.requirePermission(PERMISSIONS.CREDENTIAL_VIEW), tenantRateLimit({ max: 60, windowMs: 60_000, prefix: "git-favicons-batch" })],
+      handlerTimeout: 45_000,
+      schema: {
+        tags: ["git-integration"],
+        summary: "Get repository favicons for several repos",
+        body: z.object({
+          repos: z
+            .array(
+              z.object({
+                repo: z.string().min(1),
+                branch: z.string().optional(),
+                connectionId: z.string().optional(),
+                rootDirectory: z.string().optional(),
+                webDirectory: z.string().optional(),
+              }),
+            )
+            // Matches the largest list page (Deploy, 100) so a full page is one call.
+            .min(1)
+            .max(100),
+        }),
+        response: {
+          200: z.object({
+            results: z.array(
+              z.object({
+                repo: z.string(),
+                branch: z.string(),
+                favicon: z.string().nullable(),
+                deployId: z.string().nullable(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const auth = getAuth(request);
+      const results = await resolveFaviconsBatch(auth.tenantId, request.body.repos, log);
       return { results };
     },
   );
