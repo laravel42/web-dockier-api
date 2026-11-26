@@ -15,10 +15,6 @@ const README_PATHS = ["README.md", "readme.md", "README", "Readme.md"];
 
 interface Props {
   project: Project;
-  /** Kept for call-site compatibility; overview is view-only. */
-  editable?: boolean;
-  /** Kept for call-site compatibility; overview is view-only. */
-  onProjectUpdate?: (project: Project) => void;
   /** Hide overflow instead of scrolling — used when the parent clips with Show all. */
   clipOverflow?: boolean;
 }

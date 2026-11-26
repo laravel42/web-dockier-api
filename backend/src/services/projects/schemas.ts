@@ -1,6 +1,13 @@
 import { z } from "zod";
 
 export const projectConfigSchema = z.object({
+  /**
+   * Legacy and inert: nothing reads or writes it. The project overview was
+   * editable once and stored BlockNote blocks here; it is view-only now and
+   * renders the repository README, so the frontend reader was removed. Kept
+   * only because dropping it would leave an empty schema on `config`, which is
+   * part of the project response shape. 0 of 16 production projects have it.
+   */
   overviewBlocks: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 

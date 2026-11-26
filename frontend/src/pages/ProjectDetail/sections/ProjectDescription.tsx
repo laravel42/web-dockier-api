@@ -790,7 +790,7 @@ export default function ProjectDescription({
     setActiveMainTab(legacySettingsTab, true);
   }, [legacySettingsTab, setActiveMainTab]);
   const { has, isOwner, loading: permissionsLoading } = usePermissions();
-  const canEditOverview = isOwner || has("project:manage");
+
 
   const tabListRef = useRef<HTMLDivElement>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
@@ -1171,12 +1171,7 @@ export default function ProjectDescription({
               ) : (
                 <ErrorBoundary title="Couldn't load the overview">
                   <Suspense fallback={<TextSkeleton lines={8} />}>
-                    <OverviewEditor
-                      project={project}
-                      editable={canEditOverview}
-                      onProjectUpdate={onProjectUpdate}
-                      clipOverflow={clipOverview}
-                    />
+                    <OverviewEditor project={project} clipOverflow={clipOverview} />
                   </Suspense>
                 </ErrorBoundary>
               )
