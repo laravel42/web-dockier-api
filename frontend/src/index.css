@@ -118,14 +118,6 @@
   --color-accent-foreground: oklch(0.18 0.01 50);
   --color-input: oklch(0.28 0.008 50);
   --color-ring: oklch(0.78 0.08 70);
-  --color-terminal: oklch(0.117 0.0213 240.5);
-
-  /* bg-terminal is near-black in BOTH themes, so the per-theme signal ramp
-     does not apply on it: the light ink (L 0.50) drops to ~3.2:1 there.
-     These two are theme-invariant and hold ~8:1 on bg-terminal everywhere,
-     so they are NOT overridden under [data-theme="light"] below.          */
-  --color-terminal-success: oklch(0.72 0.13 155);
-  --color-terminal-danger: oklch(0.72 0.13 25);
 
   /* Same reasoning for the scan code preview: its Prism inks below are pinned
      GitHub-dark hexes, so every surface under them must be theme-invariant too.

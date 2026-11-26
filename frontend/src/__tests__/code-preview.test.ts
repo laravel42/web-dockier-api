@@ -86,37 +86,39 @@ function previewInks(theme: "dark" | "light"): string[] {
 }
 
 /**
- * bg-terminal is pinned near-black in BOTH themes, so a per-theme ink on it is
- * unreadable in one of them. text-strong resolves to --color-foreground, which
- * is oklch(0.22) in light: measured 1.17:1 on bg-terminal, i.e. invisible. It
- * shipped that way in the deploy log, the command output and both Observe log
- * panes, so this guards against a third round rather than trusting review.
+ * Log and code panes used `bg-terminal`, pinned near-black in BOTH themes, while
+ * their ink (`text-strong` → `--color-foreground`) flipped to oklch(0.22) in
+ * light: measured 1.17:1, invisible. It shipped that way in the deploy log, the
+ * command output, the nginx preview, the process log, both Observe panes and the
+ * wizard, so the pinned surface is gone rather than patched ink by ink.
+ *
+ * Every pane now follows the theme, which makes the ordinary tokens correct.
+ * Reintroducing a pinned fill brings the whole class of bug back, so it fails
+ * here instead of in review.
  */
-describe("no per-theme ink on a pinned terminal surface", () => {
-  const FLIPPING = ["text-strong", "text-text", "text-foreground"];
-
-  it("never pairs bg-terminal with an ink that flips per theme", () => {
-    const SRC = resolve(CSS_PATH!, "../..", "src");
+describe("no pinned-dark surfaces", () => {
+  it("nothing uses bg-terminal or the terminal-* inks", () => {
+    const SRC = resolve(CSS_PATH!, "..");
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const e of readdirSync(dir, { withFileTypes: true })) {
         const p = resolve(dir, e.name);
         if (e.isDirectory()) {
-          if (e.name !== "node_modules") walk(p);
+          if (e.name !== "node_modules" && e.name !== "__tests__") walk(p);
           continue;
         }
-        if (!e.name.endsWith(".tsx")) continue;
+        if (!/\.(tsx?|css)$/.test(e.name)) continue;
         readFileSync(p, "utf8")
           .split("\n")
           .forEach((line, i) => {
-            if (!line.includes("bg-terminal")) return;
-            const bad = FLIPPING.filter((c) => new RegExp(`\\b${c}\\b`).test(line));
-            if (bad.length) offenders.push(`${e.name}:${i + 1} → ${bad.join(", ")}`);
+            if (/\b(bg-terminal|text-terminal-\w+|--color-terminal)\b/.test(line)) {
+              offenders.push(`${e.name}:${i + 1}`);
+            }
           });
       }
     };
     walk(SRC);
-    expect(offenders, "use a pinned terminal-* ink, or a theme-following surface").toEqual([]);
+    expect(offenders, "panes follow the theme now — use bg-background").toEqual([]);
   });
 });
 

@@ -161,11 +161,11 @@ export default function StepDeploy({ state, onClose }: { state: WizardState; onC
           <summary className="cursor-pointer text-xs text-text-muted hover:text-text transition-colors select-none">
             Show raw logs ({state.deployLogs.length} lines)
           </summary>
-          <div ref={logsRef} className="mt-2 rounded-lg bg-terminal p-3 max-h-56 overflow-y-auto scrollbar-hide font-mono text-xs/relaxed">
+          <div ref={logsRef} className="mt-2 rounded-lg bg-background p-3 max-h-56 overflow-y-auto scrollbar-hide font-mono text-xs/relaxed">
             {state.deployLogs.map((line, i) => (
               <div key={i} className={
-                line.includes("✓") ? "text-terminal-success" :
-                line.includes("✗") ? "text-terminal-danger" :
+                line.includes("✓") ? "text-success-ink" :
+                line.includes("✗") ? "text-danger-ink" :
                 line.includes("──") ? "text-primary-500" :
                 line.includes("ℹ") ? "text-primary-500" :
                 line.includes("▶") ? "text-warning-ink" :
@@ -180,7 +180,7 @@ export default function StepDeploy({ state, onClose }: { state: WizardState; onC
       )}
 
       {state.deployLogs.length === 0 && isRunning && (
-        <div className="rounded-lg bg-terminal p-6 flex items-center justify-center gap-2">
+        <div className="rounded-lg bg-background p-6 flex items-center justify-center gap-2">
           <Spinner className="size-4" />
           <span className="text-sm text-text-muted">Waiting for pipeline to start…</span>
         </div>

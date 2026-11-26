@@ -410,7 +410,7 @@ function LogsSection({ project, canManage }: { project: Project; canManage: bool
       </div>
 
       {/* Log content */}
-      <div tabIndex={0} role="region" aria-label="Log contents" className="flex-1 min-h-0 max-h-[60vh] rounded-lg border border-border bg-terminal overflow-auto">
+      <div tabIndex={0} role="region" aria-label="Log contents" className="flex-1 min-h-0 max-h-[60vh] rounded-lg border border-border bg-background overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <Spinner className="size-4" />

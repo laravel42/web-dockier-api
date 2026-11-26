@@ -113,7 +113,7 @@ function ProcessLogsModal({
           <RefreshCwIcon className="size-4" />
         </button>
       </div>
-      <div className="rounded-lg border border-border bg-terminal overflow-auto max-h-80">
+      <div className="rounded-lg border border-border bg-background overflow-auto max-h-80">
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <Spinner className="size-4" />

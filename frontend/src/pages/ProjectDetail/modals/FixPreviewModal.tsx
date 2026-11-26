@@ -108,7 +108,7 @@ export default function FixPreviewModal({ open, plan, onClose, onCreatePullReque
                     tabIndex={0}
                     role="region"
                     aria-label={`Diff for ${file.path}`}
-                    className="max-h-80 overflow-auto border-t border-border bg-terminal font-mono text-xs/relaxed"
+                    className="max-h-80 overflow-auto border-t border-border bg-background font-mono text-xs/relaxed"
                   >
                     {file.rows.length === 0 ? (
                       <p className="px-3 py-2 text-text-muted">No changes in this file.</p>
