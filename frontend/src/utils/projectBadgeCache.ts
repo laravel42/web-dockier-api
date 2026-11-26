@@ -7,12 +7,16 @@ import {
 
 const CACHE_VERSION = 2;
 const CACHE_PREFIX = `project-badges:v${CACHE_VERSION}:`;
+/** Badges follow the repo's stack, which moves slowly; a week keeps them fresh enough. */
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface CachedProjectBadges {
   repoKey: string;
   branch: string;
   connectionId: string;
   badges: TechBadgeInfo[];
+  /** Absent on entries written before the TTL existed; those are treated as expired. */
+  savedAt?: number;
 }
 
 function storageKey(projectId: string): string {
@@ -63,6 +67,10 @@ export function getProjectBadgeCache(
     ) {
       return null;
     }
+    if (!cached.savedAt || Date.now() - cached.savedAt > CACHE_TTL_MS) {
+      localStorage.removeItem(storageKey(projectId));
+      return null;
+    }
     return cached.badges;
   } catch {
     return null;
@@ -77,10 +85,45 @@ export function setProjectBadgeCache(
   badges: TechBadgeInfo[],
 ): void {
   try {
-    const payload: CachedProjectBadges = { repoKey, branch, connectionId, badges };
+    const payload: CachedProjectBadges = {
+      repoKey,
+      branch,
+      connectionId,
+      badges,
+      savedAt: Date.now(),
+    };
     localStorage.setItem(storageKey(projectId), JSON.stringify(payload));
   } catch {
     // quota exceeded — ignore
+  }
+}
+
+/**
+ * Drops expired entries and every key from an older cache version.
+ *
+ * A read only ever touches its own project's key, so entries for deleted
+ * projects and keys left by `v1` were never reclaimed and grew for good.
+ */
+export function pruneProjectBadgeCache(): void {
+  try {
+    const stale: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith("project-badges:")) continue;
+      if (!key.startsWith(CACHE_PREFIX)) {
+        stale.push(key);
+        continue;
+      }
+      try {
+        const entry = JSON.parse(localStorage.getItem(key) ?? "") as CachedProjectBadges;
+        if (!entry.savedAt || Date.now() - entry.savedAt > CACHE_TTL_MS) stale.push(key);
+      } catch {
+        stale.push(key);
+      }
+    }
+    for (const key of stale) localStorage.removeItem(key);
+  } catch {
+    // storage unavailable — nothing to prune
   }
 }
 
