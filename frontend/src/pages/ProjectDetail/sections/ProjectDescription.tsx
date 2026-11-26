@@ -40,6 +40,7 @@ import { osvApi } from "@/services/osv";
 import { TabPanelHeader, tabPanelContentCls } from "@/components/TabPanelHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import MarkdownViewer from "@/components/MarkdownViewer";
 import PanelSkeleton from "./PanelSkeleton";
 import TextSkeleton from "./TextSkeleton";
 
@@ -50,9 +51,7 @@ import TextSkeleton from "./TextSkeleton";
   the fetch now overlaps the README request instead of blocking the route chunk.
 */
 const OverviewEditor = lazy(() => import("./OverviewEditor"));
-const MarkdownPreview = lazy(() =>
-  import("@uiw/react-md-editor").then((m) => ({ default: m.default.Markdown })),
-);
+
 
 interface Props {
   analysis: RepoAnalysis | null;
@@ -561,11 +560,15 @@ function VulnModal({ vuln, onClose }: { vuln: VulnDetail; onClose: () => void })
             {details ? (
               <div>
                 <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Details</p>
-                <ErrorBoundary title="Couldn't load the details renderer">
-                  <Suspense fallback={<TextSkeleton />}>
-                    <MarkdownPreview source={details} style={{ background: "transparent", color: "inherit", fontSize: "0.875rem" }} />
-                  </Suspense>
-                </ErrorBoundary>
+                {/*
+                  Same viewer as PR bodies and the overview. It replaced
+                  @uiw/react-md-editor, which rendered this text — fetched
+                  straight from api.osv.dev — through rehype-raw with no
+                  sanitizer, so advisory HTML reached the DOM as-is. Milkdown
+                  renders commonmark only, so embedded HTML shows as text.
+                  MarkdownViewer brings its own boundary and Suspense.
+                */}
+                <MarkdownViewer markdown={details} />
               </div>
             ) : (
               <p className="text-xs text-text-muted py-2">No additional details available.</p>

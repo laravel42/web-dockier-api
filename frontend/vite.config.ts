@@ -15,18 +15,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      /*
-        rehype-prism-plus (pulled in by @uiw/react-md-editor) imports
-        `refractor/all`, which registers 298 grammars — 910 KB of source, and by
-        far the largest thing in the markdown chunk. `refractor`'s default entry
-        is its `common` set: 37 grammars covering every language this product
-        renders. Same export shape, so the alias is transparent.
-
-        Safe because @uiw/react-markdown-preview passes `ignoreMissing: true`:
-        a fenced block in an unregistered language falls back to plain text
-        instead of throwing. Without that flag this alias would break the render.
-      */
-      "refractor/all": path.resolve(__dirname, "./src/utils/refractorSubset.ts"),
     },
   },
   server: {
