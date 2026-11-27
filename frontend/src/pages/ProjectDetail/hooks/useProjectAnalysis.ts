@@ -22,7 +22,19 @@ import { TEMPLATE_ANALYSIS } from "../templateAnalysis";
 // entry service and the variables a deploy requires). Without a bump, a repo
 // analysed before it existed would still be offered only a single-service
 // deploy.
-const analysisCache = new SessionCache<RepoAnalysis>("analysis", 16);
+// v17: entries carry a timestamp (the stored shape changed) and expire, below.
+//
+// The TTL is what lets a push reach this page. `analysis_cache` on the server
+// is now stamped with the commit it describes and re-analysed when the branch
+// moves on, but `GET /repo-analyze` is the only route that checks — and without
+// an expiry this cache answered that route exactly once per tab, so a project
+// kept showing the stack it had when the tab was opened.
+//
+// Two minutes, not seconds: the route is capped at 5/min per tenant, and a
+// cache that expires faster than someone clicks through projects would spend
+// that budget on repeats and 429 the next real read.
+const ANALYSIS_TTL_MS = 2 * 60_000;
+const analysisCache = new SessionCache<RepoAnalysis>("analysis", 17, ANALYSIS_TTL_MS);
 
 
 /**

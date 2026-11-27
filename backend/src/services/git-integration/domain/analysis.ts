@@ -1,5 +1,6 @@
 import type { ConnectionLike, RepoRef } from "./providers/provider-client.js";
 import { fetchRepoFile, getRepoFileTree } from "./providers/provider-client.js";
+import { getGitProvider } from "./providers/git-provider.js";
 import { scanDependencies, type Dependency } from "./dependency-scanner.js";
 import { suggestDeployOptions } from "./deploy-options.js";
 import { detectServices, type DetectedService } from "./services.js";
@@ -214,6 +215,29 @@ export async function detectDbEngine(
     return parseDbEngineFromEnvExample({ [path]: content });
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * HEAD commit of a branch, used to stamp an analysis with the revision it
+ * describes so the next read can tell whether the repo moved on.
+ *
+ * One provider call (the commit list, capped at 1). Returns "" when the
+ * revision cannot be established — an API failure, a repo with no commits, or a
+ * provider with no commit support — so a caller stamps "unknown" rather than
+ * failing an analysis over it.
+ */
+export async function getHeadCommitSha(connection: ConnectionLike, ref: RepoRef): Promise<string> {
+  try {
+    const commits = await getGitProvider(connection).listCommits({
+      owner: ref.owner,
+      repo: ref.repo,
+      branch: ref.branch,
+      limit: 1,
+    });
+    return commits[0]?.hash ?? "";
+  } catch {
+    return "";
   }
 }
 

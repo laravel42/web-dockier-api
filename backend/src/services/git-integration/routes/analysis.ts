@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getAuth } from "../../../shared/auth/auth.js";
 import { supabaseAdmin } from "../../../shared/supabase/client.js";
 import type { Json } from "../../../shared/supabase/types.js";
-import { analyzeSensitiveDataFromText, detectDbEngine, runRepoAnalysis } from "../domain/analysis.js";
+import { analyzeSensitiveDataFromText, detectDbEngine, getHeadCommitSha, runRepoAnalysis } from "../domain/analysis.js";
 import { getRepoFileTree } from "../domain/providers/provider-client.js";
 import { detectMultiService } from "../domain/multi-service.js";
 import { analyzeComposeRepo } from "../domain/compose-analysis.js";
@@ -24,6 +24,7 @@ import { tenantRateLimit } from "../../../shared/http/rate-limit.js";
 import { PERMISSIONS } from "../../../shared/permissions/constants.js";
 import {
   parseJsonField,
+  isAnalysisStale,
   writeRepoCache,
   writeAnalysisCache,
   updateAnalysisCache,
@@ -189,11 +190,16 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
           const owner = parts.slice(0, -1).join("/");
           const repoName = parts[parts.length - 1]!;
           const conn = await requireConnection(request.query.connectionId, auth.tenantId);
-          const result = await runRepoAnalysis(conn, { owner, repo: repoName, branch });
+          const ref = { owner, repo: repoName, branch };
+          const [result, commitSha] = await Promise.all([
+            runRepoAnalysis(conn, ref),
+            getHeadCommitSha(conn, ref),
+          ]);
           await writeAnalysisCache({
             tenantId: auth.tenantId,
             repoKey: repo,
             branch,
+            commitSha,
             result: result as unknown as Json,
           }, log);
           return {
@@ -462,10 +468,25 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
       const conn = await requireConnection(request.params.connectionId, auth.tenantId);
       const branch = request.query.branch || "main";
       const repoKey = `${request.query.owner}/${request.query.repo}`;
-      const cached = await db.from("analysis_cache").select("result").eq("organization_id", auth.tenantId).eq("repo", repoKey).eq("branch", branch).maybeSingle();
-      if (cached.data?.result) {
+      const ref = { owner: request.query.owner, repo: request.query.repo, branch };
+
+      // The revision the repo is at NOW, against the one the cached analysis
+      // describes. This is the only path that refreshes an analysis: the list
+      // pages' badge routes read cache-only on purpose (a HEAD lookup per
+      // project is the fan-out they were built to remove), so a project's
+      // badges, stack and deploy plan follow the repo from here and from the
+      // deploy wizard, both of which look at one project at a time.
+      const [headSha, cached] = await Promise.all([
+        getHeadCommitSha(conn, ref),
+        db.from("analysis_cache").select("result, commit_sha").eq("organization_id", auth.tenantId).eq("repo", repoKey).eq("branch", branch).maybeSingle(),
+      ]);
+
+      // A stale row falls through to the full analysis below, which overwrites
+      // it. That drops the `repoFavicon` the favicon route may have merged in —
+      // correct, since the push that moved HEAD can have changed the icon too,
+      // and that route re-resolves a missing one.
+      if (cached.data?.result && !isAnalysisStale(cached.data.commit_sha, headSha)) {
         let parsed = parseJsonField<Record<string, unknown>>(cached.data.result)!;
-        const ref = { owner: request.query.owner, repo: request.query.repo, branch };
 
         // Backfill `detectedDbEngine` onto an analysis cached before the field
         // existed, so a stale row stops showing the AI's guessed DB engine.
@@ -511,16 +532,11 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         return parsed;
       }
 
-      const result = await runRepoAnalysis(conn, {
-        owner: request.query.owner,
-        repo: request.query.repo,
-        branch,
-      });
+      const result = await runRepoAnalysis(conn, ref);
 
       // Run AI analysis if requested and API key is available
       let aiAnalysis: Record<string, unknown> | undefined;
       if (request.query.aiType && env.OPENAI_API_KEY) {
-        const ref = { owner: request.query.owner, repo: request.query.repo, branch };
         const aiResult = await runAiAnalysisForRepo(
           conn,
           ref,
@@ -539,6 +555,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance) {
         repoKey,
         branch,
         projectId: request.query.projectId,
+        commitSha: headSha,
         result: finalResult as unknown as Json,
       }, log);
       return finalResult;

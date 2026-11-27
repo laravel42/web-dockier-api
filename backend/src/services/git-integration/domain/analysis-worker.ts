@@ -18,7 +18,7 @@
 import { createWorker, REPO_ANALYSIS_QUEUE } from "../../../shared/database/queue.js";
 import { logger } from "../../../shared/logger.js";
 import { getConnectionForTenant } from "./connections.js";
-import { runRepoAnalysis } from "./analysis.js";
+import { getHeadCommitSha, runRepoAnalysis } from "./analysis.js";
 import { writeAnalysisCache } from "./cache.js";
 import { parseRepositoryRef } from "./repo-ref.js";
 import type { Json } from "../../../shared/supabase/types.js";
@@ -45,15 +45,22 @@ async function handleRepoAnalysis(input: RepoAnalysisJobInput): Promise<void> {
   const repoKey = `${ref.owner}/${ref.repo}`;
 
   const connection = await getConnectionForTenant(connectionId, tenantId);
-  const result = await runRepoAnalysis(connection, { owner: ref.owner, repo: ref.repo, branch });
+  const repoRef = { owner: ref.owner, repo: ref.repo, branch };
+  // The sha this analysis describes, so the read path can tell when the repo
+  // has moved on. Fetched alongside, not after: one is a tree walk, the other a
+  // single commit, and neither needs the other's result.
+  const [result, commitSha] = await Promise.all([
+    runRepoAnalysis(connection, repoRef),
+    getHeadCommitSha(connection, repoRef),
+  ]);
 
   await writeAnalysisCache(
-    { tenantId, repoKey, branch, projectId, result: result as unknown as Json },
+    { tenantId, repoKey, branch, projectId, commitSha, result: result as unknown as Json },
     logger,
   );
 
   logger.info(
-    { projectId, repoKey, branch, techs: result.techStack.length },
+    { projectId, repoKey, branch, commitSha, techs: result.techStack.length },
     "[repo-analysis] cached",
   );
 }

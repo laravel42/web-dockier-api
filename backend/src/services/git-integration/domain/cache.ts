@@ -121,7 +121,32 @@ export interface AnalysisCacheParams {
   repoKey: string;
   branch: string;
   projectId?: string;
+  /**
+   * HEAD commit of the analysed branch, from `getHeadCommitSha`. Omitted by
+   * callers that did not analyse the repository (the favicon route's fallback
+   * write), which leaves the row's revision unknown — see `isAnalysisStale`.
+   */
+  commitSha?: string;
   result: Json;
+}
+
+/**
+ * Whether a cached analysis describes a revision other than the branch's
+ * current HEAD, and so must be re-run.
+ *
+ * An unknown HEAD keeps the cache: `getHeadCommitSha` returns "" for a provider
+ * failure, an empty repo or a provider without commit support, and re-analysing
+ * on every read through a provider outage would cost a full repo walk per page
+ * view and produce nothing better.
+ *
+ * An unknown STORED sha is stale, deliberately. Rows written before this stamp
+ * existed, and the analysis-less row the favicon route creates on a miss, are
+ * not analyses of a known commit; treating them as fresh is what pinned a
+ * project's badges and deploy plan to its first-ever analysis.
+ */
+export function isAnalysisStale(storedSha: string | null | undefined, headSha: string): boolean {
+  if (!headSha) return false;
+  return storedSha !== headSha;
 }
 
 /**
@@ -138,7 +163,7 @@ export async function writeAnalysisCache(
         id: `${params.tenantId}:${params.repoKey}:${params.branch}`,
         repo: params.repoKey,
         branch: params.branch,
-        commit_sha: "",
+        commit_sha: params.commitSha ?? "",
         result: params.result as unknown as Database["public"]["Tables"]["analysis_cache"]["Row"]["result"],
         created_at: nowIso(),
         organization_id: params.tenantId,

@@ -15,6 +15,8 @@
 - `GET /git/connections/:connectionId/repo-stats`
 - `GET /git/connections/:connectionId/stack-analysis`
 - `GET /git/repo-badges`
+- `POST /git/repo-badges/batch`
+- `POST /git/repo-favicons/batch`
 - `GET /git/connections/:connectionId/repo-analyze`
 - `POST /git/analyze-sensitive-data`
 - `POST /git/connections/:connectionId/create-mr`
@@ -43,6 +45,30 @@ Repo analysis also enriches `techStack` from dependency manifests (`package.json
 
 - `useProjectBadges` hook fetches badges and caches the top 4 by confidence in `localStorage` (`projectBadgeCache.ts`)
 - Cache invalidates automatically when a project’s repo, branch, or connection changes; project detail refresh clears the cache explicitly
+
+## Analysis cache freshness
+
+`analysis_cache` rows are stamped with `commit_sha`, the branch HEAD the analysis
+describes. `GET /repo-analyze` resolves HEAD once per call (one commit lookup,
+capped at 1) and re-runs the whole analysis when the stamp disagrees — so a push
+is picked up the next time someone opens Project Detail or the deploy wizard,
+which is where a wrong stack costs something.
+
+Two rules hold this together:
+
+- **An empty stamp reads as stale.** Rows analysed before the stamp existed, and
+  the analysis-less row the favicon route writes on a miss, get one re-analysis
+  each and are correct from then on.
+- **An unknown HEAD keeps the cache.** A provider failure, an empty repo or a
+  provider without commit support leaves the stamp unresolved; re-analysing then
+  would walk the repo on every page view and learn nothing.
+
+The badge and favicon routes deliberately do **not** check freshness. They serve
+list pages — Projects, Deploy, Security Scans — where one HEAD lookup per project
+is the request fan-out the batch endpoints exist to remove. List badges therefore
+follow the repo one detail-page visit behind, and the batch routes read cache
+only (`/repo-favicons/batch` resolves misses, capped at 6 per call, because a
+favicon is invalidated on every successful deploy and has no other producer).
 
 ## Notes
 
